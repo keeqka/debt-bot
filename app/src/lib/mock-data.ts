@@ -1,0 +1,299 @@
+import type {
+  BankProduct,
+  Category,
+  ChatMessage,
+  Debt,
+  DebtPayment,
+  Expense,
+  Goal,
+  Income,
+  StatusInsight,
+  User,
+} from '@/types/domain'
+
+/**
+ * Sample data used while Supabase isn't configured yet (see `isBackendConfigured`
+ * in lib/env.ts), so the app is fully click-through-able before real keys land.
+ */
+
+export const mockUsers: User[] = [
+  {
+    id: 'u1',
+    telegram_id: 100001,
+    display_name: 'Айым',
+    username: 'aiym',
+    avatar_url: null,
+    timezone: 'Asia/Almaty',
+    created_at: '2026-01-05T00:00:00Z',
+  },
+  {
+    id: 'u2',
+    telegram_id: 100002,
+    display_name: 'Данияр',
+    username: 'daniyar',
+    avatar_url: null,
+    timezone: 'Asia/Almaty',
+    created_at: '2026-01-05T00:00:00Z',
+  },
+]
+
+export const currentMockUser = mockUsers[0]
+
+export const mockCategories: Category[] = [
+  { id: 'c1', name: 'Продукты', icon: 'shopping-cart', type: 'expense', is_system: true },
+  { id: 'c2', name: 'Транспорт', icon: 'car', type: 'expense', is_system: true },
+  { id: 'c3', name: 'Жильё', icon: 'home', type: 'expense', is_system: true },
+  { id: 'c4', name: 'Развлечения', icon: 'popcorn', type: 'expense', is_system: true },
+  { id: 'c5', name: 'Здоровье', icon: 'heart-pulse', type: 'expense', is_system: true },
+  { id: 'c6', name: 'Прочее', icon: 'more-horizontal', type: 'expense', is_system: true },
+  { id: 'c7', name: 'Зарплата', icon: 'wallet', type: 'income', is_system: true },
+  { id: 'c8', name: 'Фриланс', icon: 'laptop', type: 'income', is_system: true },
+]
+
+export const mockDebts: Debt[] = [
+  {
+    id: 'd1',
+    owner_user_id: 'u1',
+    title: 'Кредит на авто',
+    creditor: 'Kaspi Bank',
+    principal_amount: 3_200_000,
+    current_balance: 2_140_000,
+    currency: 'KZT',
+    interest_rate: 18.5,
+    minimum_payment: 145_000,
+    due_day: 5,
+    status: 'active',
+    notes: null,
+    created_at: '2025-03-01T00:00:00Z',
+  },
+  {
+    id: 'd2',
+    owner_user_id: 'u2',
+    title: 'Рассрочка на технику',
+    creditor: 'Halyk Bank',
+    principal_amount: 480_000,
+    current_balance: 210_000,
+    currency: 'KZT',
+    interest_rate: 0,
+    minimum_payment: 40_000,
+    due_day: 12,
+    status: 'active',
+    notes: 'Беспроцентная рассрочка 12 мес.',
+    created_at: '2025-09-01T00:00:00Z',
+  },
+  {
+    id: 'd3',
+    owner_user_id: 'u1',
+    title: 'Карта рассрочки',
+    creditor: 'Kaspi Red',
+    principal_amount: 150_000,
+    current_balance: 62_000,
+    currency: 'KZT',
+    interest_rate: 25,
+    minimum_payment: 15_000,
+    due_day: 20,
+    status: 'active',
+    notes: null,
+    created_at: '2026-02-10T00:00:00Z',
+  },
+]
+
+export const mockDebtPayments: DebtPayment[] = [
+  { id: 'dp1', debt_id: 'd1', amount: 145_000, paid_at: '2026-08-05', is_extra: false, note: null },
+  { id: 'dp2', debt_id: 'd1', amount: 60_000, paid_at: '2026-08-20', is_extra: true, note: 'премия' },
+  { id: 'dp3', debt_id: 'd2', amount: 40_000, paid_at: '2026-08-12', is_extra: false, note: null },
+]
+
+export const mockIncomes: Income[] = [
+  {
+    id: 'i1',
+    user_id: 'u1',
+    source: 'Зарплата',
+    amount: 620_000,
+    currency: 'KZT',
+    received_at: '2026-09-01',
+    is_recurring: true,
+    recurrence_day: 1,
+  },
+  {
+    id: 'i2',
+    user_id: 'u2',
+    source: 'Зарплата',
+    amount: 540_000,
+    currency: 'KZT',
+    received_at: '2026-09-01',
+    is_recurring: true,
+    recurrence_day: 1,
+  },
+  {
+    id: 'i3',
+    user_id: 'u2',
+    source: 'Фриланс',
+    amount: 95_000,
+    currency: 'KZT',
+    received_at: '2026-09-08',
+    is_recurring: false,
+    recurrence_day: null,
+  },
+]
+
+export const mockExpenses: Expense[] = [
+  {
+    id: 'e1',
+    user_id: 'u1',
+    amount: 18_400,
+    currency: 'KZT',
+    category_id: 'c1',
+    merchant: 'Magnum',
+    spent_at: '2026-09-10',
+    description: null,
+    source: 'receipt_photo',
+    receipt_asset_path: null,
+    ai_confidence: 0.94,
+    is_confirmed: true,
+  },
+  {
+    id: 'e2',
+    user_id: 'u2',
+    amount: 6_500,
+    currency: 'KZT',
+    category_id: 'c2',
+    merchant: 'InDrive',
+    spent_at: '2026-09-09',
+    description: null,
+    source: 'manual',
+    receipt_asset_path: null,
+    ai_confidence: null,
+    is_confirmed: true,
+  },
+  {
+    id: 'e3',
+    user_id: 'u1',
+    amount: 210_000,
+    currency: 'KZT',
+    category_id: 'c3',
+    merchant: null,
+    spent_at: '2026-09-05',
+    description: 'Аренда квартиры',
+    source: 'manual',
+    receipt_asset_path: null,
+    ai_confidence: null,
+    is_confirmed: true,
+  },
+  {
+    id: 'e4',
+    user_id: 'u2',
+    amount: 9_900,
+    currency: 'KZT',
+    category_id: 'c4',
+    merchant: 'Chaplin Cinemas',
+    spent_at: '2026-09-07',
+    description: null,
+    source: 'screenshot',
+    receipt_asset_path: null,
+    ai_confidence: 0.58,
+    is_confirmed: false,
+  },
+  {
+    id: 'e5',
+    user_id: 'u1',
+    amount: 32_000,
+    currency: 'KZT',
+    category_id: 'c5',
+    merchant: 'Аптека Europharma',
+    spent_at: '2026-09-03',
+    description: null,
+    source: 'receipt_photo',
+    receipt_asset_path: null,
+    ai_confidence: 0.88,
+    is_confirmed: true,
+  },
+]
+
+export const mockGoals: Goal[] = [
+  {
+    id: 'g1',
+    title: 'Первый взнос на квартиру',
+    target_amount: 8_000_000,
+    current_amount: 1_450_000,
+    target_date: '2028-06-01',
+    currency: 'KZT',
+    status: 'active',
+    ai_strategy: {
+      monthly_contribution_needed: 210_000,
+      estimated_completion_date: '2028-04-01',
+      bank_product_suggestions: [{ bank_product_id: 'b1', reasoning: 'Наивысшая ставка среди накопительных депозитов без риска потери капитала' }],
+      risks: ['Рост цен на недвижимость может опередить темп накоплений'],
+    },
+  },
+  {
+    id: 'g2',
+    title: 'Подушка безопасности (3 мес. расходов)',
+    target_amount: 1_500_000,
+    current_amount: 480_000,
+    target_date: null,
+    currency: 'KZT',
+    status: 'active',
+    ai_strategy: null,
+  },
+]
+
+export const mockBankProducts: BankProduct[] = [
+  {
+    id: 'b1',
+    bank_name: 'Halyk Bank',
+    product_name: 'Депозит «Накопительный»',
+    type: 'deposit',
+    rate_percent: 14.5,
+    term_months: 24,
+    min_amount: 50_000,
+    source_url: 'https://halykbank.kz/deposits',
+    updated_at: '2026-08-01',
+  },
+  {
+    id: 'b2',
+    bank_name: 'Kaspi Bank',
+    product_name: 'Депозит Investor',
+    type: 'deposit',
+    rate_percent: 13.8,
+    term_months: 12,
+    min_amount: 10_000,
+    source_url: 'https://kaspi.kz/deposits',
+    updated_at: '2026-08-01',
+  },
+  {
+    id: 'b3',
+    bank_name: 'Bank CenterCredit',
+    product_name: 'Сберегательный счёт',
+    type: 'savings_account',
+    rate_percent: 11.2,
+    term_months: null,
+    min_amount: 0,
+    source_url: 'https://bcc.kz/savings',
+    updated_at: '2026-07-15',
+  },
+]
+
+export const mockStatus: StatusInsight = {
+  status: 'yellow',
+  score: 58,
+  headline: 'Расходы почти сравнялись с доходом — есть куда сократить',
+  key_risks: [
+    'Обязательные платежи по долгам съедают 17% совместного дохода',
+    'Подушка безопасности покрывает меньше 2 месяцев расходов',
+  ],
+  recommendations: [
+    'Направить премию Айым на досрочное погашение карты рассрочки Kaspi Red (самая высокая ставка)',
+    'Сократить категорию «Развлечения» на 15% до конца месяца',
+  ],
+}
+
+export const mockChatMessages: ChatMessage[] = [
+  {
+    id: 'm1',
+    user_id: 'u1',
+    role: 'assistant',
+    content: 'Привет! Я вижу ваши доходы, расходы и долги — спрашивайте что угодно, например «Могу ли я купить MacBook за 750 000₸?».',
+    created_at: '2026-09-10T09:00:00Z',
+  },
+]

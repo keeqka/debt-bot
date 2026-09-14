@@ -1,0 +1,52 @@
+name: Deploy frontend (Cloudflare Pages)
+
+# Builds app/ and deploys the static output to Cloudflare Pages on every push
+# to main that touches app/**. Requires these repo secrets — see README.md
+# "Деплой через CI/CD":
+#   CLOUDFLARE_API_TOKEN     dash.cloudflare.com/profile/api-tokens — "Edit Cloudflare Pages" template
+#   CLOUDFLARE_ACCOUNT_ID    right sidebar of any page in the Cloudflare dashboard
+#   CLOUDFLARE_PAGES_PROJECT name of the Pages project (create it once in the CF dashboard, or let the action create it)
+#   VITE_SUPABASE_URL        same value as in app/.env.local
+#   VITE_SUPABASE_ANON_KEY   same value as in app/.env.local
+#
+# Alternative: skip this workflow entirely and use Cloudflare Pages' own Git
+# integration (connect the repo directly in the CF dashboard) — zero YAML,
+# zero secrets in GitHub. This file is here for teams that want the whole
+# pipeline visible in one place instead.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+          directory: app/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="ru" data-theme="luxury">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ТЗ: Telegram Mini App — AI-финансы</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :where(.grid, .flex) > * { min-width: 0; }
+  :where(p, h1, h2, h3, h4, h5, h6, li, dd, blockquote, figcaption, td, th, .badge, .label) { overflow-wrap: anywhere; }
+  :where(img, svg, video, canvas, iframe) { max-width: 100%; height: auto; }
+  html { scroll-behavior: smooth; }
+  .anchor-target { scroll-margin-top: 84px; }
+  .status-dot { width: .6rem; height: .6rem; border-radius: 999px; display: inline-block; }
+  .prose-note p { margin: 0 0 .5rem; }
+  .prose-note p:last-child { margin-bottom: 0; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: color-mix(in oklch, var(--color-base-content) 20%, transparent); border-radius: 999px; }
+</style>
+</head>
+<body class="bg-base-200 text-base-content">
+
+<div class="drawer lg:drawer-open">
+  <input id="nav-drawer" type="checkbox" class="drawer-toggle">
+
+  <div class="drawer-content flex flex-col">
+    <!-- Top bar (mobile) -->
+    <div class="navbar bg-base-100 border-b border-base-content/10 lg:hidden sticky top-0 z-30">
+      <div class="flex-none">
+        <label for="nav-drawer" class="btn btn-square btn-ghost">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </label>
+      </div>
+      <div class="flex-1 font-semibold">ТЗ · AI-финансы Mini App</div>
+    </div>
+
+    <main class="mx-auto w-full max-w-5xl px-5 py-10 lg:px-10 lg:py-12 space-y-16">
+
+      <!-- ============ HERO / META ============ -->
+      <header id="top" class="anchor-target space-y-6">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="badge badge-primary badge-soft">Технический документ</span>
+          <span class="badge badge-outline">v1.0 · черновик для реализации</span>
+          <span class="badge badge-ghost">12 сентября 2026</span>
+        </div>
+        <h1 class="text-4xl lg:text-5xl font-bold leading-tight">
+          Telegram Mini App: AI-мониторинг личных финансов
+        </h1>
+        <p class="text-lg text-base-content/70 max-w-3xl">
+          Техническое задание для передачи в Claude Code. Приложение открывается из Telegram-чата двух пользователей,
+          отслеживает долги, доходы и расходы, распознаёт чеки, оценивает финансовое состояние с помощью AI
+          и присылает еженедельные и ежемесячные сводки прямо в Telegram.
+        </p>
+        <div class="alert alert-warning alert-soft">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+          <span><b>Важное уточнение перед стартом:</b> подписка Claude.ai (Pro/Max) и Claude API — это разные продукты с разным биллингом.
+          Готовая подписка не даёт бесплатных вызовов API. Раздел <a href="#ai-cost" class="link link-primary">«Стоимость AI»</a> и
+          пункт 2 в <a href="#open-questions" class="link link-primary">спорных местах</a> объясняют, почему это всё ещё дёшево для 2 пользователей.</span>
+        </div>
+      </header>
+
+      <!-- ============ 1. ЦЕЛИ И SCOPE ============ -->
+      <section id="goals" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">1</span>Цели и Scope</h2>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">Цель продукта</h3>
+              <p class="text-sm text-base-content/80">Дать двум пользователям (семья/пара) единую точку контроля над личными финансами:
+              видеть долги и план их погашения, понимать структуру расходов, получать AI-оценку «здоровья» бюджета
+              и продвигаться к финансовым целям — не выходя из Telegram.</p>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">Формат</h3>
+              <p class="text-sm text-base-content/80">Telegram Mini App (Web App), запускается кнопкой из чата/группы с ботом.
+              Без отдельного сайта, без отдельной регистрации — авторизация через Telegram.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="card bg-success/10 border border-success/30">
+            <div class="card-body">
+              <h3 class="card-title text-base text-success">В scope (v1)</h3>
+              <ul class="text-sm space-y-1.5 list-disc list-inside marker:text-success">
+                <li>Учёт долгов, платежей по ним, 2 AI-стратегии погашения</li>
+                <li>Доходы и расходы: ручной ввод + распознавание чеков/скриншотов</li>
+                <li>Автокатегоризация расходов и разбивка по категориям</li>
+                <li>AI-оценка финансового статуса (шкала зелёный→красный)</li>
+                <li>Еженедельная и ежемесячная сводка в Telegram</li>
+                <li>Цели накопления с AI-стратегией и подсказками по банкам РК</li>
+                <li>AI-чат консультант с моделированием крупных покупок</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card bg-error/10 border border-error/30">
+            <div class="card-body">
+              <h3 class="card-title text-base text-error">Вне scope (v1)</h3>
+              <ul class="text-sm space-y-1.5 list-disc list-inside marker:text-error">
+                <li>Более 2 пользователей / мульти-тенантность / приглашения</li>
+                <li>Прямая интеграция с банками (Open Banking, парсинг SMS)</li>
+                <li>Инвестиционный портфель, брокерские счета, крипта</li>
+                <li>Нативные iOS/Android приложения вне Telegram</li>
+                <li>Автоматические платежи/переводы (только учёт, не выполнение)</li>
+                <li>Гарантированно актуальные ставки банков РК в реальном времени</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 2. ПОЛЬЗОВАТЕЛИ / АВТОРИЗАЦИЯ ============ -->
+      <section id="auth" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">2</span>Пользователи и авторизация</h2>
+        <p class="text-sm text-base-content/70 max-w-3xl">Ровно два пользователя, оба заранее известны (жёстко прописаны через переменные окружения по их Telegram ID). Отдельной регистрации, паролей или email нет.</p>
+
+        <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-100">
+          <table class="table">
+            <thead><tr><th>Шаг</th><th>Механизм</th><th>Результат</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="font-medium">1. Открытие Mini App</td>
+                <td>Telegram передаёт <code class="text-xs bg-base-200 px-1 rounded">initData</code> (подписанную строку с user.id, username, auth_date)</td>
+                <td>Frontend отправляет initData на backend при каждом запуске</td>
+              </tr>
+              <tr>
+                <td class="font-medium">2. Валидация подписи</td>
+                <td>Backend проверяет HMAC-SHA256 подписи по секрету бота (см. <a href="#telegram" class="link">раздел 8</a>)</td>
+                <td>Отклоняются поддельные/протухшие (&gt;24ч) запросы</td>
+              </tr>
+              <tr>
+                <td class="font-medium">3. Проверка whitelist</td>
+                <td>telegram_user_id сверяется со списком из 2 разрешённых ID в конфиге</td>
+                <td>Любой третий получает 403 и экран «доступ не предоставлен»</td>
+              </tr>
+              <tr>
+                <td class="font-medium">4. Сессия</td>
+                <td>Backend выпускает короткоживущий JWT (TTL ~1ч), фронт кладёт его в память (не localStorage)</td>
+                <td>Дальнейшие API-запросы идут с этим JWT</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="alert alert-info alert-soft">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span><b>Модель данных общая, не раздельная:</b> оба пользователя видят все долги/доходы/расходы/цели — это семейный бюджет, а не два изолированных кабинета.
+          Каждая запись хранит <code class="text-xs bg-base-200 px-1 rounded">created_by</code> для атрибуции «кто добавил», но фильтрации «только моё» в v1 нет. Обоснование — см. <a href="#open-questions" class="link link-primary">спорное место №1</a>.</span>
+        </div>
+      </section>
+
+      <!-- ============ 3. АРХИТЕКТУРА И СТЕК ============ -->
+      <section id="architecture" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">3</span>Архитектура и рекомендуемый стек</h2>
+        <p class="text-sm text-base-content/70 max-w-3xl">Приоритет — бесплатный tier / open source везде, кроме самого AI-вызова (см. пометку ниже). Стек рассчитан на нагрузку «2 пользователя», поэтому выбраны решения без серверов, которые нужно администрировать.</p>
+
+        <!-- Architecture diagram -->
+        <div class="card card-border bg-base-100">
+          <div class="card-body">
+            <h3 class="card-title text-base mb-2">Схема архитектуры</h3>
+            <svg viewBox="0 0 900 480" class="w-full h-auto" role="img" aria-labelledby="arch-title arch-desc" xmlns="http://www.w3.org/2000/svg">
+              <title id="arch-title">Архитектура Telegram Mini App</title>
+              <desc id="arch-desc">Telegram Mini App общается с фронтендом, фронтенд — с Supabase Edge Functions и PostgREST, которые читают/пишут в Postgres и Storage и вызывают Claude API; pg_cron раз в неделю/месяц запускает функцию, которая вызывает Claude и Telegram Bot API.</desc>
+              <defs>
+                <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" class="text-base-content/50"/>
+                </marker>
+              </defs>
+              <style>
+                .box { fill: var(--color-base-200); stroke: currentColor; stroke-opacity:.25; stroke-width:1.5; rx:10; }
+                .boxlabel { font: 600 13px system-ui, sans-serif; fill: currentColor; }
+                .boxsub { font: 11px system-ui, sans-serif; fill: currentColor; opacity:.6; }
+                .edge { fill:none; stroke: currentColor; stroke-opacity:.45; stroke-width:1.5; marker-end:url(#arrow); }
+                .edgelabel { font: 11px system-ui, sans-serif; fill: currentColor; opacity:.7; }
+                .grouplabel { font: 600 11px system-ui, sans-serif; fill: currentColor; opacity:.45; letter-spacing:.05em; text-transform:uppercase; }
+              </style>
+
+              <!-- Telegram -->
+              <rect id="node-telegram" class="box" x="30" y="40" width="170" height="70"/>
+              <text class="boxlabel" x="115" y="70" text-anchor="middle">Telegram</text>
+              <text class="boxsub" x="115" y="88" text-anchor="middle">чат / Mini App / бот</text>
+
+              <!-- Frontend -->
+              <rect id="node-frontend" class="box" x="30" y="200" width="170" height="80"/>
+              <text class="boxlabel" x="115" y="228" text-anchor="middle">Frontend</text>
+              <text class="boxsub" x="115" y="246" text-anchor="middle">React + shadcn/ui</text>
+              <text class="boxsub" x="115" y="262" text-anchor="middle">Cloudflare Pages</text>
+
+              <!-- Edge Functions -->
+              <rect id="node-edge" class="box" x="330" y="200" width="200" height="80"/>
+              <text class="boxlabel" x="430" y="228" text-anchor="middle">Supabase Edge Functions</text>
+              <text class="boxsub" x="430" y="246" text-anchor="middle">Deno · API + AI-оркестрация</text>
+              <text class="boxsub" x="430" y="262" text-anchor="middle">+ Telegram webhook</text>
+
+              <!-- Postgres -->
+              <rect id="node-db" class="box" x="330" y="360" width="200" height="80"/>
+              <text class="boxlabel" x="430" y="388" text-anchor="middle">Postgres + RLS</text>
+              <text class="boxsub" x="430" y="406" text-anchor="middle">Supabase (данные, история)</text>
+              <text class="boxsub" x="430" y="422" text-anchor="middle">Storage (фото чеков)</text>
+
+              <!-- Claude -->
+              <rect id="node-claude" class="box" x="630" y="200" width="200" height="80"/>
+              <text class="boxlabel" x="730" y="228" text-anchor="middle">Claude API</text>
+              <text class="boxsub" x="730" y="246" text-anchor="middle">распознавание, категоризация,</text>
+              <text class="boxsub" x="730" y="262" text-anchor="middle">стратегии, статус, чат</text>
+
+              <!-- pg_cron -->
+              <rect id="node-cron" class="box" x="630" y="360" width="200" height="80"/>
+              <text class="boxlabel" x="730" y="388" text-anchor="middle">pg_cron</text>
+              <text class="boxsub" x="730" y="406" text-anchor="middle">еженедельно / ежемесячно</text>
+              <text class="boxsub" x="730" y="422" text-anchor="middle">вызывает Edge Function</text>
+
+              <!-- edges -->
+              <path class="edge" d="M115,110 L115,200"/>
+              <text class="edgelabel" x="122" y="158">открытие Mini App, initData</text>
+
+              <path class="edge" d="M200,235 L330,235"/>
+              <text class="edgelabel" x="215" y="222">REST / JSON, JWT</text>
+
+              <path class="edge" d="M430,280 L430,360"/>
+              <text class="edgelabel" x="438" y="322">PostgREST / SQL</text>
+
+              <path class="edge" d="M530,225 L630,225"/>
+              <text class="edgelabel" x="540" y="212">Messages API</text>
+
+              <path class="edge" d="M730,280 L730,360"/>
+              <text class="edgelabel" x="560" y="330"></text>
+
+              <path class="edge" d="M630,395 C560,395 470,300 460,282"/>
+
+              <path class="edge" d="M730,360 C730,150 300,60 200,68"/>
+              <text class="edgelabel" x="470" y="130">Bot API: sendMessage (сводки)</text>
+
+              <text class="grouplabel" x="30" y="26">Клиент</text>
+              <text class="grouplabel" x="330" y="186">Бэкенд (без сервера)</text>
+              <text class="grouplabel" x="630" y="186">Внешние API</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Stack cards -->
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h3 class="card-title text-base">Frontend</h3>
+                <span class="badge badge-success badge-soft badge-sm">free</span>
+              </div>
+              <p class="text-sm text-base-content/70">React + TypeScript + Vite, <b>shadcn/ui</b> + Tailwind, Recharts (графики через shadcn charts),
+              <code class="text-xs bg-base-200 px-1 rounded">@telegram-apps/sdk</code> для интеграции с Telegram WebApp (тема, safe area, haptics).</p>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h3 class="card-title text-base">Backend / API</h3>
+                <span class="badge badge-success badge-soft badge-sm">free tier</span>
+              </div>
+              <p class="text-sm text-base-content/70">Supabase Edge Functions (Deno) для кастомной логики и AI-вызовов + автосгенерированный PostgREST для простого CRUD под RLS-политиками.</p>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h3 class="card-title text-base">База данных</h3>
+                <span class="badge badge-success badge-soft badge-sm">free tier</span>
+              </div>
+              <p class="text-sm text-base-content/70">Supabase Postgres (500MB, более чем достаточно для 2 пользователей), Row Level Security ограничивает доступ 2 whitelisted ID.</p>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h3 class="card-title text-base">Хранилище файлов</h3>
+                <span class="badge badge-success badge-soft badge-sm">free tier</span>
+              </div>
+              <p class="text-sm text-base-content/70">Supabase Storage (1GB free), приватный бакет <code class="text-xs bg-base-200 px-1 rounded">receipts/</code>, доступ через signed URL с TTL.</p>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h3 class="card-title text-base">Хостинг фронтенда</h3>
+                <span class="badge badge-success badge-soft badge-sm">free</span>
+              </div>
+              <p class="text-sm text-base-content/70">Cloudflare Pages (или Vercel Hobby) — HTTPS, CI из git по умолчанию, без ограничений по трафику на этом масштабе.</p>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h3 class="card-title text-base">Cron</h3>
+                <span class="badge badge-success badge-soft badge-sm">free</span>
+              </div>
+              <p class="text-sm text-base-content/70"><code class="text-xs bg-base-200 px-1 rounded">pg_cron</code> + <code class="text-xs bg-base-200 px-1 rounded">pg_net</code> внутри Supabase — расписание живёт в БД, без внешнего планировщика.</p>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100 sm:col-span-2 lg:col-span-3" id="ai-cost">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h3 class="card-title text-base">AI — единственный платный компонент</h3>
+                <span class="badge badge-warning badge-soft badge-sm">pay-per-use</span>
+              </div>
+              <p class="text-sm text-base-content/70">Claude API (Anthropic) — оплата по токенам, отдельно от подписки Claude.ai. Для 2 пользователей с умеренным использованием
+              (несколько чеков в день, пара AI-запросов, один чат в день) расход обычно составляет единицы долларов в месяц. Это единственная часть стека,
+              которая не бесплатна по умолчанию — сознательное решение, т.к. альтернативы (self-hosted LLM) не дадут сопоставимого качества
+              распознавания чеков и финансовых рекомендаций. Модель: Claude — сильная модель для сложных задач (стратегии, чат), лёгкая модель для рутинной категоризации, чтобы снизить стоимость.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 4. МОДЕЛЬ ДАННЫХ ============ -->
+      <section id="data-model" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">4</span>Сущности и модель данных</h2>
+        <p class="text-sm text-base-content/70 max-w-3xl">Postgres-схема, единый tenant (household), без multi-tenant слоя — см. <a href="#open-questions" class="link">спорное место №1</a>.</p>
+
+        <div class="join join-vertical w-full">
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox" checked>
+            <div class="collapse-title font-semibold">users</div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>uuid PK</td><td>—</td></tr>
+                  <tr><td><code>telegram_id</code></td><td>bigint unique</td><td>из initData, whitelisted</td></tr>
+                  <tr><td><code>display_name</code></td><td>text</td><td>имя в UI</td></tr>
+                  <tr><td><code>username</code>, <code>avatar_url</code></td><td>text</td><td>из Telegram профиля</td></tr>
+                  <tr><td><code>timezone</code></td><td>text</td><td>по умолчанию Asia/Almaty</td></tr>
+                  <tr><td><code>created_at</code></td><td>timestamptz</td><td>—</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox" checked>
+            <div class="collapse-title font-semibold">debts <span class="badge badge-ghost badge-sm ml-2">долги</span></div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>uuid PK</td><td>—</td></tr>
+                  <tr><td><code>owner_user_id</code></td><td>uuid FK → users</td><td>на ком формально долг</td></tr>
+                  <tr><td><code>title</code>, <code>creditor</code></td><td>text</td><td>«Кредит на авто», «Kaspi Bank»</td></tr>
+                  <tr><td><code>principal_amount</code></td><td>numeric</td><td>исходная сумма</td></tr>
+                  <tr><td><code>current_balance</code></td><td>numeric</td><td>остаток (пересчитывается платежами)</td></tr>
+                  <tr><td><code>currency</code></td><td>text</td><td>по умолчанию KZT</td></tr>
+                  <tr><td><code>interest_rate</code></td><td>numeric</td><td>% годовых, nullable</td></tr>
+                  <tr><td><code>minimum_payment</code></td><td>numeric</td><td>обязательный ежемесячный платёж</td></tr>
+                  <tr><td><code>due_day</code></td><td>int</td><td>день месяца платежа</td></tr>
+                  <tr><td><code>status</code></td><td>enum</td><td>active / closed</td></tr>
+                  <tr><td><code>notes</code>, <code>created_at</code></td><td>text / timestamptz</td><td>—</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">debt_payments</div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>uuid PK</td><td>—</td></tr>
+                  <tr><td><code>debt_id</code></td><td>uuid FK → debts</td><td>—</td></tr>
+                  <tr><td><code>amount</code></td><td>numeric</td><td>сумма платежа</td></tr>
+                  <tr><td><code>paid_at</code></td><td>date</td><td>—</td></tr>
+                  <tr><td><code>is_extra</code></td><td>bool</td><td>сверх минимального платежа (для трекинга стратегии)</td></tr>
+                  <tr><td><code>note</code></td><td>text</td><td>—</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">incomes <span class="badge badge-ghost badge-sm ml-2">доходы</span></div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code>, <code>user_id</code></td><td>uuid</td><td>кто получил</td></tr>
+                  <tr><td><code>source</code></td><td>text</td><td>«Зарплата», «Фриланс»</td></tr>
+                  <tr><td><code>amount</code>, <code>currency</code></td><td>numeric / text</td><td>—</td></tr>
+                  <tr><td><code>received_at</code></td><td>date</td><td>—</td></tr>
+                  <tr><td><code>is_recurring</code></td><td>bool</td><td>для прогноза месячного дохода</td></tr>
+                  <tr><td><code>recurrence_day</code></td><td>int</td><td>день месяца, nullable</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox" checked>
+            <div class="collapse-title font-semibold">expenses <span class="badge badge-ghost badge-sm ml-2">расходы</span></div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code>, <code>user_id</code></td><td>uuid</td><td>кто добавил</td></tr>
+                  <tr><td><code>amount</code>, <code>currency</code></td><td>numeric / text</td><td>—</td></tr>
+                  <tr><td><code>category_id</code></td><td>uuid FK → categories</td><td>nullable до категоризации</td></tr>
+                  <tr><td><code>merchant</code></td><td>text</td><td>из чека или вручную</td></tr>
+                  <tr><td><code>spent_at</code></td><td>date</td><td>—</td></tr>
+                  <tr><td><code>description</code></td><td>text</td><td>—</td></tr>
+                  <tr><td><code>source</code></td><td>enum</td><td>manual / receipt_photo / screenshot</td></tr>
+                  <tr><td><code>receipt_asset_path</code></td><td>text</td><td>путь в Storage, nullable</td></tr>
+                  <tr><td><code>ai_confidence</code></td><td>numeric</td><td>уверенность категоризации 0–1</td></tr>
+                  <tr><td><code>is_confirmed</code></td><td>bool</td><td>подтверждено пользователем после AI-разбора</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">categories</div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code>, <code>name</code>, <code>icon</code></td><td>uuid / text</td><td>«Еда», «Транспорт»…</td></tr>
+                  <tr><td><code>type</code></td><td>enum</td><td>expense / income</td></tr>
+                  <tr><td><code>is_system</code></td><td>bool</td><td>сид-набор нельзя удалить, можно скрыть</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">goals <span class="badge badge-ghost badge-sm ml-2">цели</span></div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code>, <code>title</code></td><td>uuid / text</td><td>«Квартира», «Подушка безопасности»</td></tr>
+                  <tr><td><code>target_amount</code>, <code>current_amount</code></td><td>numeric</td><td>—</td></tr>
+                  <tr><td><code>target_date</code></td><td>date</td><td>nullable</td></tr>
+                  <tr><td><code>status</code></td><td>enum</td><td>active / achieved / paused</td></tr>
+                  <tr><td><code>ai_strategy</code></td><td>jsonb</td><td>последний расчёт стратегии (см. раздел 7)</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">ai_insights</div>
+            <div class="collapse-content">
+              <p class="text-sm text-base-content/70 mb-2">Единая таблица для всех сгенерированных AI-артефактов: статус, недельная/месячная сводка, стратегии.</p>
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>uuid PK</td><td>—</td></tr>
+                  <tr><td><code>type</code></td><td>enum</td><td>status / weekly_summary / monthly_summary / debt_strategy / goal_strategy</td></tr>
+                  <tr><td><code>payload</code></td><td>jsonb</td><td>структурированный ответ модели (см. контракты)</td></tr>
+                  <tr><td><code>sent_to_telegram</code></td><td>bool</td><td>для weekly/monthly</td></tr>
+                  <tr><td><code>created_at</code></td><td>timestamptz</td><td>—</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">chat_messages</div>
+            <div class="collapse-content">
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code>, <code>user_id</code></td><td>uuid</td><td>кто пишет</td></tr>
+                  <tr><td><code>role</code></td><td>enum</td><td>user / assistant / tool</td></tr>
+                  <tr><td><code>content</code></td><td>text</td><td>—</td></tr>
+                  <tr><td><code>context_snapshot</code></td><td>jsonb</td><td>срез финансов на момент ответа (для воспроизводимости)</td></tr>
+                  <tr><td><code>created_at</code></td><td>timestamptz</td><td>—</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">bank_products <span class="badge badge-warning badge-soft badge-sm ml-2">справочник РК</span></div>
+            <div class="collapse-content">
+              <p class="text-sm text-base-content/70 mb-2">Курируемая вручную таблица (не realtime), см. <a href="#open-questions" class="link">спорное место №4</a>.</p>
+              <div class="overflow-x-auto"><table class="table table-sm">
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code>, <code>bank_name</code>, <code>product_name</code></td><td>uuid / text</td><td>—</td></tr>
+                  <tr><td><code>type</code></td><td>enum</td><td>deposit / savings_account</td></tr>
+                  <tr><td><code>rate_percent</code></td><td>numeric</td><td>индикативная ставка</td></tr>
+                  <tr><td><code>term_months</code>, <code>min_amount</code></td><td>int / numeric</td><td>—</td></tr>
+                  <tr><td><code>source_url</code>, <code>updated_at</code></td><td>text / date</td><td>для проверки пользователем</td></tr>
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 5. ЭКРАНЫ И UX ============ -->
+      <section id="screens" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">5</span>Экраны и UX</h2>
+        <p class="text-sm text-base-content/70 max-w-3xl">Компоненты — максимально shadcn/ui. Плавные переходы между экранами (view transitions / motion), графики — Recharts в обёртке shadcn <code class="text-xs bg-base-200 px-1 rounded">chart</code>. Статусный цвет (зелёный…красный) — сквозной акцент: полоса вверху дашборда, точка на аватарке, обводка карточки цели.</p>
+
+        <div class="alert alert-info alert-soft">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span><b>Mobile-first, не адаптив «сверху вниз»:</b> Telegram открывает Mini App почти всегда на телефоне (шторкой на iOS, почти на весь экран на Android) — верстаем в первую очередь под узкий экран 375–430px, десктоп получает ту же раскладку растянутой по центру, а не отдельный дизайн.</span>
+        </div>
+
+        <div class="card card-border bg-base-100">
+          <div class="card-body items-center">
+            <h3 class="card-title text-base self-start">Навигация — нижний таб-бар, не верхнее меню</h3>
+            <p class="text-sm text-base-content/70 self-start max-w-2xl">5 основных экранов — в нижнем таб-баре (Дашборд · Долги · Финансы · Цели · Чат), как в нативном iOS-приложении, большим пальцем достать удобнее, чем до верхнего меню. «Настройки» — не отдельная вкладка, а иконка профиля/аватара в шапке, чтобы не занимать 6-й слот таб-бара. Иконки — <code class="text-xs bg-base-200 px-1 rounded">lucide-react</code>, дефолтный набор shadcn/ui, а не эмодзи.</p>
+            <div class="mockup-phone mt-3 scale-90 sm:scale-100">
+              <div class="mockup-phone-camera"></div>
+              <div class="mockup-phone-display">
+                <div class="flex flex-col h-[500px] w-[250px] bg-base-200">
+                  <div class="flex items-center justify-between px-4" style="padding-top: max(0.75rem, env(safe-area-inset-top));">
+                    <div class="h-2 w-16 rounded-full bg-base-content/20"></div>
+                    <div class="avatar placeholder"><div class="bg-primary/30 text-primary rounded-full w-6"><span class="text-[10px]">A</span></div></div>
+                  </div>
+                  <div class="flex-1 p-4 space-y-2 overflow-hidden">
+                    <div class="h-16 rounded-2xl bg-success/20 border border-success/30"></div>
+                    <div class="h-20 rounded-2xl bg-base-100 border border-base-content/10"></div>
+                    <div class="h-20 rounded-2xl bg-base-100 border border-base-content/10"></div>
+                  </div>
+                  <div class="flex items-center justify-around py-2 border-t border-base-content/10 bg-base-100 rounded-t-2xl" style="padding-bottom: max(0.6rem, env(safe-area-inset-bottom));">
+                    <span class="text-[10px] flex flex-col items-center gap-1 text-primary">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-[18px] w-[18px]"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                      Дашборд
+                    </span>
+                    <span class="text-[10px] flex flex-col items-center gap-1 text-base-content/50">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-[18px] w-[18px]"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                      Долги
+                    </span>
+                    <span class="text-[10px] flex flex-col items-center gap-1 text-base-content/50">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-[18px] w-[18px]"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+                      Финансы
+                    </span>
+                    <span class="text-[10px] flex flex-col items-center gap-1 text-base-content/50">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-[18px] w-[18px]"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                      Цели
+                    </span>
+                    <span class="text-[10px] flex flex-col items-center gap-1 text-base-content/50">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-[18px] w-[18px]"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+                      Чат
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h4 class="font-semibold text-sm">Safe area / вырез и Dynamic Island</h4>
+              <p class="text-sm text-base-content/70">Отступы через <code class="text-xs bg-base-200 px-1 rounded">env(safe-area-inset-top/bottom)</code>: таб-бар и шапка не должны залезать под системные зоны iPhone. Telegram WebApp дополнительно даёт <code class="text-xs bg-base-200 px-1 rounded">viewportStableHeight</code> для расчёта реально доступной высоты под шторкой.</p>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h4 class="font-semibold text-sm">Скругления в стиле iOS</h4>
+              <p class="text-sm text-base-content/70">На iOS Telegram открывает Mini App как шторку со скруглёнными верхними углами — важные элементы не прижимаем к самому верхнему краю. Карточки, модалки и таб-бар — крупный радиус (<code class="text-xs bg-base-200 px-1 rounded">rounded-2xl</code>/<code class="text-xs bg-base-200 px-1 rounded">rounded-3xl</code>), без острых углов, в духе нативных iOS-компонентов.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <div class="flex items-center gap-2">
+                <span class="status-dot bg-success"></span>
+                <h3 class="card-title text-base">1. Дашборд (главный экран)</h3>
+              </div>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Статус-баннер: цвет + короткий AI-вывод («Расходы под контролем, долг сокращается»)</li>
+                <li>Stat-карточки: баланс, доход/расход за месяц, сумма долгов</li>
+                <li>Кольцевая диаграмма категорий расходов текущего месяца</li>
+                <li>Мини-график остатка долга по времени</li>
+                <li>Быстрые действия: + расход, + фото чека, спросить AI</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">2. Долги</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Список долгов карточками: сумма, ставка, мин. платёж, прогресс-бар погашения</li>
+                <li>Добавление/редактирование долга, история платежей по нему</li>
+                <li>Переключатель «Оптимальная / Агрессивная» стратегия (см. раздел 6)</li>
+                <li>Таймлайн погашения по выбранной стратегии + итоговая переплата</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">3. Доходы и расходы</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Единая лента транзакций с фильтром по типу/категории/периоду/автору</li>
+                <li>Ручное добавление (сумма, категория, дата, заметка)</li>
+                <li>Кнопка «Фото чека» → загрузка → экран подтверждения AI-разбора перед сохранением</li>
+                <li>Разбивка по категориям (donut + список с процентами)</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">4. Цели</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Карточки целей с прогресс-баром и датой</li>
+                <li>AI-стратегия накопления: сколько откладывать в месяц, когда достигнете цели</li>
+                <li>Релевантные депозиты/накопительные счета банков РК с пояснением выбора</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">5. AI-чат</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Чат в стиле Telegram/iMessage, знает текущее финансовое состояние без пересказа пользователем</li>
+                <li>Быстрые подсказки: «Могу я купить MacBook за ...?», «Как быстрее закрыть долги?»</li>
+                <li>Моделирование покупки — карточка-результат с влиянием на статус/цели, не просто текст</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">6. Настройки <span class="badge badge-ghost badge-sm ml-1">через аватар, не таб-бар</span></h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Управление категориями, базовая валюта</li>
+                <li>Время еженедельной/ежемесячной сводки, часовой пояс</li>
+                <li>Статус подключения бота, повторная привязка</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 6. БИЗНЕС-ЛОГИКА ============ -->
+      <section id="business-logic" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">6</span>Бизнес-логика</h2>
+
+        <h3 class="font-semibold text-lg">6.1 Стратегии погашения долгов</h3>
+        <p class="text-sm text-base-content/70 max-w-3xl">Обе стратегии используют <b>метод «лавины»</b> (avalanche: сначала долг с самой высокой ставкой) —
+        он математически минимизирует переплату по процентам. Отличие — в объёме дополнительного платежа сверх минимального.</p>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="card bg-base-100 border-2 border-info/40">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h4 class="card-title text-base">Оптимальная</h4>
+                <span class="badge badge-info badge-soft">баланс</span>
+              </div>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Порядок погашения: по убыванию ставки (avalanche)</li>
+                <li>На досрочное погашение направляется ~10–20% свободного остатка (доход − обязательные расходы − мин. платежи)</li>
+                <li>Сохраняется финансовая подушка</li>
+                <li>Более длинный срок, минимальная переплата по процентам</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card bg-base-100 border-2 border-error/40">
+            <div class="card-body">
+              <div class="flex items-center justify-between">
+                <h4 class="card-title text-base">Агрессивная</h4>
+                <span class="badge badge-error badge-soft">скорость</span>
+              </div>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Тот же порядок (avalanche) — переплата всё ещё минимизируется при данной скорости</li>
+                <li>На досрочное погашение направляется до 50–80% свободного остатка</li>
+                <li>Явно указывается, какие расходы предлагается урезать</li>
+                <li>Короткий срок, минимальная подушка — риск отмечается предупреждением в UI</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <p class="text-xs text-base-content/50">Альтернативное определение (snowball — сначала маленькие долги ради мотивации) рассматривалось и отклонено по умолчанию; см. <a href="#open-questions" class="link">спорное место №3</a>.</p>
+
+        <h3 class="font-semibold text-lg pt-2">6.2 Шкала финансового статуса</h3>
+        <p class="text-sm text-base-content/70 max-w-3xl">5-уровневая шкала, а не бинарная зелёный/красный, чтобы избежать резких скачков между двумя соседними неделями.</p>
+        <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-100">
+          <table class="table">
+            <thead><tr><th>Статус</th><th>Условие (ориентир)</th><th>Что видит пользователь</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge badge-success gap-2"><span class="status-dot bg-success"></span>Зелёный</span></td><td>норма сбережений ≥15%, долг/доход низкий, подушка ≥3 мес.</td><td>Похвала + один совет для роста</td></tr>
+              <tr><td><span class="badge badge-success badge-soft gap-2"><span class="status-dot bg-success"></span>Светло-зелёный</span></td><td>сбережения положительные, но подушка &lt;3 мес.</td><td>Совет по накоплению подушки</td></tr>
+              <tr><td><span class="badge badge-warning badge-soft gap-2"><span class="status-dot bg-warning"></span>Жёлтый</span></td><td>расходы ≈ доходам, минимальные платежи по долгам покрываются впритык</td><td>Явный список рисков</td></tr>
+              <tr><td><span class="badge badge-warning gap-2"><span class="status-dot" style="background:oklch(70% .19 55)"></span>Оранжевый</span></td><td>расходы &gt; доходов в отдельные месяцы, долговая нагрузка растёт</td><td>Приоритетные действия + предложение агрессивной стратегии</td></tr>
+              <tr><td><span class="badge badge-error gap-2"><span class="status-dot bg-error"></span>Красный</span></td><td>устойчивый дефицит, риск просрочки платежей</td><td>Тревожный баннер, конкретный план на ближайшую неделю</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-base-content/50">Итоговый статус считает Claude (см. контракт в 7.3), а не жёсткая формула на бэкенде — это осознанный выбор, чтобы учитывать контекст (сезонность, разовые траты), а не только пороги.</p>
+
+        <h3 class="font-semibold text-lg pt-2">6.3 Категоризация расходов</h3>
+        <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1 max-w-3xl">
+          <li>Каждый новый расход (ручной или из чека) проходит через AI-категоризацию (раздел 7.2)</li>
+          <li>Если уверенность &lt; 0.6 — категория проставляется, но помечается как «уточнить», подсвечивается в ленте</li>
+          <li>Пользователь может переопределить категорию вручную в любой момент — это не отправляется на дообучение модели, просто обновляет запись</li>
+        </ul>
+      </section>
+
+      <!-- ============ 7. AI-ФУНКЦИИ И ПРОМПТЫ ============ -->
+      <section id="ai-functions" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">7</span>AI-функции, промпты и контракты</h2>
+        <p class="text-sm text-base-content/70 max-w-3xl">Все AI-вызовы идут через Claude Messages API с <b>принудительным structured output</b> (tool-use с одним обязательным tool'ом, а не парсинг свободного текста) — это делает контракт стабильным для бэкенда. Ниже — назначение, сжатый системный промпт и схема ответа для каждой функции.</p>
+
+        <div class="join join-vertical w-full">
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox" checked>
+            <div class="collapse-title font-semibold">7.1 Распознавание чека / скриншота</div>
+            <div class="collapse-content space-y-3">
+              <p class="text-sm text-base-content/70">Вход: изображение (base64, до 5MB) + список существующих категорий. Модель: Claude с vision.</p>
+              <div class="mockup-code text-xs">
+<pre data-prefix=""><code>Ты помогаешь разобрать чек или скриншот банковского перевода/платежа.
+Извлеки магазина/получателя, дату, сумму, валюту и предложи категорию
+из списка: {categories}. Если это не финансовый документ — верни
+is_valid_receipt=false. Не придумывай данные, которых нет на изображении.</code></pre>
+              </div>
+              <div class="mockup-code text-xs">
+<pre data-prefix="{"><code>  "is_valid_receipt": true,</code></pre>
+<pre data-prefix=""><code>  "merchant": "Magnum",</code></pre>
+<pre data-prefix=""><code>  "date": "2026-09-10",</code></pre>
+<pre data-prefix=""><code>  "total_amount": 12450,</code></pre>
+<pre data-prefix=""><code>  "currency": "KZT",</code></pre>
+<pre data-prefix=""><code>  "line_items": [{ "name": "string", "amount": 0 }],</code></pre>
+<pre data-prefix=""><code>  "suggested_category": "Продукты",</code></pre>
+<pre data-prefix=""><code>  "confidence": 0.92</code></pre>
+<pre data-prefix="}"><code></code></pre>
+              </div>
+              <p class="text-xs text-base-content/50">Результат <b>всегда</b> ведёт на экран подтверждения — автосохранение без просмотра пользователем запрещено (см. риски OCR в разделе 11).</p>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">7.2 Автокатегоризация (ручной ввод)</div>
+            <div class="collapse-content space-y-3">
+              <p class="text-sm text-base-content/70">Лёгкая/быстрая модель — задача простая и частая, дешевле гонять на меньшей модели.</p>
+              <div class="mockup-code text-xs">
+<pre data-prefix="{"><code>  "category_id": "uuid | null",</code></pre>
+<pre data-prefix=""><code>  "new_category_suggestion": "string | null",</code></pre>
+<pre data-prefix=""><code>  "confidence": 0.0</code></pre>
+<pre data-prefix="}"><code></code></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">7.3 Оценка финансового статуса</div>
+            <div class="collapse-content space-y-3">
+              <p class="text-sm text-base-content/70">Вход: доходы/расходы за 1–3 месяца, долги, платежи, остатки, цели. Запускается при открытии дашборда (с кэшем на день) и в составе еженедельной/месячной сводки.</p>
+              <div class="mockup-code text-xs">
+<pre data-prefix="{"><code>  "status": "green | light_green | yellow | orange | red",</code></pre>
+<pre data-prefix=""><code>  "score": 0,</code></pre>
+<pre data-prefix=""><code>  "headline": "string, до 80 символов",</code></pre>
+<pre data-prefix=""><code>  "key_risks": ["string"],</code></pre>
+<pre data-prefix=""><code>  "recommendations": ["string"]</code></pre>
+<pre data-prefix="}"><code></code></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">7.4 Еженедельная / ежемесячная сводка</div>
+            <div class="collapse-content space-y-3">
+              <p class="text-sm text-base-content/70">Вызывается из pg_cron. Текст должен помещаться в одно сообщение Telegram (лимит 4096 символов, целимся в &lt;700 для читаемости).</p>
+              <div class="mockup-code text-xs">
+<pre data-prefix="{"><code>  "period": "week | month",</code></pre>
+<pre data-prefix=""><code>  "status_emoji": "🟢",</code></pre>
+<pre data-prefix=""><code>  "telegram_text": "string, Markdown, <700 символов",</code></pre>
+<pre data-prefix=""><code>  "top_category_changes": [{ "category": "string", "delta_percent": 0 }],</code></pre>
+<pre data-prefix=""><code>  "one_recommendation": "string"</code></pre>
+<pre data-prefix="}"><code></code></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">7.5 Стратегия погашения долгов</div>
+            <div class="collapse-content space-y-3">
+              <p class="text-sm text-base-content/70">Вход: список долгов (сумма, ставка, мин. платёж) + свободный остаток. Вызывается по кнопке и при существенном изменении входных данных (новый долг, платёж).</p>
+              <div class="mockup-code text-xs">
+<pre data-prefix="{"><code>  "strategy": "optimal | aggressive",</code></pre>
+<pre data-prefix=""><code>  "payoff_order": ["debt_id", "..."],</code></pre>
+<pre data-prefix=""><code>  "monthly_plan": [{ "debt_id": "uuid", "payment": 0 }],</code></pre>
+<pre data-prefix=""><code>  "estimated_payoff_date": "2027-04-01",</code></pre>
+<pre data-prefix=""><code>  "total_interest_paid": 0,</code></pre>
+<pre data-prefix=""><code>  "explanation": "string"</code></pre>
+<pre data-prefix="}"><code></code></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">7.6 Стратегия накопления на цель</div>
+            <div class="collapse-content space-y-3">
+              <p class="text-sm text-base-content/70">Вход: цель, свободный остаток, действующие долги, <code class="text-xs bg-base-200 px-1 rounded">bank_products</code> (справочник РК передаётся как контекст, не как задача поиска в интернете — см. раздел 4).</p>
+              <div class="mockup-code text-xs">
+<pre data-prefix="{"><code>  "monthly_contribution_needed": 0,</code></pre>
+<pre data-prefix=""><code>  "estimated_completion_date": "2028-01-01",</code></pre>
+<pre data-prefix=""><code>  "bank_product_suggestions": [</code></pre>
+<pre data-prefix=""><code>    { "bank_product_id": "uuid", "reasoning": "string" }</code></pre>
+<pre data-prefix=""><code>  ],</code></pre>
+<pre data-prefix=""><code>  "risks": ["string"]</code></pre>
+<pre data-prefix="}"><code></code></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">7.7 AI-чат консультант + моделирование покупки</div>
+            <div class="collapse-content space-y-3">
+              <p class="text-sm text-base-content/70">Системный промпт при каждом сообщении включает свежий финансовый срез (доход/расход за 3 мес., долги, цели, текущий статус) —
+              контекст не хранится «в голове» модели между сессиями, а прикладывается заново, чтобы не устаревал. Для вопросов вида
+              «могу ли я купить MacBook за 750 000₸» модель вызывает tool <code class="text-xs bg-base-200 px-1 rounded">model_purchase_impact</code>.</p>
+              <div class="mockup-code text-xs">
+<pre data-prefix="tool"><code>model_purchase_impact(item_name, amount, payment_type: "one_time"|"installments", installment_months?)</code></pre>
+<pre data-prefix="→"><code>{ "new_status": "yellow", "months_to_recover_buffer": 2, "impact_on_goals": [...], "verdict": "string" }</code></pre>
+              </div>
+              <p class="text-xs text-base-content/50">Ответ рендерится как отдельная карточка результата в чате (см. экран 5), а не просто текстом.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 8. TELEGRAM ИНТЕГРАЦИЯ ============ -->
+      <section id="telegram" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">8</span>Telegram-интеграция</h2>
+
+        <ul class="steps steps-vertical lg:steps-horizontal w-full">
+          <li class="step step-primary">Бот через BotFather</li>
+          <li class="step step-primary">Mini App URL зарегистрирован</li>
+          <li class="step step-primary">Кнопка Web App в чате</li>
+          <li class="step">initData → сервер</li>
+          <li class="step">Проверка HMAC</li>
+        </ul>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">Настройка</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Бот создаётся через <code class="text-xs bg-base-200 px-1 rounded">@BotFather</code>: <code class="text-xs bg-base-200 px-1 rounded">/newbot</code> → токен в секреты Edge Function, не в код</li>
+                <li><code class="text-xs bg-base-200 px-1 rounded">/newapp</code> регистрирует Mini App с URL фронтенда</li>
+                <li>В чате/группе двух пользователей — кнопка Web App или закреплённое сообщение с меню-кнопкой бота</li>
+                <li>Оба пользователя должны хотя бы раз написать боту <code class="text-xs bg-base-200 px-1 rounded">/start</code> — иначе Telegram не даст боту проактивно слать сообщения (weekly/monthly сводки)</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">Валидация initData</h3>
+              <div class="mockup-code text-xs">
+<pre data-prefix="1"><code>secret = HMAC_SHA256("WebAppData", BOT_TOKEN)</code></pre>
+<pre data-prefix="2"><code>check = HMAC_SHA256(secret, data_check_string)</code></pre>
+<pre data-prefix="3"><code>if check !== hash → 401</code></pre>
+<pre data-prefix="4"><code>if now - auth_date > 24h → 401</code></pre>
+<pre data-prefix="5"><code>if user.id not in [ID_1, ID_2] → 403</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="alert alert-info alert-soft">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span>Тема оформления синхронизируется с Telegram через <code class="text-xs bg-base-200 px-1 rounded">Telegram.WebApp.themeParams</code> и <code class="text-xs bg-base-200 px-1 rounded">colorScheme</code> — светлая/тёмная тема DaisyUI переключается автоматически вслед за темой самого Telegram.</span>
+        </div>
+      </section>
+
+      <!-- ============ 9. УВЕДОМЛЕНИЯ / CRON ============ -->
+      <section id="notifications" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">9</span>Уведомления и Cron</h2>
+
+        <ul class="timeline timeline-vertical lg:timeline-horizontal w-full">
+          <li>
+            <div class="timeline-start timeline-box">Вс 19:00 (Asia/Almaty)</div>
+            <div class="timeline-middle"><span class="badge badge-primary badge-sm">🔁</span></div>
+            <div class="timeline-end">pg_cron → Edge Function <code class="text-xs bg-base-200 px-1 rounded">weekly-summary</code> → 7.4 → Bot API <code class="text-xs bg-base-200 px-1 rounded">sendMessage</code> обоим users</div>
+            <hr/>
+          </li>
+          <li>
+            <hr/>
+            <div class="timeline-start timeline-box">Последний день месяца, 20:00</div>
+            <div class="timeline-middle"><span class="badge badge-primary badge-sm">🔁</span></div>
+            <div class="timeline-end">pg_cron → Edge Function <code class="text-xs bg-base-200 px-1 rounded">monthly-summary</code> → 7.4 (period=month) → Bot API</div>
+          </li>
+        </ul>
+
+        <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-100">
+          <table class="table">
+            <thead><tr><th>Параметр</th><th>Значение по умолчанию</th><th>Настраивается</th></tr></thead>
+            <tbody>
+              <tr><td>Часовой пояс</td><td>Asia/Almaty (UTC+5)</td><td>да, в настройках</td></tr>
+              <tr><td>День/время еженедельной сводки</td><td>Воскресенье, 19:00</td><td>да</td></tr>
+              <tr><td>День/время ежемесячной сводки</td><td>Последний день месяца, 20:00</td><td>да</td></tr>
+              <tr><td>Повторные попытки при сбое отправки</td><td>3 попытки с backoff, затем запись в <code class="text-xs bg-base-200 px-1 rounded">ai_insights.sent_to_telegram=false</code> для ручного разбора</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 10. API ============ -->
+      <section id="api" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">10</span>API</h2>
+        <p class="text-sm text-base-content/70 max-w-3xl">Простой CRUD (долги, доходы, расходы, категории, цели) — через автосгенерированный PostgREST под RLS.
+        Кастомная логика — через Edge Functions, перечислены ниже.</p>
+
+        <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-100">
+          <table class="table">
+            <thead><tr><th>Endpoint</th><th>Метод</th><th>Назначение</th></tr></thead>
+            <tbody>
+              <tr><td><code>/auth/telegram</code></td><td><span class="badge badge-soft">POST</span></td><td>обмен initData → JWT</td></tr>
+              <tr><td><code>/functions/receipts/parse</code></td><td><span class="badge badge-soft">POST</span></td><td>изображение → структурированный чек (7.1)</td></tr>
+              <tr><td><code>/functions/expenses/categorize</code></td><td><span class="badge badge-soft">POST</span></td><td>автокатегоризация (7.2)</td></tr>
+              <tr><td><code>/functions/status</code></td><td><span class="badge badge-soft">GET</span></td><td>текущий AI-статус, кэш 24ч (7.3)</td></tr>
+              <tr><td><code>/functions/debts/strategy</code></td><td><span class="badge badge-soft">POST</span></td><td>пересчёт стратегии (7.5), <code class="text-xs">?type=optimal|aggressive</code></td></tr>
+              <tr><td><code>/functions/goals/:id/strategy</code></td><td><span class="badge badge-soft">POST</span></td><td>стратегия накопления (7.6)</td></tr>
+              <tr><td><code>/functions/chat</code></td><td><span class="badge badge-soft">POST</span></td><td>сообщение в AI-чат, возможен tool-call (7.7)</td></tr>
+              <tr><td><code>/functions/telegram-webhook</code></td><td><span class="badge badge-soft">POST</span></td><td>входящие апдейты бота (например, <code class="text-xs">/start</code>)</td></tr>
+              <tr><td><code>/functions/cron/weekly-summary</code></td><td><span class="badge badge-soft">POST</span></td><td>вызывается только pg_cron, защищён service-ключом</td></tr>
+              <tr><td><code>/functions/cron/monthly-summary</code></td><td><span class="badge badge-soft">POST</span></td><td>вызывается только pg_cron</td></tr>
+              <tr><td><code>debts, expenses, incomes, categories, goals</code></td><td><span class="badge badge-ghost">CRUD</span></td><td>PostgREST напрямую, под RLS</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 11. БЕЗОПАСНОСТЬ ============ -->
+      <section id="security" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">11</span>Безопасность</h2>
+        <div class="grid md:grid-cols-2 gap-4">
+          <ul class="text-sm space-y-2">
+            <li class="flex gap-2"><input type="checkbox" checked class="checkbox checkbox-sm checkbox-success mt-0.5" disabled><span>Каждый запрос проверяет подпись <code class="text-xs bg-base-200 px-1 rounded">initData</code> и whitelist из 2 Telegram ID</span></li>
+            <li class="flex gap-2"><input type="checkbox" checked class="checkbox checkbox-sm checkbox-success mt-0.5" disabled><span>RLS-политики Postgres запрещают доступ без валидного JWT, привязанного к одному из 2 <code class="text-xs bg-base-200 px-1 rounded">user_id</code></span></li>
+            <li class="flex gap-2"><input type="checkbox" checked class="checkbox checkbox-sm checkbox-success mt-0.5" disabled><span>Секреты (bot token, Claude API key, service-role key) — только в env переменных Edge Functions, никогда во фронтенд-бандле</span></li>
+            <li class="flex gap-2"><input type="checkbox" checked class="checkbox checkbox-sm checkbox-success mt-0.5" disabled><span>Фото чеков — приватный Storage-бакет, доступ только по signed URL с коротким TTL</span></li>
+          </ul>
+          <ul class="text-sm space-y-2">
+            <li class="flex gap-2"><input type="checkbox" checked class="checkbox checkbox-sm checkbox-success mt-0.5" disabled><span>Cron-эндпоинты защищены отдельным service-секретом, недоступны без него даже с валидным пользовательским JWT</span></li>
+            <li class="flex gap-2"><input type="checkbox" checked class="checkbox checkbox-sm checkbox-success mt-0.5" disabled><span>Rate limiting на AI-эндпоинтах (например, 30 запросов/час на пользователя) — защита от случайного цикла запросов и от расхода бюджета</span></li>
+            <li class="flex gap-2"><input type="checkbox" checked class="checkbox checkbox-sm checkbox-success mt-0.5" disabled><span>Приложение не хранит номера карт, CVV, пароли от банков — только суммы и текстовые описания</span></li>
+            <li class="flex gap-2"><input type="checkbox" checked class="checkbox checkbox-sm checkbox-success mt-0.5" disabled><span>Логи AI-запросов не пишут полный base64 изображения в постоянные логи (только метаданные)</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ============ 12. БЕСПЛАТНАЯ ИНФРАСТРУКТУРА / ЛИМИТЫ ============ -->
+      <section id="free-limits" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">12</span>Бесплатная инфраструктура — лимиты</h2>
+        <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-100">
+          <table class="table">
+            <thead><tr><th>Сервис</th><th>Free tier</th><th>Достаточно для 2 пользователей?</th></tr></thead>
+            <tbody>
+              <tr><td>Supabase (DB+Auth+Storage+Edge Functions)</td><td>500MB БД, 1GB Storage, 500K вызовов Edge Functions/мес</td><td><span class="badge badge-success badge-soft">с большим запасом</span></td></tr>
+              <tr><td>Cloudflare Pages</td><td>неограниченные запросы, 500 сборок/мес</td><td><span class="badge badge-success badge-soft">с запасом</span></td></tr>
+              <tr><td>Telegram Bot API</td><td>бесплатно без лимитов на объём для такого масштаба</td><td><span class="badge badge-success badge-soft">да</span></td></tr>
+              <tr><td>pg_cron (в составе Supabase)</td><td>включён в free tier проекта</td><td><span class="badge badge-success badge-soft">да</span></td></tr>
+              <tr><td>Claude API</td><td>без бесплатного tier, оплата по токенам</td><td><span class="badge badge-warning badge-soft">низкая стоимость, не $0</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ 13. ОГРАНИЧЕНИЯ ============ -->
+      <section id="limitations" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">13</span>Ограничения</h2>
+        <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1.5 max-w-3xl">
+          <li>Жёсткий whitelist на 2 Telegram ID — добавление третьего пользователя требует изменения конфигурации, это не продуктовая функция</li>
+          <li>Нет прямой интеграции с банками — все данные вносятся вручную или через фото чека/скриншота</li>
+          <li>Точность распознавания чеков не гарантирована на 100% — обязателен экран подтверждения перед сохранением</li>
+          <li>Данные о банковских продуктах РК курируются вручную и могут устаревать — в UI показывается дата обновления и ссылка на источник, пользователю рекомендуется сверяться напрямую</li>
+          <li>AI-советы (стратегии, статус, чат) — вспомогательная информация, не являются формальной финансовой консультацией</li>
+          <li>Базовая валюта — KZT; мультивалютность поддержана в модели данных, но конвертация курсов в v1 не автоматизирована</li>
+        </ul>
+      </section>
+
+      <!-- ============ 14. ЭТАПЫ РЕАЛИЗАЦИИ ============ -->
+      <section id="stages" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">14</span>Этапы реализации</h2>
+        <ul class="steps steps-vertical w-full">
+          <li class="step step-primary"><div class="text-left ml-2"><b>0. Инфраструктура</b><div class="text-xs text-base-content/60">Supabase-проект, схема БД, бот в BotFather, Cloudflare Pages, репозиторий/CI</div></div></li>
+          <li class="step step-primary"><div class="text-left ml-2"><b>1. Авторизация + базовый CRUD</b><div class="text-xs text-base-content/60">initData-валидация, JWT, экраны долгов/доходов/расходов без AI</div></div></li>
+          <li class="step step-primary"><div class="text-left ml-2"><b>2. Ручной учёт и визуализация</b><div class="text-xs text-base-content/60">Дашборд, графики категорий, ручные категории без AI</div></div></li>
+          <li class="step"><div class="text-left ml-2"><b>3. AI: чеки и категоризация</b><div class="text-xs text-base-content/60">Загрузка фото, распознавание (7.1), автокатегоризация (7.2), экран подтверждения</div></div></li>
+          <li class="step"><div class="text-left ml-2"><b>4. AI: статус и стратегии долгов</b><div class="text-xs text-base-content/60">Оценка статуса (7.3), оптимальная/агрессивная стратегия (7.5)</div></div></li>
+          <li class="step"><div class="text-left ml-2"><b>5. Цели и банковские продукты</b><div class="text-xs text-base-content/60">Экран целей, стратегия накопления (7.6), сид справочника bank_products</div></div></li>
+          <li class="step"><div class="text-left ml-2"><b>6. AI-чат</b><div class="text-xs text-base-content/60">Чат с контекстом, tool model_purchase_impact (7.7)</div></div></li>
+          <li class="step"><div class="text-left ml-2"><b>7. Уведомления</b><div class="text-xs text-base-content/60">pg_cron, weekly/monthly сводки (7.4), доставка в Telegram</div></div></li>
+          <li class="step"><div class="text-left ml-2"><b>8. Полировка</b><div class="text-xs text-base-content/60">Анимации, тёмная/светлая тема из Telegram, нагрузочная проверка на реальных данных 2 пользователей</div></div></li>
+        </ul>
+      </section>
+
+      <!-- ============ 15. ACCEPTANCE CRITERIA ============ -->
+      <section id="acceptance" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">15</span>Acceptance criteria</h2>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">Авторизация и доступ</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Открытие Mini App любым из 2 пользователей проходит без ручного логина</li>
+                <li>Запрос с поддельной/протухшей initData отклоняется с понятной ошибкой</li>
+                <li>Третий Telegram-аккаунт получает экран «нет доступа», не видит данных</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">Долги</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Можно добавить/закрыть долг, внести платёж, увидеть обновлённый остаток</li>
+                <li>Обе стратегии показывают разный порядок сумм и дату погашения при одних и тех же долгах</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">Расходы / чеки</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Фото чека даёт заполненную форму подтверждения с корректными суммой и датой в &gt;90% тестовых чеков</li>
+                <li>Ни один расход не сохраняется из фото без явного подтверждения пользователем</li>
+                <li>Ручной расход появляется в ленте и дашборде сразу после сохранения</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">AI-статус и уведомления</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Статус на дашборде обновляется не реже раза в сутки и соответствует шкале из 6.2</li>
+                <li>Оба пользователя получают еженедельное и ежемесячное сообщение в Telegram в заданное время ±5 минут</li>
+                <li>Сбой отправки логируется и не роняет остальную функциональность</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">Цели</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Для новой цели AI-стратегия рассчитывается и отображается без ручного пересчёта</li>
+                <li>Показаны минимум 1–3 релевантных банковских продукта РК с датой актуальности данных</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card card-border bg-base-100">
+            <div class="card-body">
+              <h3 class="card-title text-base">AI-чат</h3>
+              <ul class="text-sm text-base-content/70 list-disc list-inside space-y-1">
+                <li>Вопрос о покупке (например, MacBook) возвращает структурированную карточку влияния, а не только текст</li>
+                <li>Ответы учитывают актуальные цифры пользователя, а не общие советы</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 16. СПОРНЫЕ МЕСТА ============ -->
+      <section id="open-questions" class="anchor-target space-y-5">
+        <h2 class="text-2xl font-bold flex items-center gap-2"><span class="badge badge-primary badge-lg">16</span>Спорные места и решения по умолчанию</h2>
+        <p class="text-sm text-base-content/70 max-w-3xl">Эти пункты стоило бы подтвердить с пользователем до реализации, но чтобы не блокировать Claude Code — ниже зафиксировано разумное решение по умолчанию для каждого.</p>
+
+        <div class="join join-vertical w-full">
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox" checked>
+            <div class="collapse-title font-semibold">1. Общий бюджет или два изолированных кабинета?</div>
+            <div class="collapse-content text-sm text-base-content/70">
+              <p><b>По умолчанию:</b> один общий «семейный» набор данных, видимый обоим, с атрибуцией автора записи.</p>
+              <p><b>Почему:</b> контекст — конференция/чат на двоих, цели вроде «квартира» обычно общие; раздельные кабинеты усложнили бы AI-оценку статуса (пришлось бы решать, чей это статус).</p>
+            </div>
+          </div>
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">2. Подписка Claude.ai vs Claude API</div>
+            <div class="collapse-content text-sm text-base-content/70">
+              <p><b>По умолчанию:</b> отдельный ключ Claude API с оплатой по токенам; подписка Claude.ai используется пользователем отдельно для общения с Claude, но не даёт бесплатных вызовов внутри приложения.</p>
+              <p><b>Почему:</b> это два разных продукта Anthropic с разным биллингом; технической возможности «прокинуть» веб-подписку в API не существует. При малом объёме использования (2 человека) стоимость токенов минимальна.</p>
+            </div>
+          </div>
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">3. Что значит «оптимальная» и «агрессивная» стратегия?</div>
+            <div class="collapse-content text-sm text-base-content/70">
+              <p><b>По умолчанию:</b> обе — avalanche (по ставке), различаются только долей свободного остатка, направляемой на досрочное погашение (см. 6.1).</p>
+              <p><b>Почему:</b> avalanche всегда даёт меньшую переплату при любой скорости, поэтому оставлять его в обеих версиях логичнее, чем переключаться на snowball — который мотивационно приятнее, но математически хуже. Snowball можно добавить позже как третий вариант.</p>
+            </div>
+          </div>
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">4. Актуальность данных о банках Казахстана</div>
+            <div class="collapse-content text-sm text-base-content/70">
+              <p><b>По умолчанию:</b> курируемая вручную таблица <code class="text-xs bg-base-200 px-1 rounded">bank_products</code> с датой обновления и ссылкой на источник; AI выбирает из неё, а не «придумывает» ставки.</p>
+              <p><b>Почему:</b> у Claude нет гарантированного доступа к живым ставкам депозитов РК; выдумывание цифр в финансовом контексте недопустимо. Более сложная альтернатива — Anthropic web search tool «на лету» с явной пометкой «требует проверки» — можно добавить отдельным этапом.</p>
+            </div>
+          </div>
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">5. Базовая валюта</div>
+            <div class="collapse-content text-sm text-base-content/70">
+              <p><b>По умолчанию:</b> KZT как основная валюта интерфейса; поле <code class="text-xs bg-base-200 px-1 rounded">currency</code> есть у каждой суммы на будущее, но автоконвертации курсов нет.</p>
+            </div>
+          </div>
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">6. Хранение фото чеков</div>
+            <div class="collapse-content text-sm text-base-content/70">
+              <p><b>По умолчанию:</b> Supabase Storage, приватный бакет, оригинал хранится постоянно (для пересмотра при споре по сумме), доступ только по подписанной ссылке.</p>
+            </div>
+          </div>
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">7. День и время уведомлений</div>
+            <div class="collapse-content text-sm text-base-content/70">
+              <p><b>По умолчанию:</b> воскресенье 19:00 (итог недели, перед планированием новой) и последний день месяца 20:00, часовой пояс Asia/Almaty — оба настраиваются в UI.</p>
+            </div>
+          </div>
+          <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-100">
+            <input type="checkbox">
+            <div class="collapse-title font-semibold">8. Backend: своя нода или Supabase</div>
+            <div class="collapse-content text-sm text-base-content/70">
+              <p><b>По умолчанию:</b> без отдельного Node-сервера — Supabase Edge Functions покрывают всю кастомную логику, PostgREST — CRUD.</p>
+              <p><b>Почему:</b> для 2 пользователей отдельный сервер — это лишняя эксплуатационная нагрузка (мониторинг аптайма, деплой) без выигрыша; serverless free tier с запасом покрывает нагрузку.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="pt-6 pb-2 text-xs text-base-content/40 border-t border-base-content/10">
+        Документ подготовлен как ТЗ для передачи в Claude Code. Формулировки в разделе 16 — предложенные значения по умолчанию, не окончательные решения пользователя.
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- ============ SIDEBAR NAV ============ -->
+  <div class="drawer-side z-40">
+    <label for="nav-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+    <aside class="min-h-full w-72 bg-base-100 border-r border-base-content/10 p-5 flex flex-col gap-1">
+      <a href="#top" class="text-sm font-bold mb-3 px-2">AI-финансы · ТЗ</a>
+      <ul class="menu menu-sm gap-0.5">
+        <li><a href="#goals">1. Цели и scope</a></li>
+        <li><a href="#auth">2. Пользователи / авторизация</a></li>
+        <li><a href="#architecture">3. Архитектура и стек</a></li>
+        <li><a href="#data-model">4. Модель данных</a></li>
+        <li><a href="#screens">5. Экраны и UX</a></li>
+        <li><a href="#business-logic">6. Бизнес-логика</a></li>
+        <li><a href="#ai-functions">7. AI-функции и промпты</a></li>
+        <li><a href="#telegram">8. Telegram-интеграция</a></li>
+        <li><a href="#notifications">9. Уведомления / cron</a></li>
+        <li><a href="#api">10. API</a></li>
+        <li><a href="#security">11. Безопасность</a></li>
+        <li><a href="#free-limits">12. Бесплатная инфраструктура</a></li>
+        <li><a href="#limitations">13. Ограничения</a></li>
+        <li><a href="#stages">14. Этапы реализации</a></li>
+        <li><a href="#acceptance">15. Acceptance criteria</a></li>
+        <li><a href="#open-questions">16. Спорные места</a></li>
+      </ul>
+    </aside>
+  </div>
+</div>
+
+</body>
+</html>

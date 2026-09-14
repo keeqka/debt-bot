@@ -1,0 +1,18 @@
+# See https://supabase.com/docs/guides/local-development/cli/config
+project_id = "financeminiapp"
+
+# auth-telegram is the login endpoint itself (no session yet), and the cron/
+# webhook functions authenticate via a custom shared secret instead of a
+# Supabase JWT (ТЗ §8/§9/§11) — the platform's automatic JWT check must be
+# off for these four, or it rejects the request before the function runs.
+[functions.auth-telegram]
+verify_jwt = false
+
+[functions.telegram-webhook]
+verify_jwt = false
+
+[functions.cron-weekly-summary]
+verify_jwt = false
+
+[functions.cron-monthly-summary]
+verify_jwt = false
