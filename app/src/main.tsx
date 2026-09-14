@@ -11,6 +11,13 @@ import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 initTelegram()
 initTheme()
 
+// Lets an embedder (e.g. the marketing site iframing this app in mock mode
+// for a live product demo) deep-link to a screen via ?screen=/chat without
+// needing SPA-fallback rewrites configured on whatever static host serves
+// this build — rewritten to a real path before BrowserRouter ever reads it.
+const deepLinkScreen = new URLSearchParams(window.location.search).get('screen')
+if (deepLinkScreen) window.history.replaceState(null, '', deepLinkScreen)
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 1000 * 30, retry: 1 },
