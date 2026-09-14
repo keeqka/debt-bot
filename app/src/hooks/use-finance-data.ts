@@ -17,7 +17,23 @@ export const queryKeys = {
   users: ['users'] as const,
 }
 
-export const useStatus = () => useQuery({ queryKey: queryKeys.status, queryFn: api.getStatus, staleTime: 1000 * 60 * 60 })
+// Pure DB read (see api.getStatus) — cheap no matter how often it's called,
+// unlike the AI computation itself, which only ever runs from the weekly
+// cron or useRefreshStatus below.
+export const useStatus = () => useQuery({ queryKey: queryKeys.status, queryFn: api.getStatus })
+
+export function useRefreshStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.refreshStatus,
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.status, data)
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Не удалось обновить статус')
+    },
+  })
+}
 export const useUsers = () => useQuery({ queryKey: queryKeys.users, queryFn: api.getUsers })
 export const useDebts = () => useQuery({ queryKey: queryKeys.debts, queryFn: api.getDebts })
 export const useIncomes = () => useQuery({ queryKey: queryKeys.incomes, queryFn: api.getIncomes })

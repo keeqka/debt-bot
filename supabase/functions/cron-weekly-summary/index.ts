@@ -1,12 +1,16 @@
 // ТЗ §7.4/§9: runs Sunday 19:00 Asia/Almaty via pg_cron (see
 // supabase/migrations/0002_cron.sql), summarizes the past 7 days and sends
-// it to both whitelisted users in Telegram.
+// it to both whitelisted users in Telegram. Also the weekly "heartbeat" for
+// the dashboard status card (ТЗ §6.2/§7.3) — this and the manual "Обновить"
+// button in the UI are the ONLY two places that ever call Claude for status;
+// opening the app just reads whatever was last stored here.
 
 import { jsonResponse } from '../_shared/cors.ts'
 import { assertCronSecret, sendTelegramMessageWithRetry } from '../_shared/telegram-send.ts'
 import { callClaudeTool } from '../_shared/claude.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getPeriodMetrics, metricsToPrompt, SUMMARY_TOOL } from '../_shared/summary.ts'
+import { computeAndStoreStatus } from '../_shared/compute-status.ts'
 
 Deno.serve(async (req) => {
   try {
@@ -17,6 +21,14 @@ Deno.serve(async (req) => {
     const prevWeekStart = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
 
     const supabase = getAdminClient()
+
+    // Independent of the weekly digest below — refreshes the dashboard status card.
+    try {
+      await computeAndStoreStatus(supabase)
+    } catch (error) {
+      console.error('cron-weekly-summary: status refresh failed (continuing with the digest)', error)
+    }
+
     const [current, previous] = await Promise.all([
       getPeriodMetrics(supabase, weekStart.toISOString().slice(0, 10), now.toISOString().slice(0, 10)),
       getPeriodMetrics(supabase, prevWeekStart.toISOString().slice(0, 10), weekStart.toISOString().slice(0, 10)),

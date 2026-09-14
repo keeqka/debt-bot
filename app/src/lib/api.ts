@@ -229,8 +229,31 @@ export async function getBankProducts(): Promise<BankProduct[]> {
   return data as BankProduct[]
 }
 
-export async function getStatus(): Promise<StatusInsight> {
-  if (!isBackendConfigured) return mock.mockStatus
+/**
+ * Pure read — never calls Claude. The status card only ever gets a fresh AI
+ * computation from the weekly cron or the explicit "Обновить" button
+ * (refreshStatus below); opening/navigating the app just reads whatever was
+ * last stored, so it costs nothing no matter how often it's called.
+ */
+export async function getStatus(): Promise<StatusInsight | null> {
+  if (!isBackendConfigured || !supabase) return mock.mockStatus
+  const { data, error } = await supabase
+    .from('ai_insights')
+    .select('payload')
+    .eq('type', 'status')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return (data?.payload as StatusInsight) ?? null
+}
+
+/** Manually triggered recompute (ТЗ: only the weekly cron and this button ever call Claude for status). */
+export async function refreshStatus(): Promise<StatusInsight> {
+  if (!isBackendConfigured) {
+    await new Promise((r) => setTimeout(r, 600))
+    return mock.mockStatus
+  }
   return callFunction<StatusInsight>('status', {})
 }
 
