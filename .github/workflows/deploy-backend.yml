@@ -9,7 +9,9 @@ name: Deploy backend (Supabase)
 #   TELEGRAM_BOT_TOKEN
 #   TELEGRAM_ALLOWED_USER_IDS   comma-separated, e.g. 111111111,222222222
 #   ANTHROPIC_API_KEY
-#   SUPABASE_JWT_SECRET     Settings → API → JWT Keys → "JWT Secret" (legacy) — used to sign our own session tokens, not the platform's
+#   SUPABASE_JWT_SECRET     Settings → API → JWT Keys → "JWT Secret" (legacy) — used to sign our own session tokens, not the platform's.
+#                           Kept under this GitHub secret name for convenience, but synced to Supabase as SESSION_JWT_SECRET below —
+#                           Supabase rejects custom function secrets named SUPABASE_*, that prefix is reserved for its own vars.
 #   CRON_SECRET             any random string you generate once, reused by pg_cron and the Telegram webhook
 
 on:
@@ -44,7 +46,7 @@ jobs:
             TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
             TELEGRAM_ALLOWED_USER_IDS="${{ secrets.TELEGRAM_ALLOWED_USER_IDS }}" \
             ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}" \
-            SUPABASE_JWT_SECRET="${{ secrets.SUPABASE_JWT_SECRET }}" \
+            SESSION_JWT_SECRET="${{ secrets.SUPABASE_JWT_SECRET }}" \
             CRON_SECRET="${{ secrets.CRON_SECRET }}"
 
       - name: Deploy Edge Functions

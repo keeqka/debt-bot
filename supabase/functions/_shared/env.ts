@@ -1,7 +1,12 @@
 /**
  * Typed access to Edge Function secrets. Set these with:
  *   supabase secrets set TELEGRAM_BOT_TOKEN=... ANTHROPIC_API_KEY=... \
- *     SUPABASE_JWT_SECRET=... CRON_SECRET=... TELEGRAM_ALLOWED_USER_IDS=111,222
+ *     SESSION_JWT_SECRET=... CRON_SECRET=... TELEGRAM_ALLOWED_USER_IDS=111,222
+ *
+ * Note: this is the *value* of the project's JWT Secret (Settings → API →
+ * JWT Keys), but it can't be stored under the name SUPABASE_JWT_SECRET —
+ * Supabase rejects any custom secret whose name starts with SUPABASE_,
+ * reserved for its own auto-injected vars. Hence SESSION_JWT_SECRET here.
  *
  * SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically by
  * the Supabase platform — no need to set those yourself.
@@ -20,7 +25,7 @@ export const env = {
     return required('SUPABASE_SERVICE_ROLE_KEY')
   },
   get supabaseJwtSecret() {
-    return required('SUPABASE_JWT_SECRET')
+    return required('SESSION_JWT_SECRET')
   },
   get telegramBotToken() {
     return required('TELEGRAM_BOT_TOKEN')

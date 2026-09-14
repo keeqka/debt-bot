@@ -45,7 +45,7 @@ npm run dev
    supabase secrets set \
      TELEGRAM_BOT_TOKEN=... \
      ANTHROPIC_API_KEY=... \
-     SUPABASE_JWT_SECRET=...  `# Settings → API → JWT Secret в дашборде` \
+     SESSION_JWT_SECRET=...   `# значение JWT Secret из Settings → API — но имя секрета НЕ SUPABASE_JWT_SECRET: Supabase запрещает секретам функций префикс SUPABASE_` \
      CRON_SECRET=...          `# любая случайная строка, придумать самим` \
      TELEGRAM_ALLOWED_USER_IDS=111111111,222222222  `# Telegram user id обоих пользователей`
    ```
@@ -85,7 +85,7 @@ npm run dev
 - `SUPABASE_ACCESS_TOKEN` — [supabase.com/dashboard/account/tokens](https://supabase.com/dashboard/account/tokens)
 - `SUPABASE_PROJECT_REF` — из URL проекта или Settings → General
 - `SUPABASE_DB_PASSWORD` — пароль Postgres, заданный при создании проекта
-- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, `ANTHROPIC_API_KEY`, `SUPABASE_JWT_SECRET`, `CRON_SECRET` — те же значения, что и в шаге 1.4 выше
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS`, `ANTHROPIC_API_KEY`, `SUPABASE_JWT_SECRET`, `CRON_SECRET` — те же значения, что и в шаге 1.4 выше. Имя GitHub-секрета остаётся `SUPABASE_JWT_SECRET` для удобства — воркфлоу сам прокидывает его в Supabase уже под именем `SESSION_JWT_SECRET` (см. комментарий в `deploy-backend.yml`)
 
 **Для `deploy-frontend.yml`:**
 - `CLOUDFLARE_API_TOKEN` — [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens), шаблон «Edit Cloudflare Pages»
