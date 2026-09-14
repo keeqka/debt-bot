@@ -2,10 +2,13 @@
 // used by status, debts-strategy, goals-strategy, chat, and the weekly/monthly
 // summary functions (ТЗ §7.3-§7.7) so every AI call sees the same numbers.
 
+import { resolveBaseCurrency, currencyInstruction } from './currency.ts'
+
 // deno-lint-ignore no-explicit-any
 type SupabaseLike = any
 
 export interface FinancialSnapshot {
+  currency: string
   incomes: { source: string; amount: number; received_at: string }[]
   expensesByCategory: { category: string; total: number }[]
   totalIncomeLast30d: number
@@ -18,6 +21,7 @@ export interface FinancialSnapshot {
 
 export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<FinancialSnapshot> {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const currency = await resolveBaseCurrency(supabase)
 
   const [{ data: incomes }, { data: expenses }, { data: debts }, { data: goals }, { data: categories }] = await Promise.all([
     supabase.from('incomes').select('source, amount, received_at').gte('received_at', since),
@@ -35,6 +39,7 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<Fi
   }
 
   return {
+    currency,
     incomes: incomes ?? [],
     expensesByCategory: [...byCategory.entries()].map(([category, total]) => ({ category, total })),
     totalIncomeLast30d: (incomes ?? []).reduce((s: number, i: { amount: number }) => s + Number(i.amount), 0),
@@ -57,6 +62,7 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<Fi
 
 export function snapshotToPrompt(snapshot: FinancialSnapshot): string {
   return [
+    `Валюта всех сумм ниже: ${snapshot.currency}. ${currencyInstruction(snapshot.currency)}`,
     `Доход за 30 дней: ${snapshot.totalIncomeLast30d}`,
     `Расход за 30 дней: ${snapshot.totalExpenseLast30d}`,
     `Расходы по категориям: ${snapshot.expensesByCategory.map((c) => `${c.category}=${c.total}`).join(', ') || '—'}`,

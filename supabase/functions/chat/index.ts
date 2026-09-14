@@ -72,8 +72,8 @@ function computePurchaseImpact(
     impact_on_goals: snapshot.goals.map((g) => ({ title: g.title, delayed: bufferHit > 0 })),
     verdict:
       newSurplus < 0
-        ? `После этой покупки расходы превысят доходы примерно на ${Math.abs(Math.round(newSurplus))} в месяц — стоит отложить или растянуть на рассрочку.`
-        : `Покупка выполнима: свободный остаток снизится с ${Math.round(monthlySurplus)} до ${Math.round(newSurplus)} в месяц.`,
+        ? `После этой покупки расходы превысят доходы примерно на ${Math.abs(Math.round(newSurplus))} ${snapshot.currency} в месяц — стоит отложить или растянуть на рассрочку.`
+        : `Покупка выполнима: свободный остаток снизится с ${Math.round(monthlySurplus)} до ${Math.round(newSurplus)} ${snapshot.currency} в месяц.`,
   }
 }
 

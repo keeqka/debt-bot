@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, Pencil, CircleDollarSign, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,8 +44,23 @@ export function Debts() {
   const monthExpense = (expenses ?? []).filter((e) => isThisMonth(e.spent_at)).reduce((s, e) => s + e.amount, 0)
 
   const computedSurplus = Math.max(0, monthIncome - monthExpense - totalMinPayments)
+
+  // The surplus input feeds directly into the AI query key (getDebtStrategy
+  // calls Claude), so committing every keystroke would fire a fresh AI call
+  // per character typed. surplusText is what the field shows live; surplus
+  // (used for the actual query) only catches up 600ms after typing stops.
+  const [surplusText, setSurplusText] = useState<string | null>(null)
   const [surplusOverride, setSurplusOverride] = useState<number | null>(null)
   const surplus = surplusOverride ?? computedSurplus
+
+  useEffect(() => {
+    if (surplusText === null) return
+    const id = setTimeout(() => {
+      const n = Number(surplusText)
+      if (Number.isFinite(n)) setSurplusOverride(n)
+    }, 600)
+    return () => clearTimeout(id)
+  }, [surplusText])
 
   const [strategy, setStrategy] = useState<DebtStrategyKind>('optimal')
   const { data: plan, isLoading: planLoading } = useDebtStrategy(strategy, surplus)
@@ -139,8 +154,8 @@ export function Debts() {
               <Label className="text-muted-foreground text-xs">Свободный остаток/мес.</Label>
               <Input
                 type="number"
-                value={surplus}
-                onChange={(e) => setSurplusOverride(Number(e.target.value))}
+                value={surplusText ?? surplus}
+                onChange={(e) => setSurplusText(e.target.value)}
                 className="h-9"
               />
             </div>

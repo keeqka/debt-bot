@@ -11,6 +11,7 @@ import { callClaudeTool } from '../_shared/claude.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getPeriodMetrics, metricsToPrompt, SUMMARY_TOOL } from '../_shared/summary.ts'
 import { computeAndStoreStatus } from '../_shared/compute-status.ts'
+import { resolveBaseCurrency } from '../_shared/currency.ts'
 
 Deno.serve(async (req) => {
   try {
@@ -29,15 +30,16 @@ Deno.serve(async (req) => {
       console.error('cron-weekly-summary: status refresh failed (continuing with the digest)', error)
     }
 
-    const [current, previous] = await Promise.all([
+    const [current, previous, currency] = await Promise.all([
       getPeriodMetrics(supabase, weekStart.toISOString().slice(0, 10), now.toISOString().slice(0, 10)),
       getPeriodMetrics(supabase, prevWeekStart.toISOString().slice(0, 10), weekStart.toISOString().slice(0, 10)),
+      resolveBaseCurrency(supabase),
     ])
 
     const summary = await callClaudeTool({
       system:
         'Составь еженедельный итог для семьи из двух человек: как прошла неделя по расходам/доходам/долгам, один конкретный совет на следующую неделю. Пиши по-русски, тепло, но по делу, без воды. telegram_text должен быть готов к прямой отправке в Telegram.',
-      messages: [{ role: 'user', content: `period=week\n${metricsToPrompt(current, previous)}` }],
+      messages: [{ role: 'user', content: `period=week\n${metricsToPrompt(current, previous, currency)}` }],
       tool: SUMMARY_TOOL,
     })
 

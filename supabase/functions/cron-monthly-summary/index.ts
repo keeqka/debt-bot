@@ -7,6 +7,7 @@ import { assertCronSecret, sendTelegramMessageWithRetry } from '../_shared/teleg
 import { callClaudeTool } from '../_shared/claude.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getPeriodMetrics, metricsToPrompt, SUMMARY_TOOL } from '../_shared/summary.ts'
+import { resolveBaseCurrency } from '../_shared/currency.ts'
 
 function isLastDayOfMonth(date: Date): boolean {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate() === date.getDate()
@@ -25,15 +26,16 @@ Deno.serve(async (req) => {
     const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
 
     const supabase = getAdminClient()
-    const [current, previous] = await Promise.all([
+    const [current, previous, currency] = await Promise.all([
       getPeriodMetrics(supabase, monthStart.toISOString().slice(0, 10), now.toISOString().slice(0, 10)),
       getPeriodMetrics(supabase, prevMonthStart.toISOString().slice(0, 10), monthStart.toISOString().slice(0, 10)),
+      resolveBaseCurrency(supabase),
     ])
 
     const summary = await callClaudeTool({
       system:
         'Составь итог месяца для семьи из двух человек: доходы/расходы/платежи по долгам, изменения по категориям, один приоритетный совет на следующий месяц. Пиши по-русски, по делу. telegram_text должен быть готов к прямой отправке в Telegram.',
-      messages: [{ role: 'user', content: `period=month\n${metricsToPrompt(current, previous)}` }],
+      messages: [{ role: 'user', content: `period=month\n${metricsToPrompt(current, previous, currency)}` }],
       tool: SUMMARY_TOOL,
     })
 

@@ -1,5 +1,7 @@
 // Shared by cron-weekly-summary and cron-monthly-summary (ТЗ §7.4).
 
+import { currencyInstruction } from './currency.ts'
+
 // deno-lint-ignore no-explicit-any
 type SupabaseLike = any
 
@@ -56,8 +58,9 @@ export async function getPeriodMetrics(supabase: SupabaseLike, fromISO: string, 
   }
 }
 
-export function metricsToPrompt(current: PeriodMetrics, previous: PeriodMetrics): string {
+export function metricsToPrompt(current: PeriodMetrics, previous: PeriodMetrics, currency: string): string {
   return [
+    `Валюта всех сумм ниже: ${currency}. ${currencyInstruction(currency)}`,
     `Расходы за период: ${current.totalExpense} (прошлый период: ${previous.totalExpense})`,
     `Доходы за период: ${current.totalIncome} (прошлый период: ${previous.totalIncome})`,
     `Платежи по долгам за период: ${current.debtPaymentsTotal}`,

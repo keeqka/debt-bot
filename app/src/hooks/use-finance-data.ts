@@ -46,10 +46,17 @@ export const useChatMessages = () => useQuery({ queryKey: queryKeys.chatMessages
 export const useDebtPayments = (debtId: string) =>
   useQuery({ queryKey: queryKeys.debtPayments(debtId), queryFn: () => api.getDebtPayments(debtId) })
 
+// Calls Claude, so this must only ever run when the user actually asks for
+// this exact (kind, surplus) combination — not on every remount or Telegram
+// window-refocus. staleTime: Infinity means the cached result for a given
+// key is reused forever; it's only invalidated below, when the underlying
+// debts actually change (add/edit/delete/payment).
 export const useDebtStrategy = (kind: DebtStrategyKind, monthlySurplus: number) =>
   useQuery({
     queryKey: queryKeys.debtStrategy(kind, monthlySurplus),
     queryFn: () => api.getDebtStrategy(kind, monthlySurplus),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
   })
 
 export function useAddDebtPayment() {
@@ -60,6 +67,7 @@ export function useAddDebtPayment() {
       queryClient.invalidateQueries({ queryKey: queryKeys.debts })
       queryClient.invalidateQueries({ queryKey: queryKeys.debtPayments(variables.debt_id) })
       queryClient.invalidateQueries({ queryKey: queryKeys.status })
+      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },
   })
 }
@@ -68,7 +76,10 @@ export function useAddDebt() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: api.addDebt,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.debts }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.debts })
+      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
+    },
   })
 }
 
@@ -76,7 +87,10 @@ export function useUpdateDebt() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Parameters<typeof api.updateDebt>[1] }) => api.updateDebt(id, patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.debts }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.debts })
+      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
+    },
   })
 }
 
@@ -87,6 +101,7 @@ export function useDeleteDebt() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.debts })
       queryClient.invalidateQueries({ queryKey: queryKeys.status })
+      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },
   })
 }

@@ -7,6 +7,7 @@ import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
 import { callClaudeTool } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
+import { resolveBaseCurrency, currencyInstruction } from '../_shared/currency.ts'
 
 const STRATEGY_TOOL = {
   name: 'report_debt_strategy',
@@ -26,7 +27,7 @@ const STRATEGY_TOOL = {
       },
       estimated_payoff_date: { type: 'string', description: 'ISO date' },
       total_interest_paid: { type: 'number' },
-      explanation: { type: 'string', description: 'по-русски, 2-3 предложения' },
+      explanation: { type: 'string', description: 'по-русски, 2-3 предложения, суммы в указанной валюте' },
     },
     required: ['strategy', 'payoff_order', 'monthly_plan', 'estimated_payoff_date', 'total_interest_paid', 'explanation'],
   },
@@ -46,13 +47,14 @@ Deno.serve(async (req) => {
     const supabase = getUserClient(req.headers.get('Authorization')!)
     const { data: debts, error } = await supabase
       .from('debts')
-      .select('id, title, current_balance, interest_rate, minimum_payment')
+      .select('id, title, current_balance, interest_rate, minimum_payment, currency')
       .eq('status', 'active')
     if (error) throw error
 
+    const currency = await resolveBaseCurrency(supabase)
     const extraShare = strategy === 'optimal' ? '10-20%' : '50-80%'
     const result = await callClaudeTool({
-      system: `Ты рассчитываешь план погашения долгов методом "лавины" (сначала долг с наибольшей ставкой). На досрочное погашение направляй ${extraShare} свободного остатка сверх минимальных платежей. Верни порядок долгов по их id, план ежемесячных платежей, ожидаемую дату полного погашения и итоговую переплату по процентам.`,
+      system: `Ты рассчитываешь план погашения долгов методом "лавины" (сначала долг с наибольшей ставкой). На досрочное погашение направляй ${extraShare} свободного остатка сверх минимальных платежей. Верни порядок долгов по их id, план ежемесячных платежей, ожидаемую дату полного погашения и итоговую переплату по процентам. ${currencyInstruction(currency)}`,
       messages: [
         {
           role: 'user',
