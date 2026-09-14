@@ -29,6 +29,24 @@ if (themeOverride === 'light' || themeOverride === 'dark') {
   initTheme()
 }
 
+// Same embedding case again: an iframe is its own scrollable document, so a
+// visitor's mouse wheel over it would scroll *this* page instead of the
+// marketing site around it — stuck mid-scroll rather than reaching the rest
+// of the landing page. Forward the wheel delta to the embedder via
+// postMessage and swallow it here instead, so from the visitor's side the
+// page behind the demo just scrolls normally, like any static screenshot
+// would. window.parent === window (no-op) when this isn't actually embedded.
+if (deepLinkParams.get('embedded') === '1' && window.parent !== window) {
+  window.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault()
+      window.parent.postMessage({ type: 'fincore-demo-scroll', deltaY: e.deltaY }, '*')
+    },
+    { passive: false },
+  )
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 1000 * 30, retry: 1 },
