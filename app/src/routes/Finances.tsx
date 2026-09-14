@@ -1,12 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
+import { Plus, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useCategories, useExpenses, useIncomes } from '@/hooks/use-finance-data'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useCategories, useDeleteExpense, useDeleteIncome, useExpenses, useIncomes } from '@/hooks/use-finance-data'
 import { formatMoney, formatDateShort } from '@/lib/format'
 import { AddTransactionDialog } from '@/components/finances/AddTransactionDialog'
 import { ReceiptCaptureFlow } from '@/components/finances/ReceiptCaptureFlow'
@@ -29,9 +40,12 @@ export function Finances() {
   const { data: expenses, isLoading: expensesLoading } = useExpenses()
   const { data: incomes, isLoading: incomesLoading } = useIncomes()
   const { data: categories } = useCategories()
+  const deleteExpense = useDeleteExpense()
+  const deleteIncome = useDeleteIncome()
 
   const [filter, setFilter] = useState<Filter>('all')
   const [addOpen, setAddOpen] = useState(searchParams.get('add') === 'manual')
+  const [deletingRow, setDeletingRow] = useState<LedgerRow | null>(null)
 
   const autoOpenReceipt = searchParams.get('add') === 'receipt'
 
@@ -64,6 +78,18 @@ export function Finances() {
 
   const filteredRows = rows.filter((r) => filter === 'all' || r.type === filter)
   const isLoading = expensesLoading || incomesLoading
+  const isDeleting = deleteExpense.isPending || deleteIncome.isPending
+
+  async function confirmDelete() {
+    if (!deletingRow) return
+    if (deletingRow.type === 'expense') {
+      await deleteExpense.mutateAsync(deletingRow.id)
+    } else {
+      await deleteIncome.mutateAsync(deletingRow.id)
+    }
+    toast.success(deletingRow.type === 'expense' ? 'Расход удалён' : 'Доход удалён')
+    setDeletingRow(null)
+  }
 
   return (
     <div className="space-y-5 pb-6">
@@ -106,8 +132,8 @@ export function Finances() {
         ) : (
           <ul className="space-y-2">
             {filteredRows.map((row) => (
-              <li key={`${row.type}-${row.id}`} className="flex items-center justify-between rounded-xl border border-border px-3 py-2.5">
-                <div className="min-w-0">
+              <li key={`${row.type}-${row.id}`} className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2.5">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{row.label}</p>
                   <p className="text-muted-foreground text-xs">{formatDateShort(row.date)}</p>
                 </div>
@@ -121,6 +147,13 @@ export function Finances() {
                     {row.type === 'income' ? '+' : '−'}
                     {formatMoney(row.amount, row.currency)}
                   </span>
+                  <button
+                    onClick={() => setDeletingRow(row)}
+                    aria-label={`Удалить: ${row.label}`}
+                    className="text-muted-foreground hover:text-destructive shrink-0 p-1"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </li>
             ))}
@@ -130,6 +163,23 @@ export function Finances() {
       </div>
 
       <AddTransactionDialog open={addOpen} onOpenChange={setAddOpen} />
+
+      <AlertDialog open={Boolean(deletingRow)} onOpenChange={(open) => !open && setDeletingRow(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить запись?</AlertDialogTitle>
+            <AlertDialogDescription>
+              «{deletingRow?.label}» на {deletingRow ? formatMoney(deletingRow.amount, deletingRow.currency) : ''} удалится безвозвратно.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {isDeleting ? 'Удаление...' : 'Удалить'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

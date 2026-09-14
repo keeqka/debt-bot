@@ -128,11 +128,25 @@ export interface DebtStrategyPlan {
   explanation: string
 }
 
+/** What the chat advisor proposed when the user asked it to add a debt — always reviewed in the "Новый долг" form, never auto-saved. */
+export interface ProposedDebt {
+  title: string
+  creditor: string
+  principal_amount: number | null
+  current_balance: number | null
+  interest_rate: number | null
+  minimum_payment: number | null
+  due_day: number | null
+}
+
 export interface ChatMessage {
   id: Uuid
   user_id: Uuid
   role: 'user' | 'assistant' | 'tool'
   content: string
+  /** Which Claude model produced this reply (assistant messages only). */
+  model?: string | null
+  proposed_debt?: ProposedDebt | null
   created_at: string
 }
 

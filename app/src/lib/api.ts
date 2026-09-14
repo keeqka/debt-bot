@@ -164,6 +164,26 @@ export async function addIncome(income: Omit<Income, 'id'>): Promise<Income> {
   return data as Income
 }
 
+export async function deleteExpense(id: string): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const index = mock.mockExpenses.findIndex((e) => e.id === id)
+    if (index !== -1) mock.mockExpenses.splice(index, 1)
+    return
+  }
+  const { error } = await supabase.from('expenses').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteIncome(id: string): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const index = mock.mockIncomes.findIndex((i) => i.id === id)
+    if (index !== -1) mock.mockIncomes.splice(index, 1)
+    return
+  }
+  const { error } = await supabase.from('incomes').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function getCategories(): Promise<Category[]> {
   if (!isBackendConfigured || !supabase) return mock.mockCategories
   const { data, error } = await supabase.from('categories').select('*')
@@ -306,14 +326,35 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
       created_at: new Date().toISOString(),
     })
     await new Promise((r) => setTimeout(r, 700))
-    const reply: ChatMessage = {
-      id: crypto.randomUUID(),
-      user_id: mock.currentMockUser.id,
-      role: 'assistant',
-      content:
-        'Пока это демо-режим без ключей Claude API — как только подключим бэкенд, здесь будет настоящий ответ на основе ваших реальных доходов, расходов и долгов.',
-      created_at: new Date().toISOString(),
-    }
+
+    const wantsDebt = /долг|кредит|рассрочк/i.test(content)
+    const reply: ChatMessage = wantsDebt
+      ? {
+          id: crypto.randomUUID(),
+          user_id: mock.currentMockUser.id,
+          role: 'assistant',
+          content: 'Демо-режим: нашёл в сообщении похоже на долг — проверьте и подтвердите данные в форме.',
+          model: 'claude-sonnet-5',
+          proposed_debt: {
+            title: 'Новый долг (демо)',
+            creditor: 'Из чата',
+            principal_amount: 200_000,
+            current_balance: 200_000,
+            interest_rate: null,
+            minimum_payment: null,
+            due_day: null,
+          },
+          created_at: new Date().toISOString(),
+        }
+      : {
+          id: crypto.randomUUID(),
+          user_id: mock.currentMockUser.id,
+          role: 'assistant',
+          content:
+            'Пока это демо-режим без ключей Claude API — как только подключим бэкенд, здесь будет настоящий ответ на основе ваших реальных доходов, расходов и долгов.',
+          model: 'claude-sonnet-5',
+          created_at: new Date().toISOString(),
+        }
     mock.mockChatMessages.push(reply)
     return reply
   }

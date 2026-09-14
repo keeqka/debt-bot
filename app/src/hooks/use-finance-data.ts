@@ -145,6 +145,28 @@ export function useAddIncome() {
   })
 }
 
+export function useDeleteExpense() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.deleteExpense,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses })
+      queryClient.invalidateQueries({ queryKey: queryKeys.status })
+    },
+  })
+}
+
+export function useDeleteIncome() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.deleteIncome,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.incomes })
+      queryClient.invalidateQueries({ queryKey: queryKeys.status })
+    },
+  })
+}
+
 export function useSendChatMessage() {
   const queryClient = useQueryClient()
   return useMutation({

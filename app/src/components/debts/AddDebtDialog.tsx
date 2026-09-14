@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAddDebt, useUpdateDebt } from '@/hooks/use-finance-data'
 import { useCurrentUserId } from '@/lib/auth'
 import { assistDebtDraft } from '@/lib/api'
-import type { Debt, DebtDraft, DebtStatus } from '@/types/domain'
+import type { Debt, DebtDraft, DebtStatus, ProposedDebt } from '@/types/domain'
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -44,8 +44,22 @@ const EMPTY_FORM: FormState = {
   notes: '',
 }
 
-/** Create or edit a debt (ТЗ §5 экран 2: "Добавление/редактирование долга"). Pass `debt` to edit. */
-export function AddDebtDialog({ open, onOpenChange, debt }: { open: boolean; onOpenChange: (open: boolean) => void; debt?: Debt }) {
+/**
+ * Create or edit a debt (ТЗ §5 экран 2: "Добавление/редактирование долга").
+ * Pass `debt` to edit an existing one, or `prefill` to seed a new one (e.g.
+ * from a chat proposal) — the user still reviews/edits before saving either way.
+ */
+export function AddDebtDialog({
+  open,
+  onOpenChange,
+  debt,
+  prefill,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  debt?: Debt
+  prefill?: ProposedDebt
+}) {
   const userId = useCurrentUserId()
   const addDebt = useAddDebt()
   const updateDebt = useUpdateDebt()
@@ -60,24 +74,35 @@ export function AddDebtDialog({ open, onOpenChange, debt }: { open: boolean; onO
 
   useEffect(() => {
     if (!open) return
-    setForm(
-      debt
-        ? {
-            title: debt.title,
-            creditor: debt.creditor,
-            principalAmount: String(debt.principal_amount),
-            currentBalance: String(debt.current_balance),
-            interestRate: debt.interest_rate != null ? String(debt.interest_rate) : '',
-            minimumPayment: String(debt.minimum_payment),
-            dueDay: debt.due_day != null ? String(debt.due_day) : '',
-            status: debt.status,
-            notes: debt.notes ?? '',
-          }
-        : EMPTY_FORM,
-    )
+    if (debt) {
+      setForm({
+        title: debt.title,
+        creditor: debt.creditor,
+        principalAmount: String(debt.principal_amount),
+        currentBalance: String(debt.current_balance),
+        interestRate: debt.interest_rate != null ? String(debt.interest_rate) : '',
+        minimumPayment: String(debt.minimum_payment),
+        dueDay: debt.due_day != null ? String(debt.due_day) : '',
+        status: debt.status,
+        notes: debt.notes ?? '',
+      })
+    } else if (prefill) {
+      setForm({
+        ...EMPTY_FORM,
+        title: prefill.title,
+        creditor: prefill.creditor,
+        principalAmount: prefill.principal_amount != null ? String(prefill.principal_amount) : '',
+        currentBalance: prefill.current_balance != null ? String(prefill.current_balance) : '',
+        interestRate: prefill.interest_rate != null ? String(prefill.interest_rate) : '',
+        minimumPayment: prefill.minimum_payment != null ? String(prefill.minimum_payment) : '',
+        dueDay: prefill.due_day != null ? String(prefill.due_day) : '',
+      })
+    } else {
+      setForm(EMPTY_FORM)
+    }
     setHint('')
     setDraftNote(null)
-  }, [open, debt])
+  }, [open, debt, prefill])
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }))

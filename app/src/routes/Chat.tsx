@@ -1,16 +1,38 @@
 import { useEffect, useRef, useState } from 'react'
-import { Send, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Send, Loader2, Copy, Check, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useChatMessages, useSendChatMessage } from '@/hooks/use-finance-data'
 import { cn } from '@/lib/utils'
+import { modelLabel } from '@/lib/ai-models'
+import { formatMoney } from '@/lib/format'
+import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
+import type { ProposedDebt } from '@/types/domain'
 
 const SUGGESTIONS = ['Могу я купить MacBook за 750 000₸?', 'Как быстрее закрыть долги?', 'Сколько я трачу на еду в месяц?']
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.position = 'fixed'
+    el.style.opacity = '0'
+    document.body.appendChild(el)
+    el.select()
+    document.execCommand('copy')
+    document.body.removeChild(el)
+  }
+}
 
 export function Chat() {
   const { data: messages, isLoading } = useChatMessages()
   const sendMessage = useSendChatMessage()
   const [draft, setDraft] = useState('')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [debtPrefill, setDebtPrefill] = useState<ProposedDebt | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -24,23 +46,49 @@ export function Chat() {
     sendMessage.mutate(trimmed)
   }
 
+  async function handleCopy(id: string, content: string) {
+    await copyText(content)
+    setCopiedId(id)
+    toast.success('Скопировано')
+    setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 1500)
+  }
+
   return (
     <div className="flex h-[calc(100dvh-8.5rem)] flex-col">
-      <div className="flex-1 space-y-3 overflow-y-auto pb-2">
+      <div className="flex-1 space-y-1 overflow-y-auto pb-2">
         {isLoading ? (
           <Skeleton className="h-16 w-3/4 rounded-2xl" />
         ) : (
-          messages?.map((m) => (
-            <div
-              key={m.id}
-              className={cn(
-                'max-w-[85%] min-w-0 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words whitespace-pre-wrap',
-                m.role === 'user' ? 'bg-primary text-primary-foreground ml-auto rounded-br-sm' : 'bg-muted rounded-bl-sm',
-              )}
-            >
-              {m.content}
-            </div>
-          ))
+          messages?.map((m) => {
+            const label = m.role === 'assistant' ? modelLabel(m.model) : null
+            return (
+              <div key={m.id} className={cn('flex flex-col gap-1 pb-2', m.role === 'user' ? 'items-end' : 'items-start')}>
+                <div
+                  className={cn(
+                    'max-w-[85%] min-w-0 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words whitespace-pre-wrap',
+                    m.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-sm' : 'bg-muted rounded-bl-sm',
+                  )}
+                >
+                  {m.content}
+                </div>
+
+                {m.proposed_debt && (
+                  <ProposedDebtCard debt={m.proposed_debt} onAdd={() => setDebtPrefill(m.proposed_debt!)} />
+                )}
+
+                <div className={cn('flex items-center gap-2 px-1 text-[10px]', m.role === 'user' && 'flex-row-reverse')}>
+                  {label && <span className="text-muted-foreground">{label}</span>}
+                  <button
+                    onClick={() => handleCopy(m.id, m.content)}
+                    aria-label="Скопировать сообщение"
+                    className="text-muted-foreground hover:text-foreground flex items-center gap-1"
+                  >
+                    {copiedId === m.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </button>
+                </div>
+              </div>
+            )
+          })
         )}
         {sendMessage.isPending && (
           <div className="bg-muted flex w-fit items-center gap-2 rounded-2xl rounded-bl-sm px-3.5 py-2.5">
@@ -82,6 +130,29 @@ export function Chat() {
           <Send className="h-4 w-4" />
         </Button>
       </form>
+
+      <AddDebtDialog open={Boolean(debtPrefill)} onOpenChange={(open) => !open && setDebtPrefill(null)} prefill={debtPrefill ?? undefined} />
+    </div>
+  )
+}
+
+function ProposedDebtCard({ debt, onAdd }: { debt: ProposedDebt; onAdd: () => void }) {
+  return (
+    <div className="bg-muted/50 w-full max-w-[85%] space-y-2 rounded-2xl rounded-bl-sm border border-border p-3">
+      <div className="flex items-center gap-1.5 text-xs font-semibold">
+        <CreditCard className="h-3.5 w-3.5" />
+        Предложение: новый долг
+      </div>
+      <div className="text-muted-foreground space-y-0.5 text-xs">
+        <p>
+          {debt.title} · {debt.creditor}
+        </p>
+        {debt.principal_amount != null && <p>Сумма: {formatMoney(debt.principal_amount)}</p>}
+        {debt.interest_rate != null && <p>Ставка: {debt.interest_rate}%</p>}
+      </div>
+      <Button size="sm" variant="secondary" className="w-full" onClick={onAdd}>
+        Добавить долг
+      </Button>
     </div>
   )
 }
