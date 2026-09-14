@@ -44,11 +44,11 @@ export function CategoryDonutChart({ expenses, categories }: { expenses: Expense
   }
 
   return (
-    <div className="flex items-center gap-4">
-      <ChartContainer config={config} className="aspect-square h-[160px] w-[160px] shrink-0">
+    <div className="flex min-w-0 items-center gap-2">
+      <ChartContainer config={config} className="aspect-square h-[110px] w-[110px] shrink-0">
         <PieChart>
           <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-          <Pie data={data} dataKey="amount" nameKey="label" innerRadius={45} outerRadius={70} strokeWidth={2}>
+          <Pie data={data} dataKey="amount" nameKey="label" innerRadius={30} outerRadius={50} strokeWidth={2}>
             {data.map((entry) => (
               <Cell key={entry.key} fill={entry.fill} />
             ))}
@@ -57,7 +57,7 @@ export function CategoryDonutChart({ expenses, categories }: { expenses: Expense
       </ChartContainer>
       <ul className="min-w-0 flex-1 space-y-1.5">
         {data.map((row) => (
-          <li key={row.key} className="flex items-center gap-2 text-xs">
+          <li key={row.key} className="flex min-w-0 items-center gap-1.5 text-xs">
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: row.fill }} />
             <span className="min-w-0 flex-1 truncate">{row.label}</span>
             <span className="text-muted-foreground shrink-0">{formatPercent(row.amount / total)}</span>

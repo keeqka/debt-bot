@@ -187,21 +187,14 @@ export function AddDebtDialog({
                 e.target.value = ''
               }}
             />
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2">
               <Input
                 value={hint}
                 onChange={(e) => setHint(e.target.value)}
-                placeholder="Уточнение для AI (необязательно), напр. «Kaspi Bank, потребительский»"
-                className="h-9 flex-1 bg-background"
+                placeholder="Уточнение (необязательно), напр. «Kaspi Bank»"
+                className="h-9 w-full bg-background"
               />
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="shrink-0"
-                disabled={isAssisting}
-                onClick={() => fileInputRef.current?.click()}
-              >
+              <Button type="button" size="sm" variant="secondary" disabled={isAssisting} onClick={() => fileInputRef.current?.click()}>
                 {isAssisting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                 {isAssisting ? 'Разбираю...' : 'Скриншот → AI'}
               </Button>

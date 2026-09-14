@@ -136,18 +136,18 @@ export function SettingsPanel() {
         <h3 className="text-sm font-semibold text-muted-foreground">Категории</h3>
         <ul className="space-y-1.5">
           {categories?.map((c) => (
-            <li key={c.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
-              <span className="flex items-center gap-2">
-                {c.name}
-                <span className="text-muted-foreground text-[10px] uppercase">{c.type === 'expense' ? 'расход' : 'доход'}</span>
+            <li key={c.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate">{c.name}</span>
+                <span className="text-muted-foreground shrink-0 text-[10px] uppercase">{c.type === 'expense' ? 'расход' : 'доход'}</span>
               </span>
               {c.is_system ? (
-                <span className="text-muted-foreground text-xs">системная</span>
+                <span className="text-muted-foreground shrink-0 text-xs">системная</span>
               ) : (
                 <button
                   onClick={() => handleDeleteCategory(c.id)}
                   aria-label={`Удалить категорию ${c.name}`}
-                  className="text-muted-foreground hover:text-destructive"
+                  className="text-muted-foreground hover:text-destructive shrink-0"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -159,7 +159,7 @@ export function SettingsPanel() {
         <div className="space-y-2 pt-1">
           <Select value={newCategoryType} onValueChange={(v) => setNewCategoryType((v ?? 'expense') as CategoryType)}>
             <SelectTrigger className="w-full">
-              <SelectValue>{(value: CategoryType) => (value === 'expense' ? 'Новая категория расхода' : 'Новая категория дохода')}</SelectValue>
+              <SelectValue>{(value: CategoryType) => (value === 'expense' ? 'Новая: расход' : 'Новая: доход')}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="expense">Новая категория расхода</SelectItem>

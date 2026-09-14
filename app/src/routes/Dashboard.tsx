@@ -63,15 +63,15 @@ export function Dashboard() {
 
 function StatCard({ label, value, accent, muted }: { label: string; value: string | null; accent?: boolean; muted?: boolean }) {
   return (
-    <Card className="py-0">
-      <CardContent className="space-y-1 p-4">
-        <p className="text-muted-foreground text-xs">{label}</p>
+    <Card className="min-w-0 py-0">
+      <CardContent className="min-w-0 space-y-1 p-3">
+        <p className="text-muted-foreground truncate text-xs">{label}</p>
         {value === null ? (
-          <Skeleton className="h-6 w-24" />
+          <Skeleton className="h-6 w-20" />
         ) : (
           <p
             className={
-              'text-lg font-semibold ' +
+              'truncate text-base font-semibold ' +
               (accent === undefined ? (muted ? 'text-muted-foreground' : '') : accent ? 'text-status-green' : 'text-status-red')
             }
           >
