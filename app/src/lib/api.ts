@@ -408,3 +408,13 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
   }
   return callFunction<ChatMessage>('chat', { content })
 }
+
+/** Wipes the whole shared thread (both household members see the same chat, so this clears it for everyone) — always gated behind a confirm dialog. */
+export async function clearChatMessages(): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    mock.mockChatMessages.length = 0
+    return
+  }
+  const { error } = await supabase.from('chat_messages').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  if (error) throw error
+}

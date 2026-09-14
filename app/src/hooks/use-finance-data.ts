@@ -233,3 +233,13 @@ export function useSendChatMessage() {
     },
   })
 }
+
+export function useClearChat() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.clearChatMessages,
+    onSuccess: () => {
+      queryClient.setQueryData<ChatMessage[]>(queryKeys.chatMessages, [])
+    },
+  })
+}

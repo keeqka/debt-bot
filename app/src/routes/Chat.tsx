@@ -1,13 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Send, Loader2, Copy, Check, CreditCard } from 'lucide-react'
+import { Send, Loader2, Copy, Check, CreditCard, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useChatMessages, useSendChatMessage } from '@/hooks/use-finance-data'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useChatMessages, useClearChat, useSendChatMessage } from '@/hooks/use-finance-data'
 import { cn } from '@/lib/utils'
 import { modelLabel } from '@/lib/ai-models'
 import { formatMoney } from '@/lib/format'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
+import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
 import type { ProposedDebt } from '@/types/domain'
 
 const SUGGESTIONS = ['Могу я купить MacBook за 750 000₸?', 'Как быстрее закрыть долги?', 'Сколько я трачу на еду в месяц?']
@@ -30,9 +41,11 @@ async function copyText(text: string) {
 export function Chat() {
   const { data: messages, isLoading } = useChatMessages()
   const sendMessage = useSendChatMessage()
+  const clearChat = useClearChat()
   const [draft, setDraft] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [debtPrefill, setDebtPrefill] = useState<ProposedDebt | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -53,8 +66,27 @@ export function Chat() {
     setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 1500)
   }
 
+  async function confirmClearChat() {
+    await clearChat.mutateAsync()
+    toast.success('История чата очищена')
+    setConfirmClear(false)
+  }
+
   return (
     <div className="flex h-[calc(100dvh-8.5rem)] flex-col">
+      <div className="flex items-center justify-end pb-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-destructive h-auto gap-1.5 px-2 py-1 text-xs"
+          onClick={() => setConfirmClear(true)}
+          disabled={!messages?.length}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Очистить чат
+        </Button>
+      </div>
+
       <div className="flex-1 space-y-1 overflow-y-auto pb-2">
         {isLoading ? (
           <Skeleton className="h-16 w-3/4 rounded-2xl" />
@@ -65,11 +97,11 @@ export function Chat() {
               <div key={m.id} className={cn('flex flex-col gap-1 pb-2', m.role === 'user' ? 'items-end' : 'items-start')}>
                 <div
                   className={cn(
-                    'max-w-[85%] min-w-0 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words whitespace-pre-wrap',
-                    m.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-sm' : 'bg-muted rounded-bl-sm',
+                    'max-w-[85%] min-w-0 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words',
+                    m.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-sm whitespace-pre-wrap' : 'bg-muted rounded-bl-sm',
                   )}
                 >
-                  {m.content}
+                  {m.role === 'assistant' ? <MarkdownMessage content={m.content} /> : m.content}
                 </div>
 
                 {m.proposed_debt && (
@@ -132,6 +164,23 @@ export function Chat() {
       </form>
 
       <AddDebtDialog open={Boolean(debtPrefill)} onOpenChange={(open) => !open && setDebtPrefill(null)} prefill={debtPrefill ?? undefined} />
+
+      <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Очистить историю чата?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вся переписка с AI-советником удалится безвозвратно — для обоих участников, чат общий.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmClearChat} disabled={clearChat.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {clearChat.isPending ? 'Удаление...' : 'Очистить'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
