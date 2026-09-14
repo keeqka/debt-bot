@@ -29,19 +29,29 @@ Deno.serve(async (req) => {
     const admin = getAdminClient()
     const displayName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ')
 
-    const { data: user, error } = await admin
-      .from('users')
-      .upsert(
-        {
-          telegram_id: tgUser.id,
-          display_name: displayName,
-          username: tgUser.username ?? null,
-          avatar_url: tgUser.photo_url ?? null,
-        },
-        { onConflict: 'telegram_id' },
-      )
-      .select()
-      .single()
+    // Preserve a pre-set/custom display_name (e.g. a seeded nickname) across
+    // logins instead of overwriting it with the real Telegram name every
+    // time — username/avatar still refresh normally. New users get their
+    // Telegram name on first login as before.
+    const { data: existing } = await admin.from('users').select('id').eq('telegram_id', tgUser.id).maybeSingle()
+
+    const { data: user, error } = existing
+      ? await admin
+          .from('users')
+          .update({ username: tgUser.username ?? null, avatar_url: tgUser.photo_url ?? null })
+          .eq('telegram_id', tgUser.id)
+          .select()
+          .single()
+      : await admin
+          .from('users')
+          .insert({
+            telegram_id: tgUser.id,
+            display_name: displayName,
+            username: tgUser.username ?? null,
+            avatar_url: tgUser.photo_url ?? null,
+          })
+          .select()
+          .single()
 
     if (error) throw error
 
