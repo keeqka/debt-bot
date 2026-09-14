@@ -19,6 +19,7 @@ import { modelLabel } from '@/lib/ai-models'
 import { formatMoney } from '@/lib/format'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
+import { useHeaderAction } from '@/lib/header-action'
 import type { ProposedDebt } from '@/types/domain'
 
 const SUGGESTIONS = ['Могу я купить MacBook за 750 000₸?', 'Как быстрее закрыть долги?', 'Сколько я трачу на еду в месяц?']
@@ -72,21 +73,20 @@ export function Chat() {
     setConfirmClear(false)
   }
 
+  useHeaderAction(
+    <button
+      onClick={() => setConfirmClear(true)}
+      disabled={!messages?.length}
+      aria-label="Очистить чат"
+      className="text-muted-foreground hover:text-destructive disabled:pointer-events-none disabled:opacity-40"
+    >
+      <Trash2 className="h-[18px] w-[18px]" />
+    </button>,
+    [messages?.length],
+  )
+
   return (
     <div className="flex h-[calc(100dvh-8.5rem)] flex-col">
-      <div className="flex items-center justify-end pb-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-destructive h-auto gap-1.5 px-2 py-1 text-xs"
-          onClick={() => setConfirmClear(true)}
-          disabled={!messages?.length}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Очистить чат
-        </Button>
-      </div>
-
       <div className="flex-1 space-y-1 overflow-y-auto pb-2">
         {isLoading ? (
           <Skeleton className="h-16 w-3/4 rounded-2xl" />

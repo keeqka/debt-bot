@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { useStatus } from '@/hooks/use-finance-data'
@@ -12,7 +12,7 @@ import { useCurrentUser } from '@/lib/auth'
  * на аватарке" as part of the status color threading through the whole UI).
  * Settings lives behind this avatar rather than a bottom-tab slot.
  */
-export function TopBar({ title }: { title: string }) {
+export function TopBar({ title, action }: { title: string; action?: ReactNode }) {
   const { data: status } = useStatus()
   const user = useCurrentUser()
   const [open, setOpen] = useState(false)
@@ -22,26 +22,29 @@ export function TopBar({ title }: { title: string }) {
   return (
     <header className="pt-safe sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/95 px-4 pb-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <h1 className="text-lg font-semibold">{title}</h1>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger className="relative" aria-label="Профиль и настройки">
-          <Avatar className="h-9 w-9">
-            {user.avatar_url && <AvatarImage src={user.avatar_url} alt={user.display_name} />}
-            <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">{initials}</AvatarFallback>
-          </Avatar>
-          {meta && (
-            <span
-              className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-background', meta.dot)}
-              aria-label={`Статус: ${meta.label}`}
-            />
-          )}
-        </SheetTrigger>
-        <SheetContent side="right" className="w-full sm:max-w-sm">
-          <SheetHeader>
-            <SheetTitle>Настройки</SheetTitle>
-          </SheetHeader>
-          <SettingsPanel />
-        </SheetContent>
-      </Sheet>
+      <div className="flex items-center gap-3">
+        {action}
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger className="relative" aria-label="Профиль и настройки">
+            <Avatar className="h-9 w-9">
+              {user.avatar_url && <AvatarImage src={user.avatar_url} alt={user.display_name} />}
+              <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">{initials}</AvatarFallback>
+            </Avatar>
+            {meta && (
+              <span
+                className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-background', meta.dot)}
+                aria-label={`Статус: ${meta.label}`}
+              />
+            )}
+          </SheetTrigger>
+          <SheetContent side="right" className="w-full sm:max-w-sm">
+            <SheetHeader>
+              <SheetTitle>Настройки</SheetTitle>
+            </SheetHeader>
+            <SettingsPanel />
+          </SheetContent>
+        </Sheet>
+      </div>
     </header>
   )
 }
