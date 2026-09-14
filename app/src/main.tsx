@@ -6,6 +6,7 @@ import App from './App.tsx'
 import { initTelegram } from '@/lib/telegram'
 import { initSession } from '@/lib/auth'
 import { initTheme } from '@/lib/theme'
+import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 
 initTelegram()
 initTheme()
@@ -22,8 +23,10 @@ await initSession()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )
