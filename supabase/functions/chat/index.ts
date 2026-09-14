@@ -93,16 +93,21 @@ Deno.serve(async (req) => {
     const supabase = getUserClient(req.headers.get('Authorization')!)
     await supabase.from('chat_messages').insert({ user_id: session.sub, role: 'user', content })
 
-    const { data: history } = await supabase
+    // Most recent 20 — order-by-ascending-with-limit would instead grab the
+    // OLDEST 20 and, once the thread outgrows that, silently drop the
+    // message we just inserted. The array is reversed back to chronological
+    // order afterward since that's what the Messages API expects.
+    const { data: historyDesc } = await supabase
       .from('chat_messages')
       .select('role, content')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(20)
+    const history = (historyDesc ?? []).slice().reverse()
 
     const snapshot = await buildFinancialSnapshot(supabase)
     const system = `Ты — личный финансовый AI-консультант семьи из двух человек. Отвечай по-русски, кратко и по делу, опираясь на приведённые ниже реальные данные — не придумывай цифры о финансах пользователя.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nИнструменты:\n- Если пользователь спрашивает про влияние конкретной покупки на бюджет — используй model_purchase_impact вместо оценки на глаз.\n- Если пользователь просит добавить/записать/завести долг — используй propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Можешь использовать веб-поиск для общих вопросов не про личные финансы пользователя (например, типичные цены, курсы, общие советы) — если используешь, упомяни это в ответе.`
 
-    const messages: ClaudeMessage[] = (history ?? [])
+    const messages: ClaudeMessage[] = history
       .filter((m: { role: string }) => m.role === 'user' || m.role === 'assistant')
       .map((m: { role: 'user' | 'assistant'; content: string }) => ({ role: m.role, content: m.content }))
 
