@@ -64,6 +64,17 @@ export function useUpdateDebt() {
   })
 }
 
+export function useDeleteDebt() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.deleteDebt,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.debts })
+      queryClient.invalidateQueries({ queryKey: queryKeys.status })
+    },
+  })
+}
+
 export function useAddGoal() {
   const queryClient = useQueryClient()
   return useMutation({

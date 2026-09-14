@@ -81,6 +81,17 @@ export async function updateDebt(id: string, patch: Partial<Omit<Debt, 'id'>>): 
   return data as Debt
 }
 
+/** Hard delete — payment history cascades with it (FK on debt_payments). Frontend always confirms first. */
+export async function deleteDebt(id: string): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const index = mock.mockDebts.findIndex((d) => d.id === id)
+    if (index !== -1) mock.mockDebts.splice(index, 1)
+    return
+  }
+  const { error } = await supabase.from('debts').delete().eq('id', id)
+  if (error) throw error
+}
+
 /**
  * AI-assisted "new debt" form fill (manually triggered by a button, never
  * automatic): send a screenshot and/or a text hint, get back a draft to

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Plus, Pencil, CircleDollarSign } from 'lucide-react'
+import { toast } from 'sonner'
+import { Plus, Pencil, CircleDollarSign, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -8,7 +9,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { useDebts, useDebtStrategy, useExpenses, useIncomes } from '@/hooks/use-finance-data'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useDebts, useDebtStrategy, useDeleteDebt, useExpenses, useIncomes } from '@/hooks/use-finance-data'
 import { formatMoney, formatDate } from '@/lib/format'
 import type { Debt, DebtStrategyKind } from '@/types/domain'
 import { cn } from '@/lib/utils'
@@ -41,6 +52,15 @@ export function Debts() {
   const [addOpen, setAddOpen] = useState(false)
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
   const [payingDebt, setPayingDebt] = useState<Debt | null>(null)
+  const [deletingDebt, setDeletingDebt] = useState<Debt | null>(null)
+  const deleteDebt = useDeleteDebt()
+
+  async function confirmDelete() {
+    if (!deletingDebt) return
+    await deleteDebt.mutateAsync(deletingDebt.id)
+    toast.success('Долг удалён')
+    setDeletingDebt(null)
+  }
 
   if (isLoading) {
     return (
@@ -87,9 +107,18 @@ export function Debts() {
                       Платёж
                     </Button>
                   )}
-                  <Button size="sm" variant="ghost" className={cn(!isClosed ? 'flex-none' : 'flex-1')} onClick={() => setEditingDebt(debt)}>
+                  <Button size="sm" variant="ghost" className={cn(!isClosed && 'flex-none')} onClick={() => setEditingDebt(debt)}>
                     <Pencil className="h-3.5 w-3.5" />
                     Изменить
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-destructive flex-none"
+                    onClick={() => setDeletingDebt(debt)}
+                    aria-label={`Удалить ${debt.title}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </CardContent>
@@ -142,6 +171,23 @@ export function Debts() {
       <AddDebtDialog open={addOpen} onOpenChange={setAddOpen} />
       <AddDebtDialog open={Boolean(editingDebt)} onOpenChange={(open) => !open && setEditingDebt(null)} debt={editingDebt ?? undefined} />
       <RecordPaymentDialog open={Boolean(payingDebt)} onOpenChange={(open) => !open && setPayingDebt(null)} debt={payingDebt} />
+
+      <AlertDialog open={Boolean(deletingDebt)} onOpenChange={(open) => !open && setDeletingDebt(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить «{deletingDebt?.title}»?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Долг и вся история платежей по нему удалятся безвозвратно. Если он просто погашен — лучше отредактировать и поставить статус «Закрыт».
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={deleteDebt.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteDebt.isPending ? 'Удаление...' : 'Удалить'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
