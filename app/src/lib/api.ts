@@ -15,6 +15,7 @@ import type {
   Goal,
   Income,
   ReceiptParseResult,
+  StatementParseResult,
   StatusInsight,
   User,
 } from '@/types/domain'
@@ -34,7 +35,11 @@ export async function getUsers(): Promise<User[]> {
 }
 
 export async function getDebts(): Promise<Debt[]> {
-  if (!isBackendConfigured || !supabase) return mock.mockDebts
+  // A fresh array copy on every read — mock.mockDebts is mutated in place by
+  // add/update/delete below, so returning the same reference would make
+  // React Query (and any useMemo keyed on it) think nothing changed and
+  // skip re-rendering after a mutation.
+  if (!isBackendConfigured || !supabase) return [...mock.mockDebts]
   const { data, error } = await supabase.from('debts').select('*').order('interest_rate', { ascending: false })
   if (error) throw error
   return data as Debt[]
@@ -129,14 +134,14 @@ export async function getDebtStrategy(strategy: DebtStrategyKind, monthlySurplus
 }
 
 export async function getIncomes(): Promise<Income[]> {
-  if (!isBackendConfigured || !supabase) return mock.mockIncomes
+  if (!isBackendConfigured || !supabase) return [...mock.mockIncomes]
   const { data, error } = await supabase.from('incomes').select('*').order('received_at', { ascending: false })
   if (error) throw error
   return data as Income[]
 }
 
 export async function getExpenses(): Promise<Expense[]> {
-  if (!isBackendConfigured || !supabase) return mock.mockExpenses
+  if (!isBackendConfigured || !supabase) return [...mock.mockExpenses]
   const { data, error } = await supabase.from('expenses').select('*').order('spent_at', { ascending: false })
   if (error) throw error
   return data as Expense[]
@@ -164,6 +169,31 @@ export async function addIncome(income: Omit<Income, 'id'>): Promise<Income> {
   return data as Income
 }
 
+/** Bulk variants for statement import (ТЗ chat request: "по банковской выписке добавить траты") — one round trip for the whole reviewed batch instead of N. */
+export async function addExpensesBulk(expenses: Omit<Expense, 'id'>[]): Promise<Expense[]> {
+  if (expenses.length === 0) return []
+  if (!isBackendConfigured || !supabase) {
+    const created = expenses.map((e) => ({ ...e, id: crypto.randomUUID() }))
+    mock.mockExpenses.unshift(...created)
+    return created
+  }
+  const { data, error } = await supabase.from('expenses').insert(expenses).select()
+  if (error) throw error
+  return data as Expense[]
+}
+
+export async function addIncomesBulk(incomes: Omit<Income, 'id'>[]): Promise<Income[]> {
+  if (incomes.length === 0) return []
+  if (!isBackendConfigured || !supabase) {
+    const created = incomes.map((i) => ({ ...i, id: crypto.randomUUID() }))
+    mock.mockIncomes.unshift(...created)
+    return created
+  }
+  const { data, error } = await supabase.from('incomes').insert(incomes).select()
+  if (error) throw error
+  return data as Income[]
+}
+
 export async function deleteExpense(id: string): Promise<void> {
   if (!isBackendConfigured || !supabase) {
     const index = mock.mockExpenses.findIndex((e) => e.id === id)
@@ -185,7 +215,7 @@ export async function deleteIncome(id: string): Promise<void> {
 }
 
 export async function getCategories(): Promise<Category[]> {
-  if (!isBackendConfigured || !supabase) return mock.mockCategories
+  if (!isBackendConfigured || !supabase) return [...mock.mockCategories]
   const { data, error } = await supabase.from('categories').select('*')
   if (error) throw error
   return data as Category[]
@@ -213,7 +243,7 @@ export async function deleteCategory(id: string): Promise<void> {
 }
 
 export async function getGoals(): Promise<Goal[]> {
-  if (!isBackendConfigured || !supabase) return mock.mockGoals
+  if (!isBackendConfigured || !supabase) return [...mock.mockGoals]
   const { data, error } = await supabase.from('goals').select('*')
   if (error) throw error
   return data as Goal[]
@@ -299,6 +329,24 @@ export async function parseReceipt(imageBase64: string, mediaType = 'image/jpeg'
   return callFunction<ReceiptParseResult>('receipts-parse', { image_base64: imageBase64, media_type: mediaType })
 }
 
+export async function parseStatement(fileBase64: string, mediaType = 'application/pdf'): Promise<StatementParseResult> {
+  if (!isBackendConfigured) {
+    // Mock mode: a small demo statement so the review screen is clickable.
+    await new Promise((r) => setTimeout(r, 1400))
+    const today = new Date().toISOString().slice(0, 10)
+    return {
+      is_valid_statement: true,
+      transactions: [
+        { date: today, description: 'Magnum', amount: 12_400, direction: 'expense', suggested_category: 'Продукты', confidence: 0.9 },
+        { date: today, description: 'InDrive', amount: 2_100, direction: 'expense', suggested_category: 'Транспорт', confidence: 0.85 },
+        { date: today, description: 'Kaspi Gold пополнение — Зарплата', amount: 450_000, direction: 'income', suggested_category: null, confidence: 0.95 },
+        { date: today, description: 'Wolt', amount: 6_800, direction: 'expense', suggested_category: 'Развлечения', confidence: 0.7 },
+      ],
+    }
+  }
+  return callFunction<StatementParseResult>('statement-parse', { file_base64: fileBase64, media_type: mediaType })
+}
+
 export async function categorizeExpense(input: { description: string; merchant: string | null; amount: number }): Promise<{
   category_id: string | null
   confidence: number
@@ -310,7 +358,7 @@ export async function categorizeExpense(input: { description: string; merchant: 
 }
 
 export async function getChatMessages(): Promise<ChatMessage[]> {
-  if (!isBackendConfigured) return mock.mockChatMessages
+  if (!isBackendConfigured) return [...mock.mockChatMessages]
   const { data, error } = await supabase!.from('chat_messages').select('*').order('created_at', { ascending: true })
   if (error) throw error
   return data as ChatMessage[]

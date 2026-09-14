@@ -160,6 +160,28 @@ export function useAddIncome() {
   })
 }
 
+export function useAddExpensesBulk() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.addExpensesBulk,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses })
+      queryClient.invalidateQueries({ queryKey: queryKeys.status })
+    },
+  })
+}
+
+export function useAddIncomesBulk() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.addIncomesBulk,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.incomes })
+      queryClient.invalidateQueries({ queryKey: queryKeys.status })
+    },
+  })
+}
+
 export function useDeleteExpense() {
   const queryClient = useQueryClient()
   return useMutation({

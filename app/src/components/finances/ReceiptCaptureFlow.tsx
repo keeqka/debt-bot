@@ -9,16 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { parseReceipt } from '@/lib/api'
 import { useAddExpense, useCategories } from '@/hooks/use-finance-data'
 import { useCurrentUserId } from '@/lib/auth'
+import { fileToBase64 } from '@/lib/file-to-base64'
 import type { ReceiptParseResult } from '@/types/domain'
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve((reader.result as string).split(',')[1] ?? '')
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
 
 /**
  * Photo-of-receipt → AI parse → mandatory confirmation screen before saving,

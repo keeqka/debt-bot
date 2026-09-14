@@ -50,7 +50,7 @@ export interface Income {
   recurrence_day: number | null
 }
 
-export type ExpenseSource = 'manual' | 'receipt_photo' | 'screenshot'
+export type ExpenseSource = 'manual' | 'receipt_photo' | 'screenshot' | 'statement'
 
 export interface Expense {
   id: Uuid
@@ -159,6 +159,20 @@ export interface ReceiptParseResult {
   line_items: { name: string; amount: number }[]
   suggested_category: string | null
   confidence: number
+}
+
+export interface StatementTransaction {
+  date: string
+  description: string
+  amount: number
+  direction: 'expense' | 'income'
+  suggested_category: string | null
+  confidence: number
+}
+
+export interface StatementParseResult {
+  is_valid_statement: boolean
+  transactions: StatementTransaction[]
 }
 
 /**

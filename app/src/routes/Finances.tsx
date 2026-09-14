@@ -21,6 +21,7 @@ import { useCategories, useDeleteExpense, useDeleteIncome, useExpenses, useIncom
 import { formatMoney, formatDateShort } from '@/lib/format'
 import { AddTransactionDialog } from '@/components/finances/AddTransactionDialog'
 import { ReceiptCaptureFlow } from '@/components/finances/ReceiptCaptureFlow'
+import { StatementImportFlow } from '@/components/finances/StatementImportFlow'
 import { CategoryDonutChart } from '@/components/charts/CategoryDonutChart'
 
 type Filter = 'all' | 'expense' | 'income'
@@ -93,12 +94,13 @@ export function Finances() {
 
   return (
     <div className="space-y-5 pb-6">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <Button onClick={() => setAddOpen(true)} className="h-auto flex-col gap-1.5 rounded-2xl py-3" variant="outline">
           <Plus className="h-4 w-4" />
-          <span className="text-xs">Добавить вручную</span>
+          <span className="text-xs">Вручную</span>
         </Button>
         <ReceiptCaptureFlow autoOpen={autoOpenReceipt} />
+        <StatementImportFlow />
       </div>
 
       <Card>
