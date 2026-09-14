@@ -9,6 +9,7 @@ import { env } from '../_shared/env.ts'
 import { verifyTelegramInitData } from '../_shared/telegram-verify.ts'
 import { signSupabaseJwt } from '../_shared/jwt.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
+import { getOrCreateUser } from '../_shared/get-or-create-user.ts'
 
 const SESSION_TTL_SECONDS = 60 * 60 // ~1h, per ТЗ §2 step 4
 
@@ -27,33 +28,7 @@ Deno.serve(async (req) => {
     }
 
     const admin = getAdminClient()
-    const displayName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ')
-
-    // Preserve a pre-set/custom display_name (e.g. a seeded nickname) across
-    // logins instead of overwriting it with the real Telegram name every
-    // time — username/avatar still refresh normally. New users get their
-    // Telegram name on first login as before.
-    const { data: existing } = await admin.from('users').select('id').eq('telegram_id', tgUser.id).maybeSingle()
-
-    const { data: user, error } = existing
-      ? await admin
-          .from('users')
-          .update({ username: tgUser.username ?? null, avatar_url: tgUser.photo_url ?? null })
-          .eq('telegram_id', tgUser.id)
-          .select()
-          .single()
-      : await admin
-          .from('users')
-          .insert({
-            telegram_id: tgUser.id,
-            display_name: displayName,
-            username: tgUser.username ?? null,
-            avatar_url: tgUser.photo_url ?? null,
-          })
-          .select()
-          .single()
-
-    if (error) throw error
+    const user = await getOrCreateUser(admin, tgUser)
 
     const token = await signSupabaseJwt(
       { sub: user.id, telegram_id: tgUser.id, expiresInSeconds: SESSION_TTL_SECONDS },

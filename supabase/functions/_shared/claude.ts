@@ -11,6 +11,7 @@ export const CLAUDE_MODEL_DEFAULT = 'claude-sonnet-5'
 type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
 
 interface ClaudeMessage {
   role: 'user' | 'assistant'

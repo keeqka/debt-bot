@@ -5,34 +5,8 @@
 
 import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
-import { callClaudeTool } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
-
-const RECEIPT_TOOL = {
-  name: 'record_receipt',
-  description: 'Structured data extracted from a photographed receipt or payment screenshot.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      is_valid_receipt: { type: 'boolean', description: 'false if the image is not a receipt or payment confirmation' },
-      merchant: { type: ['string', 'null'] },
-      date: { type: ['string', 'null'], description: 'ISO 8601 date, e.g. 2026-09-10' },
-      total_amount: { type: ['number', 'null'] },
-      currency: { type: ['string', 'null'], description: '3-letter ISO code, e.g. KZT' },
-      line_items: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: { name: { type: 'string' }, amount: { type: 'number' } },
-          required: ['name', 'amount'],
-        },
-      },
-      suggested_category: { type: ['string', 'null'], description: 'One of the provided category names, or null' },
-      confidence: { type: 'number', description: '0 to 1' },
-    },
-    required: ['is_valid_receipt', 'line_items', 'confidence'],
-  },
-}
+import { parseReceiptFile } from '../_shared/receipt-tool.ts'
 
 Deno.serve(async (req) => {
   const preflight = handleOptions(req)
@@ -47,19 +21,7 @@ Deno.serve(async (req) => {
     const { data: categories } = await supabase.from('categories').select('name').eq('type', 'expense')
     const categoryNames = (categories ?? []).map((c) => c.name)
 
-    const result = await callClaudeTool({
-      system: `Ты помогаешь разобрать чек или скриншот банковского перевода/платежа. Извлеки магазина/получателя, дату, сумму, валюту и предложи категорию строго из списка: ${categoryNames.join(', ')}. Если это не финансовый документ — верни is_valid_receipt=false. Не придумывай данные, которых нет на изображении.`,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type, data: image_base64 } },
-            { type: 'text', text: 'Разбери этот чек.' },
-          ],
-        },
-      ],
-      tool: RECEIPT_TOOL,
-    })
+    const result = await parseReceiptFile(image_base64, media_type, categoryNames)
 
     console.log(`receipts-parse ok for user ${session.sub}`)
     return jsonResponse(result)
