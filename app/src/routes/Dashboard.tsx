@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Camera, MessageCircle } from 'lucide-react'
+import { Plus, Paperclip, MessageCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -45,7 +45,7 @@ export function Dashboard() {
 
       <div className="grid grid-cols-3 gap-2">
         <QuickAction icon={Plus} label="Расход" onClick={() => navigate('/finances?add=manual')} />
-        <QuickAction icon={Camera} label="Фото чека" onClick={() => navigate('/finances?add=receipt')} />
+        <QuickAction icon={Paperclip} label="Чек" onClick={() => navigate('/finances?add=receipt')} />
         <QuickAction icon={MessageCircle} label="Спросить AI" onClick={() => navigate('/chat')} />
       </div>
 

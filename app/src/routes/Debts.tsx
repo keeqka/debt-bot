@@ -25,6 +25,7 @@ import type { Debt, DebtStrategyKind } from '@/types/domain'
 import { cn } from '@/lib/utils'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { RecordPaymentDialog } from '@/components/debts/RecordPaymentDialog'
+import { DebtPayoffChart } from '@/components/charts/DebtPayoffChart'
 
 function isThisMonth(iso: string) {
   const d = new Date(iso)
@@ -165,6 +166,12 @@ export function Debts() {
               </TabsContent>
             ))}
           </Tabs>
+
+          {activeDebts.length > 0 && (
+            <div className="border-border border-t pt-4">
+              <DebtPayoffChart debts={activeDebts} monthlySurplus={surplus} />
+            </div>
+          )}
         </CardContent>
       </Card>
 

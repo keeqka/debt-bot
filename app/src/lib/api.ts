@@ -277,7 +277,7 @@ export async function refreshStatus(): Promise<StatusInsight> {
   return callFunction<StatusInsight>('status', {})
 }
 
-export async function parseReceipt(imageBase64: string): Promise<ReceiptParseResult> {
+export async function parseReceipt(imageBase64: string, mediaType = 'image/jpeg'): Promise<ReceiptParseResult> {
   if (!isBackendConfigured) {
     // Mock mode: pretend the photo was Magnum groceries so the confirm screen is demo-able.
     await new Promise((r) => setTimeout(r, 900))
@@ -296,7 +296,7 @@ export async function parseReceipt(imageBase64: string): Promise<ReceiptParseRes
       confidence: 0.91,
     }
   }
-  return callFunction<ReceiptParseResult>('receipts-parse', { image_base64: imageBase64 })
+  return callFunction<ReceiptParseResult>('receipts-parse', { image_base64: imageBase64, media_type: mediaType })
 }
 
 export async function categorizeExpense(input: { description: string; merchant: string | null; amount: number }): Promise<{

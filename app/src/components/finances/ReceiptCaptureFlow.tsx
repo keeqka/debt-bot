@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Camera, Loader2 } from 'lucide-react'
+import { Paperclip, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -44,7 +44,7 @@ export function ReceiptCaptureFlow({ autoOpen = false }: { autoOpen?: boolean })
     setStatus('parsing')
     try {
       const base64 = await fileToBase64(file)
-      const parsed = await parseReceipt(base64)
+      const parsed = await parseReceipt(base64, file.type || 'image/jpeg')
       if (!parsed.is_valid_receipt) {
         toast.error('Не похоже на чек — попробуйте другое фото')
         setStatus('idle')
@@ -88,8 +88,7 @@ export function ReceiptCaptureFlow({ autoOpen = false }: { autoOpen?: boolean })
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
-        capture="environment"
+        accept="image/*,application/pdf"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0]
@@ -98,8 +97,8 @@ export function ReceiptCaptureFlow({ autoOpen = false }: { autoOpen?: boolean })
         }}
       />
       <Button variant="outline" className="h-auto flex-col gap-1.5 rounded-2xl py-3" onClick={() => inputRef.current?.click()}>
-        <Camera className="h-4 w-4" />
-        <span className="text-xs">Фото чека</span>
+        <Paperclip className="h-4 w-4" />
+        <span className="text-xs">Чек (фото/PDF)</span>
       </Button>
 
       <Dialog open={status === 'parsing'}>
