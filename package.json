@@ -1,0 +1,11 @@
+{
+  "name": "finance-mini-app",
+  "private": true,
+  "description": "Telegram Mini App for AI personal finance monitoring — repo root, tooling only (see app/ and supabase/)",
+  "scripts": {
+    "supabase": "supabase"
+  },
+  "devDependencies": {
+    "supabase": "^2.117.0"
+  }
+}
