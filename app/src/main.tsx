@@ -5,18 +5,29 @@ import './index.css'
 import App from './App.tsx'
 import { initTelegram } from '@/lib/telegram'
 import { initSession } from '@/lib/auth'
-import { initTheme } from '@/lib/theme'
+import { initTheme, setThemeMode } from '@/lib/theme'
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 
 initTelegram()
-initTheme()
+
+const deepLinkParams = new URLSearchParams(window.location.search)
 
 // Lets an embedder (e.g. the marketing site iframing this app in mock mode
 // for a live product demo) deep-link to a screen via ?screen=/chat without
 // needing SPA-fallback rewrites configured on whatever static host serves
 // this build — rewritten to a real path before BrowserRouter ever reads it.
-const deepLinkScreen = new URLSearchParams(window.location.search).get('screen')
+const deepLinkScreen = deepLinkParams.get('screen')
 if (deepLinkScreen) window.history.replaceState(null, '', deepLinkScreen)
+
+// Same embedding case: pins the theme so a demo screenshot looks the same
+// for every visitor regardless of their own OS preference, instead of the
+// usual "system" default (see lib/theme.ts).
+const themeOverride = deepLinkParams.get('theme')
+if (themeOverride === 'light' || themeOverride === 'dark') {
+  setThemeMode(themeOverride)
+} else {
+  initTheme()
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
