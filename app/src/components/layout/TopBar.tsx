@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { useStatus } from '@/hooks/use-finance-data'
 import { STATUS_META } from '@/lib/status'
 import { cn } from '@/lib/utils'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
-import { currentMockUser } from '@/lib/mock-data'
+import { useCurrentUser } from '@/lib/auth'
 
 /**
  * Header with the current user's avatar + a live status dot (ТЗ §5: "точка
@@ -14,9 +14,10 @@ import { currentMockUser } from '@/lib/mock-data'
  */
 export function TopBar({ title }: { title: string }) {
   const { data: status } = useStatus()
+  const user = useCurrentUser()
   const [open, setOpen] = useState(false)
   const meta = status ? STATUS_META[status.status] : null
-  const initials = currentMockUser.display_name.slice(0, 1).toUpperCase()
+  const initials = user.display_name.slice(0, 1).toUpperCase()
 
   return (
     <header className="pt-safe sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/95 px-4 pb-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
@@ -24,6 +25,7 @@ export function TopBar({ title }: { title: string }) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger className="relative" aria-label="Профиль и настройки">
           <Avatar className="h-9 w-9">
+            {user.avatar_url && <AvatarImage src={user.avatar_url} alt={user.display_name} />}
             <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">{initials}</AvatarFallback>
           </Avatar>
           {meta && (
