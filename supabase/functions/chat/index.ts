@@ -4,7 +4,7 @@
 // model_purchase_impact tool so the answer is a computed projection, not a
 // guess — the frontend renders its result as a dedicated card (ТЗ §5 screen 5).
 
-import { handleOptions, jsonResponse } from '../_shared/cors.ts'
+import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
 import { callClaudeRaw, type ClaudeMessage } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
@@ -106,7 +106,6 @@ Deno.serve(async (req) => {
 
     return jsonResponse(saved)
   } catch (error) {
-    console.error('chat failed', error)
-    return jsonResponse({ error: 'Не удалось получить ответ' }, 500)
+    return jsonError('Не удалось получить ответ', error)
   }
 })

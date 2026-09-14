@@ -6,7 +6,7 @@
 // the editable form for the user to review before saving — same "never
 // trust AI blindly" pattern as receipts-parse (ТЗ §7.1/§13).
 
-import { handleOptions, jsonResponse } from '../_shared/cors.ts'
+import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
 import { callClaudeRaw, WEB_SEARCH_TOOL, type ContentBlock, type ToolDefinition } from '../_shared/claude.ts'
 
@@ -68,7 +68,6 @@ Deno.serve(async (req) => {
 
     return jsonResponse(draftBlock.input)
   } catch (error) {
-    console.error('debts-assist failed', error)
-    return jsonResponse({ error: 'Не удалось разобрать данные о долге' }, 500)
+    return jsonError('Не удалось разобрать данные о долге', error)
   }
 })

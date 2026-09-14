@@ -1,7 +1,7 @@
 // ТЗ §7.3: AI financial status (green -> red scale, §6.2). Cached in
 // ai_insights for 24h so opening the dashboard repeatedly doesn't burn tokens.
 
-import { handleOptions, jsonResponse } from '../_shared/cors.ts'
+import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
 import { callClaudeTool } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
@@ -57,7 +57,6 @@ Deno.serve(async (req) => {
 
     return jsonResponse(result)
   } catch (error) {
-    console.error('status failed', error)
-    return jsonResponse({ error: 'Не удалось оценить статус' }, 500)
+    return jsonError('Не удалось оценить статус', error)
   }
 })

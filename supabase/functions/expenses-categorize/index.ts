@@ -2,7 +2,7 @@
 // Deliberately on the light model — this runs on every manual entry, so cost
 // per call matters more than for the occasional strategy/status calls.
 
-import { handleOptions, jsonResponse } from '../_shared/cors.ts'
+import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
 import { callClaudeTool, CLAUDE_MODEL_LIGHT } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
@@ -43,7 +43,6 @@ Deno.serve(async (req) => {
 
     return jsonResponse(result)
   } catch (error) {
-    console.error('expenses-categorize failed', error)
-    return jsonResponse({ error: 'Не удалось определить категорию' }, 500)
+    return jsonError('Не удалось определить категорию', error)
   }
 })

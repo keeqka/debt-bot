@@ -3,7 +3,7 @@
 // for instant feedback — this endpoint is the source of truth once a
 // backend exists, adding a natural-language explanation on top of the numbers.
 
-import { handleOptions, jsonResponse } from '../_shared/cors.ts'
+import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
 import { callClaudeTool } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
@@ -68,7 +68,6 @@ Deno.serve(async (req) => {
 
     return jsonResponse(result)
   } catch (error) {
-    console.error('debts-strategy failed', error)
-    return jsonResponse({ error: 'Не удалось рассчитать стратегию' }, 500)
+    return jsonError('Не удалось рассчитать стратегию', error)
   }
 })

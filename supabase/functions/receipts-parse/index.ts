@@ -3,7 +3,7 @@
 // (ТЗ §13: recognition accuracy isn't guaranteed) and saves via a normal
 // `expenses` insert only after the user confirms.
 
-import { handleOptions, jsonResponse } from '../_shared/cors.ts'
+import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
 import { callClaudeTool } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
@@ -64,7 +64,6 @@ Deno.serve(async (req) => {
     console.log(`receipts-parse ok for user ${session.sub}`)
     return jsonResponse(result)
   } catch (error) {
-    console.error('receipts-parse failed', error)
-    return jsonResponse({ error: 'Не удалось распознать чек' }, 500)
+    return jsonError('Не удалось распознать чек', error)
   }
 })
