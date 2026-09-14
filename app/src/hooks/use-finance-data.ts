@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import type { ChatMessage, DebtStrategyKind } from '@/types/domain'
 
@@ -124,15 +125,22 @@ export function useSendChatMessage() {
     // Optimistically show the user's own bubble immediately instead of waiting
     // for the AI reply to round-trip before anything appears.
     onMutate: async (content: string) => {
-      const previous = queryClient.getQueryData<ChatMessage[]>(queryKeys.chatMessages)
+      const optimisticId = `optimistic-${Date.now()}`
       queryClient.setQueryData<ChatMessage[]>(queryKeys.chatMessages, (old = []) => [
         ...old,
-        { id: `optimistic-${Date.now()}`, user_id: 'me', role: 'user', content, created_at: new Date().toISOString() },
+        { id: optimisticId, user_id: 'me', role: 'user', content, created_at: new Date().toISOString() },
       ])
-      return { previous }
+      return { optimisticId }
     },
-    onError: (_err, _content, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKeys.chatMessages, context.previous)
+    onError: (error, _content, context) => {
+      // Only drop the one bubble that failed — never blindly restore an old
+      // snapshot, which could also wipe real messages that arrived meanwhile.
+      if (context?.optimisticId) {
+        queryClient.setQueryData<ChatMessage[]>(queryKeys.chatMessages, (old = []) =>
+          old.filter((m) => m.id !== context.optimisticId),
+        )
+      }
+      toast.error(error instanceof Error ? error.message : 'Не удалось отправить сообщение')
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.chatMessages })
