@@ -1,13 +1,46 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/jetbrains-mono";
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+    /* Hlow Flow — "бумага и чек": тёмный интерфейс, светлые бумажные карточки
+       для данных из чеков/выписок. Токены живут РЯДОМ с shadcn-токенами ниже
+       (не заменяют их) — диалоги/Select/Sheet из shadcn всё ещё на них завязаны. */
+    --font-hf-sans: 'Space Grotesk Variable', Helvetica, system-ui, sans-serif;
+    --font-hf-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+    --color-hf-bg: #17181c;
+    --color-hf-bar: #1c1e23;
+    --color-hf-card: #22262d;
+    --color-hf-line: #23262c;
+    --color-hf-track: #2e333b;
+    --color-hf-text: #f2efe9;
+    --color-hf-text-2: #e4e1db;
+    --color-hf-text-3: #b9c1ca;
+    --color-hf-text-4: #98a2ae;
+
+    --color-hf-receipt: #f6f1e8;
+    --color-hf-receipt-line: #e4ddd0;
+    --color-hf-receipt-warn: #fbefdd;
+    --color-hf-ink: #14171c;
+    --color-hf-ink-soft: #6b6558;
+
+    --color-hf-accent: #3c82c8;
+    --color-hf-accent-ink: #2c6497;
+    --color-hf-accent-on-dark: #7fa9d4;
+    --color-hf-warn: #c0632f;
+    --color-hf-warn-ink: #a34e1f;
+    --color-hf-warn-on-dark: #e08a4f;
+    --color-hf-ok: #7fbf8e;
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Space Grotesk Variable', Helvetica, system-ui, sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

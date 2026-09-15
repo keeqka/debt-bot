@@ -20,6 +20,7 @@ interface TelegramWebApp {
   viewportStableHeight: number
   ready: () => void
   expand: () => void
+  close: () => void
   setHeaderColor: (color: string) => void
   setBackgroundColor: (color: string) => void
   onEvent: (event: string, handler: () => void) => void
@@ -63,4 +64,8 @@ export function initTelegram() {
 
 export function haptic(style: 'light' | 'medium' | 'heavy' = 'light') {
   getTelegramWebApp()?.HapticFeedback?.impactOccurred(style)
+}
+
+export function closeApp() {
+  getTelegramWebApp()?.close()
 }
