@@ -29,6 +29,7 @@ export const mockUsers: User[] = [
     daily_reminder_enabled: false,
     daily_reminder_time: '21:00',
     vacation_paused: false,
+    onboarding_completed_at: '2026-01-05T00:00:00Z',
     created_at: '2026-01-05T00:00:00Z',
   },
   {
@@ -43,6 +44,7 @@ export const mockUsers: User[] = [
     daily_reminder_enabled: false,
     daily_reminder_time: '21:00',
     vacation_paused: false,
+    onboarding_completed_at: '2026-01-05T00:00:00Z',
     created_at: '2026-01-05T00:00:00Z',
   },
 ]

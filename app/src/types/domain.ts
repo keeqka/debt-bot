@@ -15,6 +15,7 @@ export interface User {
   daily_reminder_enabled: boolean
   daily_reminder_time: string
   vacation_paused: boolean
+  onboarding_completed_at: string | null
   created_at: string
 }
 

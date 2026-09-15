@@ -69,8 +69,13 @@ export function useMonth() {
 export function useUpdateUser() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Pick<User, 'monthly_income' | 'payday' | 'daily_reminder_enabled' | 'daily_reminder_time' | 'vacation_paused'>> }) =>
-      api.updateUser(id, patch),
+    mutationFn: ({
+      id,
+      patch,
+    }: {
+      id: string
+      patch: Partial<Pick<User, 'monthly_income' | 'payday' | 'daily_reminder_enabled' | 'daily_reminder_time' | 'vacation_paused' | 'onboarding_completed_at'>>
+    }) => api.updateUser(id, patch),
     onSuccess: (user) => {
       queryClient.setQueryData(['current-user'], user)
       queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
