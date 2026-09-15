@@ -52,7 +52,44 @@ const PROPOSE_DEBT_TOOL = {
   },
 }
 
-const ALL_TOOLS = [PURCHASE_IMPACT_TOOL, PROPOSE_DEBT_TOOL, WEB_SEARCH_TOOL]
+const DATA_WIDGET_TOOL = {
+  name: 'render_data_widget',
+  description:
+    'Renders a numeric breakdown (e.g. spending by category, income vs expense) as a data card on paper instead of writing percentages out in text. Use for "how much do I spend on X" / "break down Y" style questions.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      caption: { type: 'string', description: 'по-русски, 1 короткое предложение перед виджетом' },
+      rows: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            amount: { type: 'number' },
+            pct: { type: 'number', description: '0-100, доля от суммы всех строк' },
+          },
+          required: ['name', 'amount', 'pct'],
+        },
+      },
+    },
+    required: ['rows'],
+  },
+}
+
+const SUGGEST_FOLLOWUPS_TOOL = {
+  name: 'suggest_followups',
+  description: '2-3 короткие вопроса, которые пользователь мог бы задать следующими, исходя из твоего последнего ответа.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      replies: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 3 },
+    },
+    required: ['replies'],
+  },
+}
+
+const ALL_TOOLS = [PURCHASE_IMPACT_TOOL, PROPOSE_DEBT_TOOL, DATA_WIDGET_TOOL, SUGGEST_FOLLOWUPS_TOOL, WEB_SEARCH_TOOL]
 
 function computePurchaseImpact(
   input: { item_name: string; amount: number; payment_type: 'one_time' | 'installments'; installment_months?: number },
@@ -105,7 +142,7 @@ Deno.serve(async (req) => {
     const history = (historyDesc ?? []).slice().reverse()
 
     const snapshot = await buildFinancialSnapshot(supabase)
-    const system = `Ты — личный финансовый AI-консультант семьи из двух человек. Отвечай по-русски, кратко и по делу, опираясь на приведённые ниже реальные данные — не придумывай цифры о финансах пользователя.\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно использовать **жирный** для ключевых цифр/выводов и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в чат-пузыре они выглядят как сломанная вёрстка. Обычно 2-5 коротких абзацев/пунктов достаточно.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nИнструменты:\n- Если пользователь спрашивает про влияние конкретной покупки на бюджет — используй model_purchase_impact вместо оценки на глаз.\n- Если пользователь просит добавить/записать/завести долг — используй propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Можешь использовать веб-поиск для общих вопросов не про личные финансы пользователя (например, типичные цены, курсы, общие советы) — если используешь, упомяни это в ответе.\n- Ты сам (в чате) не умеешь принимать файлы и не можешь напрямую добавлять траты или доходы. Но в приложении на вкладке "Финансы" есть отдельная кнопка "Выписка" — туда можно загрузить PDF или скриншот банковской выписки за период, ИИ разберёт все операции, а пользователь выберет и подтвердит нужные перед сохранением. Для одного чека/платежа есть отдельная кнопка "Чек (фото/PDF)" там же, а прямо боту в Telegram можно просто прислать фото/PDF чека. Если пользователь просит добавить траты по выписке — направь его туда, а не отказывай без объяснения.`
+    const system = `Ты — личный финансовый AI-консультант семьи из двух человек. Отвечай по-русски, кратко и по делу, опираясь на приведённые ниже реальные данные — не придумывай цифры о финансах пользователя.\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно использовать **жирный** для ключевых цифр/выводов и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в чат-пузыре они выглядят как сломанная вёрстка. Обычно 2-5 коротких абзацев/пунктов достаточно.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nИнструменты:\n- Если пользователь спрашивает про влияние конкретной покупки на бюджет — используй model_purchase_impact вместо оценки на глаз.\n- Если пользователь просит добавить/записать/завести долг — используй propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Если вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — используй render_data_widget вместо того, чтобы перечислять проценты текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами, которые логично задать дальше.\n- Можешь использовать веб-поиск для общих вопросов не про личные финансы пользователя (например, типичные цены, курсы, общие советы) — если используешь, упомяни это в ответе.\n- Никогда не давай советов по инвестициям, доходности вложений или конкретным финансовым инструментам (акции, крипта, депозиты под определённый процент и т.п.) — вежливо объясни, что это не твоя область, и предложи то, чем ты реально можешь помочь (бюджет, долги, траты).\n- Ты сам (в чате) не умеешь принимать файлы и не можешь напрямую добавлять траты или доходы. Но в приложении на вкладке "Чеки" можно загрузить фото/PDF чека или PDF банковской выписки — ИИ разберёт и предложит на подтверждение, а прямо боту в Telegram можно просто прислать фото/PDF чека. Если пользователь просит добавить траты — направь его туда, а не отказывай без объяснения.`
 
     const messages: ClaudeMessage[] = history
       .filter((m: { role: string }) => m.role === 'user' || m.role === 'assistant')
@@ -115,9 +152,17 @@ Deno.serve(async (req) => {
 
     let finalText = ''
     let proposedDebt: Record<string, unknown> | null = null
+    let dataWidget: unknown[] | null = null
+    // Which response to scan for suggest_followups — the second (post-tool-result)
+    // turn when one happened, otherwise the first. Claude can emit multiple
+    // tool_use blocks in one turn (tool_choice is "auto", not forced), so
+    // suggest_followups can ride along with propose_debt/render_data_widget
+    // directly, but model_purchase_impact needs its own round trip first.
+    let followupSource = first.content
 
     const purchaseToolUse = findToolUse(first.content, 'model_purchase_impact')
     const proposeDebtToolUse = findToolUse(first.content, 'propose_debt')
+    const dataWidgetToolUse = findToolUse(first.content, 'render_data_widget')
 
     if (purchaseToolUse && first.stop_reason === 'tool_use') {
       const impact = computePurchaseImpact(purchaseToolUse.input as never, snapshot)
@@ -132,13 +177,21 @@ Deno.serve(async (req) => {
         ],
       })
       finalText = (second.content.find((b) => b.type === 'text') as { text: string } | undefined)?.text ?? impact.verdict
-    } else if (proposeDebtToolUse && first.stop_reason === 'tool_use') {
+      followupSource = second.content
+    } else if (proposeDebtToolUse) {
       const { confirmation_text, ...draft } = proposeDebtToolUse.input as Record<string, unknown> & { confirmation_text: string }
       finalText = confirmation_text || 'Проверьте предложенные данные и подтвердите добавление долга в форме.'
       proposedDebt = draft
+    } else if (dataWidgetToolUse) {
+      const { caption, rows } = dataWidgetToolUse.input as { caption?: string; rows: unknown[] }
+      finalText = caption || (first.content.find((b) => b.type === 'text') as { text: string } | undefined)?.text || ''
+      dataWidget = rows
     } else {
       finalText = (first.content.find((b) => b.type === 'text') as { text: string } | undefined)?.text ?? ''
     }
+
+    const followupsToolUse = findToolUse(followupSource, 'suggest_followups')
+    const quickReplies = (followupsToolUse?.input as { replies?: string[] } | undefined)?.replies ?? null
 
     const { data: saved, error } = await supabase
       .from('chat_messages')
@@ -149,6 +202,8 @@ Deno.serve(async (req) => {
         context_snapshot: snapshot,
         model: CLAUDE_MODEL_DEFAULT,
         proposed_debt: proposedDebt,
+        data_widget: dataWidget,
+        quick_replies: quickReplies,
       })
       .select()
       .single()

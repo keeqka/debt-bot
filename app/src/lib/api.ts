@@ -376,6 +376,7 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
     await new Promise((r) => setTimeout(r, 700))
 
     const wantsDebt = /долг|кредит|рассрочк/i.test(content)
+    const wantsBreakdown = /сколько.*(трачу|уходит)|на что.*деньги|разбивк/i.test(content)
     const reply: ChatMessage = wantsDebt
       ? {
           id: crypto.randomUUID(),
@@ -392,17 +393,34 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
             minimum_payment: null,
             due_day: null,
           },
+          quick_replies: ['Какая ставка обычно у такого долга?', 'Добавь ещё один долг'],
           created_at: new Date().toISOString(),
         }
-      : {
-          id: crypto.randomUUID(),
-          user_id: mock.currentMockUser.id,
-          role: 'assistant',
-          content:
-            'Пока это демо-режим без ключей Claude API — как только подключим бэкенд, здесь будет настоящий ответ на основе ваших реальных доходов, расходов и долгов.',
-          model: 'claude-sonnet-5',
-          created_at: new Date().toISOString(),
-        }
+      : wantsBreakdown
+        ? {
+            id: crypto.randomUUID(),
+            user_id: mock.currentMockUser.id,
+            role: 'assistant',
+            content: 'Вот на что ушли деньги за сентябрь:',
+            model: 'claude-sonnet-5',
+            data_widget: [
+              { name: 'Жильё', amount: 210_000, pct: 76 },
+              { name: 'Здоровье', amount: 32_000, pct: 12 },
+              { name: 'Продукты', amount: 18_400, pct: 7 },
+            ],
+            quick_replies: ['А в прошлом месяце?', 'Поставь лимит на продукты'],
+            created_at: new Date().toISOString(),
+          }
+        : {
+            id: crypto.randomUUID(),
+            user_id: mock.currentMockUser.id,
+            role: 'assistant',
+            content:
+              'Пока это демо-режим без ключей Claude API — как только подключим бэкенд, здесь будет настоящий ответ на основе ваших реальных доходов, расходов и долгов.',
+            model: 'claude-sonnet-5',
+            quick_replies: ['Сколько я трачу на еду?', 'Как быстрее закрыть долги?'],
+            created_at: new Date().toISOString(),
+          }
     mock.mockChatMessages.push(reply)
     return reply
   }
