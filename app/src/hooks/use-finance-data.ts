@@ -1,6 +1,8 @@
+import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
+import { computeMonth } from '@/lib/month'
 import type { ChatMessage, DebtStrategyKind } from '@/types/domain'
 
 export const queryKeys = {
@@ -42,6 +44,25 @@ export const useCategories = () => useQuery({ queryKey: queryKeys.categories, qu
 export const useGoals = () => useQuery({ queryKey: queryKeys.goals, queryFn: api.getGoals })
 export const useBankProducts = () => useQuery({ queryKey: queryKeys.bankProducts, queryFn: api.getBankProducts })
 export const useChatMessages = () => useQuery({ queryKey: queryKeys.chatMessages, queryFn: api.getChatMessages })
+
+/**
+ * Overview's budget math (available/perDay/category breakdown) — a pure
+ * client-side aggregation over data every one of these hooks already fetches
+ * and caches on its own, so this composes them instead of adding a
+ * redundant query key. Recomputes whenever any underlying list changes
+ * (expenses/incomes/debts/categories), same as any other derived useMemo.
+ */
+export function useMonth() {
+  const { data: debts } = useDebts()
+  const { data: expenses } = useExpenses()
+  const { data: incomes } = useIncomes()
+  const { data: categories } = useCategories()
+
+  return useMemo(() => {
+    if (!debts || !expenses || !incomes || !categories) return undefined
+    return computeMonth(debts, expenses, incomes, categories)
+  }, [debts, expenses, incomes, categories])
+}
 
 export const useDebtPayments = (debtId: string) =>
   useQuery({ queryKey: queryKeys.debtPayments(debtId), queryFn: () => api.getDebtPayments(debtId) })

@@ -1,12 +1,11 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
-// Overview and Receipt temporarily reuse the pre-redesign Dashboard/Finances
-// screens under their new paths/labels — phases 2 and 4 replace their
-// content. Debts and Chat keep their real routes and get reskinned in place
-// (phases 3 and 5). Goals and the old general-ledger Finances route are
-// dropped from navigation per the new 4-tab IA (files kept on disk, unlinked
-// — see the redesign plan for why).
-import { Dashboard as Overview } from '@/routes/Dashboard'
+// Receipt temporarily reuses the pre-redesign Finances screen under its new
+// path/label — phase 4 replaces its content. Debts and Chat keep their real
+// routes and get reskinned in place (phases 3 and 5). Goals and the old
+// general-ledger Finances route are dropped from navigation per the new
+// 4-tab IA (files kept on disk, unlinked — see the redesign plan for why).
+import { Overview } from '@/routes/Overview'
 import { Debts } from '@/routes/Debts'
 import { Finances as Receipt } from '@/routes/Finances'
 import { Chat } from '@/routes/Chat'
