@@ -124,6 +124,15 @@ export interface StatusInsight {
   recommendations: string[]
 }
 
+export type SubscriptionStatus = 'free' | 'active'
+
+/** One row for the whole household — see 0012_subscription_stub.sql. */
+export interface Subscription {
+  id: Uuid
+  status: SubscriptionStatus
+  activated_at: string | null
+}
+
 export type DebtStrategyKind = 'avalanche' | 'snowball'
 
 export interface DebtStrategyPlan {

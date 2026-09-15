@@ -18,6 +18,8 @@ export const queryKeys = {
   bankProducts: ['bank-products'] as const,
   chatMessages: ['chat-messages'] as const,
   users: ['users'] as const,
+  subscription: ['subscription'] as const,
+  receiptScanCount: ['receipt-scan-count'] as const,
 }
 
 // Pure DB read (see api.getStatus) — cheap no matter how often it's called,
@@ -280,6 +282,31 @@ export function useClearChat() {
     mutationFn: api.clearChatMessages,
     onSuccess: () => {
       queryClient.setQueryData<ChatMessage[]>(queryKeys.chatMessages, [])
+    },
+  })
+}
+
+export const useSubscription = () => useQuery({ queryKey: queryKeys.subscription, queryFn: api.getSubscription })
+
+export function useActivateSubscription() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.activateSubscription,
+    onSuccess: (subscription) => {
+      queryClient.setQueryData(queryKeys.subscription, subscription)
+    },
+  })
+}
+
+export const useReceiptScanCount = () => useQuery({ queryKey: queryKeys.receiptScanCount, queryFn: api.getReceiptScanCountThisMonth })
+
+/** Logs one parse attempt (receipt or statement, success or failure) — must be awaited before the scan count is trusted again. */
+export function useLogReceiptScan() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.logReceiptScan,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.receiptScanCount })
     },
   })
 }

@@ -7,12 +7,26 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
-import { useAddCategory, useCategories, useDeleteCategory, useUpdateUser } from '@/hooks/use-finance-data'
+import {
+  useActivateSubscription,
+  useAddCategory,
+  useCategories,
+  useDeleteCategory,
+  useReceiptScanCount,
+  useSubscription,
+  useUpdateUser,
+} from '@/hooks/use-finance-data'
 import { useCurrentUser } from '@/lib/auth'
 import { isBackendConfigured } from '@/lib/env'
 import { isInsideTelegram } from '@/lib/telegram'
 import { cn } from '@/lib/utils'
 import type { CategoryType } from '@/types/domain'
+
+const FULL_TIER_FEATURES = [
+  'Чеки и выписки без лимита',
+  'Разбор подписок и комиссий',
+  'Ежедневное напоминание загрузить чеки',
+]
 
 /**
  * Профиль — доход/дата зарплаты (Overview's budget math depends on this),
@@ -29,6 +43,9 @@ export function ProfilePanel() {
   const addCategory = useAddCategory()
   const deleteCategory = useDeleteCategory()
   const updateUser = useUpdateUser()
+  const { data: subscription } = useSubscription()
+  const { data: scanCount = 0 } = useReceiptScanCount()
+  const activateSubscription = useActivateSubscription()
 
   const [income, setIncome] = useState(user.monthly_income?.toString() ?? '')
   const [payday, setPayday] = useState(user.payday?.toString() ?? '')
@@ -81,6 +98,43 @@ export function ProfilePanel() {
           <span className="text-sm">Backend (Supabase)</span>
           <Badge variant={isBackendConfigured ? 'default' : 'secondary'}>{isBackendConfigured ? 'Подключено' : 'Демо-режим'}</Badge>
         </div>
+      </section>
+
+      <Separator />
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-muted-foreground">Тариф</h3>
+          <Badge variant={subscription?.status === 'active' ? 'default' : 'secondary'}>
+            {subscription?.status === 'active' ? 'Полный' : 'Бесплатный'}
+          </Badge>
+        </div>
+        {subscription?.status === 'active' ? (
+          <p className="text-xs text-muted-foreground">Чеки и выписки без лимита, разбор подписок, ежедневные напоминания.</p>
+        ) : (
+          <div className="space-y-3 rounded-xl border border-border p-3">
+            <p className="text-xs text-muted-foreground">
+              Использовано {scanCount} из 30 бесплатных чеков в этом месяце.
+            </p>
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {FULL_TIER_FEATURES.map((f) => (
+                <li key={f}>· {f}</li>
+              ))}
+            </ul>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-lg font-semibold">2 990 ₸</span>
+              <span className="text-xs text-muted-foreground">в месяц</span>
+            </div>
+            <Button
+              className="w-full"
+              disabled={activateSubscription.isPending}
+              onClick={() => activateSubscription.mutate(undefined, { onSuccess: () => toast.success('Тариф «Полный» активирован') })}
+            >
+              {activateSubscription.isPending ? 'Активация...' : 'Активировать'}
+            </Button>
+            <p className="text-[11px] text-muted-foreground">Оплата внутри Telegram появится позже — пока это демонстрация тарифа.</p>
+          </div>
+        )}
       </section>
 
       <Separator />

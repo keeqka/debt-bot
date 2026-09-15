@@ -6,7 +6,19 @@ import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { Mascot } from '@/components/Mascot'
 import { useReceiptDraft, type StatementDraftRow } from '@/hooks/use-receipt-draft'
-import { useAddExpense, useAddExpensesBulk, useAddIncomesBulk, useCategories, useExpenses, useDeleteExpense, useDeleteIncome, useIncomes } from '@/hooks/use-finance-data'
+import {
+  useAddExpense,
+  useAddExpensesBulk,
+  useAddIncomesBulk,
+  useCategories,
+  useExpenses,
+  useDeleteExpense,
+  useDeleteIncome,
+  useIncomes,
+  useLogReceiptScan,
+  useReceiptScanCount,
+  useSubscription,
+} from '@/hooks/use-finance-data'
 import { useCurrentUserId } from '@/lib/auth'
 import { parseReceipt, parseStatement } from '@/lib/api'
 import { fileToBase64 } from '@/lib/file-to-base64'
@@ -16,6 +28,8 @@ import { cn } from '@/lib/utils'
 import type { Category, Expense, Income, ReceiptParseResult } from '@/types/domain'
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024
+const FREE_TIER_WARN_AT = 25
+const FREE_TIER_LIMIT = 30
 
 function validateFile(file: File): string | null {
   const okType = file.type.startsWith('image/') || file.type === 'application/pdf'
@@ -42,6 +56,13 @@ export function Receipt() {
   const addIncomesBulk = useAddIncomesBulk()
   const deleteExpense = useDeleteExpense()
   const deleteIncome = useDeleteIncome()
+  const { data: subscription } = useSubscription()
+  const { data: scanCount = 0 } = useReceiptScanCount()
+  const logScan = useLogReceiptScan()
+
+  const isFreeTier = subscription?.status !== 'active'
+  const scansLeft = FREE_TIER_LIMIT - scanCount
+  const atScanLimit = isFreeTier && scansLeft <= 0
 
   const receiptInputRef = useRef<HTMLInputElement>(null)
   const statementInputRef = useRef<HTMLInputElement>(null)
@@ -56,6 +77,10 @@ export function Receipt() {
   const expenseCategories = categories?.filter((c) => c.type === 'expense') ?? []
 
   async function handleReceiptFile(file: File) {
+    if (atScanLimit) {
+      setDraft({ status: 'error', message: `Достигнут лимит бесплатного тарифа (${FREE_TIER_LIMIT} чеков в месяц) — оформи «Полный», чтобы продолжить.` })
+      return
+    }
     const invalid = validateFile(file)
     if (invalid) {
       setDraft({ status: 'error', message: invalid })
@@ -65,6 +90,7 @@ export function Receipt() {
     try {
       const base64 = await fileToBase64(file)
       setDraft({ status: 'reading', kind: 'receipt' })
+      await logScan.mutateAsync(userId)
       const result = await parseReceipt(base64, file.type || 'image/jpeg')
       if (!result.is_valid_receipt) {
         setDraft({ status: 'error', message: 'Не разобрал — переснять? Убедись, что чек целиком в кадре и хорошо освещён.' })
@@ -78,6 +104,10 @@ export function Receipt() {
   }
 
   async function handleStatementFile(file: File) {
+    if (atScanLimit) {
+      setDraft({ status: 'error', message: `Достигнут лимит бесплатного тарифа (${FREE_TIER_LIMIT} чеков в месяц) — оформи «Полный», чтобы продолжить.` })
+      return
+    }
     const invalid = validateFile(file)
     if (invalid) {
       setDraft({ status: 'error', message: invalid })
@@ -87,6 +117,7 @@ export function Receipt() {
     try {
       const base64 = await fileToBase64(file)
       setDraft({ status: 'reading', kind: 'statement' })
+      await logScan.mutateAsync(userId)
       const parsed = await parseStatement(base64, file.type || 'application/pdf')
       if (!parsed.is_valid_statement || parsed.transactions.length === 0) {
         setDraft({ status: 'error', message: 'Не нашёл операций в файле — попробуй другую выписку или добавь траты вручную.' })
@@ -191,6 +222,14 @@ export function Receipt() {
           e.target.value = ''
         }}
       />
+
+      {draft.status === 'idle' && isFreeTier && scanCount >= FREE_TIER_WARN_AT && (
+        <div className="rounded-[12px] bg-hf-receipt-warn px-3.5 py-2.5 text-[13px] text-hf-warn-ink">
+          {atScanLimit
+            ? `Лимит бесплатного тарифа исчерпан (${FREE_TIER_LIMIT} чеков в месяц) — оформи «Полный» в Профиле, чтобы продолжить.`
+            : `Осталось ${scansLeft} ${scansLeft === 1 ? 'чек' : 'чека'} из бесплатного лимита на этот месяц.`}
+        </div>
+      )}
 
       {draft.status === 'idle' && (
         <IdleView

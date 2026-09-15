@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Mascot } from '@/components/Mascot'
 import { Eyebrow } from '@/components/chrome/Chrome'
-import { useAddExpense, useCategories, useUpdateUser } from '@/hooks/use-finance-data'
+import { useAddExpense, useCategories, useLogReceiptScan, useUpdateUser } from '@/hooks/use-finance-data'
 import { useCurrentUser, useCurrentUserId } from '@/lib/auth'
 import { parseReceipt } from '@/lib/api'
 import { fileToBase64 } from '@/lib/file-to-base64'
@@ -50,12 +50,14 @@ function ReceiptStep({ onNext }: { onNext: () => void }) {
   const userId = useCurrentUserId()
   const { data: categories } = useCategories()
   const addExpense = useAddExpense()
+  const logScan = useLogReceiptScan()
   const [status, setStatus] = useState<'idle' | 'reading' | 'error'>('idle')
 
   async function handleFile(file: File) {
     setStatus('reading')
     try {
       const base64 = await fileToBase64(file)
+      await logScan.mutateAsync(userId)
       const result = await parseReceipt(base64, file.type || 'image/jpeg')
       if (!result.is_valid_receipt) {
         setStatus('error')

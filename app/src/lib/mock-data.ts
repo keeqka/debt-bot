@@ -7,6 +7,7 @@ import type {
   Expense,
   Goal,
   Income,
+  Subscription,
   StatusInsight,
   User,
 } from '@/types/domain'
@@ -299,6 +300,15 @@ export const mockStatus: StatusInsight = {
     'Сократить категорию «Развлечения» на 15% до конца месяца',
   ],
 }
+
+export const mockSubscription: Subscription = {
+  id: 'sub1',
+  status: 'free',
+  activated_at: null,
+}
+
+/** created_at of every past receipt/statement parse attempt — see receipt_scans in 0012_subscription_stub.sql. */
+export const mockReceiptScans: string[] = []
 
 export const mockChatMessages: ChatMessage[] = [
   {

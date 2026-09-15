@@ -17,6 +17,7 @@ import type {
   ReceiptParseResult,
   StatementParseResult,
   StatusInsight,
+  Subscription,
   User,
 } from '@/types/domain'
 
@@ -452,4 +453,55 @@ export async function clearChatMessages(): Promise<void> {
   }
   const { error } = await supabase.from('chat_messages').delete().neq('id', '00000000-0000-0000-0000-000000000000')
   if (error) throw error
+}
+
+/** One row for the whole household (0012_subscription_stub.sql) — always the single seeded row, never created from application code. */
+export async function getSubscription(): Promise<Subscription> {
+  if (!isBackendConfigured || !supabase) return { ...mock.mockSubscription }
+  const { data, error } = await supabase.from('subscriptions').select('*').limit(1).single()
+  if (error) throw error
+  return data as Subscription
+}
+
+/** UI-only stub (no real payment yet, confirmed decision) — just flips the household row to active. */
+export async function activateSubscription(): Promise<Subscription> {
+  if (!isBackendConfigured || !supabase) {
+    mock.mockSubscription.status = 'active'
+    mock.mockSubscription.activated_at = new Date().toISOString()
+    return { ...mock.mockSubscription }
+  }
+  // Exactly one row ever exists (seeded once in 0012_subscription_stub.sql,
+  // never inserted again) — no id to filter by, so this updates it unconditionally.
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .update({ status: 'active', activated_at: new Date().toISOString() })
+    .select()
+    .single()
+  if (error) throw error
+  return data as Subscription
+}
+
+/** Logs one parse attempt (receipt or statement, success or failure) against the free-tier limit. */
+export async function logReceiptScan(userId: string): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    mock.mockReceiptScans.push(new Date().toISOString())
+    return
+  }
+  const { error } = await supabase.from('receipt_scans').insert({ user_id: userId })
+  if (error) throw error
+}
+
+/** Count of parse attempts so far this calendar month — the free-tier limit resets monthly, same cadence as Overview's budget. */
+export async function getReceiptScanCountThisMonth(): Promise<number> {
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  if (!isBackendConfigured || !supabase) {
+    return mock.mockReceiptScans.filter((iso) => iso >= monthStart).length
+  }
+  const { count, error } = await supabase
+    .from('receipt_scans')
+    .select('*', { count: 'exact', head: true })
+    .gte('created_at', monthStart)
+  if (error) throw error
+  return count ?? 0
 }
