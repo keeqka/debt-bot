@@ -1,19 +1,36 @@
 import type { Debt, DebtStrategyKind, DebtStrategyPlan } from '@/types/domain'
 
 /**
- * Client-side avalanche simulation used for instant UI feedback, the
- * mock-mode fallback, and the payoff chart (ТЗ §6.1/§7.5). The real
- * "source of truth" for the saved strategy numbers is the debts-strategy
- * Edge Function (Claude), which returns the same shape plus a
- * natural-language explanation — this mirrors that math exactly so both
- * stay consistent. The chart is always computed here rather than asked of
- * Claude: precise month-by-month arithmetic over years is exactly the kind
- * of thing a deterministic simulation should own, not a model.
+ * Client-side debt-payoff simulation used for instant UI feedback, the
+ * mock-mode fallback, and the payoff chart. The real "source of truth" for
+ * the saved strategy numbers is the debts-strategy Edge Function (Claude),
+ * which is given this exact same deterministic order and asked only to
+ * price it and explain it in words — this mirrors that math exactly so
+ * both stay consistent. The chart is always computed here rather than
+ * asked of Claude: precise month-by-month arithmetic over years is exactly
+ * the kind of thing a deterministic simulation should own, not a model.
+ *
+ * Two real algorithms (ТЗ FUNCTIONAL.md §4), not two flavors of the same
+ * one: avalanche sorts by interest rate (most expensive debt first, saves
+ * the most money); snowball sorts by balance (smallest debt first, clears
+ * a debt off the list soonest — a motivation play, honestly a worse deal
+ * in interest). The whole monthly surplus goes to extra payment on
+ * whichever debt is first in that order — there's no separate
+ * "aggressiveness" dial; the surplus input on the Debts screen already is
+ * that dial, directly.
  */
 
-const EXTRA_PAYMENT_SHARE: Record<DebtStrategyKind, number> = {
-  optimal: 0.15,
-  aggressive: 0.65,
+function sortOrder(debts: Debt[], algorithm: DebtStrategyKind): Debt[] {
+  const active = debts.filter((d) => d.status === 'active' && d.current_balance > 0)
+  return algorithm === 'avalanche'
+    ? [...active].sort((a, b) => (b.interest_rate ?? 0) - (a.interest_rate ?? 0))
+    : [...active].sort((a, b) => a.current_balance - b.current_balance)
+}
+
+/** Deterministic one-line reason per position — not asked of Claude, it's a pure function of algorithm + rank. */
+export function debtPayoffNote(index: number, algorithm: DebtStrategyKind): string {
+  if (index !== 0) return 'Минимальный платёж, пока не дойдёт очередь'
+  return algorithm === 'avalanche' ? 'Гасим первой — дороже всех по ставке' : 'Гасим первой — закроется быстрее всех'
 }
 
 interface SimulationInput {
@@ -41,10 +58,9 @@ interface SimulationRun {
 const MAX_MONTHS = 600 // 50-year safety cap so a bad input can't loop forever
 const MAX_TIMELINE_POINTS = 120 // 10 years of monthly points is plenty for a chart
 
-function runAvalancheSimulation({ debts, monthlySurplus, strategy }: SimulationInput): SimulationRun {
-  const active = debts.filter((d) => d.status === 'active' && d.current_balance > 0)
-  const order = [...active].sort((a, b) => (b.interest_rate ?? 0) - (a.interest_rate ?? 0))
-  const extraBudget = Math.max(0, monthlySurplus * EXTRA_PAYMENT_SHARE[strategy])
+function runSimulation({ debts, monthlySurplus, strategy }: SimulationInput): SimulationRun {
+  const order = sortOrder(debts, strategy)
+  const extraBudget = Math.max(0, monthlySurplus)
 
   const balances = new Map(order.map((d) => [d.id, d.current_balance]))
   const startBalance = [...balances.values()].reduce((sum, b) => sum + b, 0)
@@ -89,8 +105,7 @@ function runAvalancheSimulation({ debts, monthlySurplus, strategy }: SimulationI
 
 export function simulateDebtStrategy(input: SimulationInput): DebtStrategyPlan {
   const { strategy, monthlySurplus } = input
-  const { order, totalInterest, months } = runAvalancheSimulation(input)
-  const extraBudget = Math.max(0, monthlySurplus * EXTRA_PAYMENT_SHARE[strategy])
+  const { order, totalInterest, months } = runSimulation(input)
 
   const payoffDate = new Date()
   payoffDate.setMonth(payoffDate.getMonth() + months)
@@ -98,20 +113,20 @@ export function simulateDebtStrategy(input: SimulationInput): DebtStrategyPlan {
   return {
     strategy,
     payoff_order: order.map((d) => d.id),
-    monthly_plan: order.map((d) => ({
+    monthly_plan: order.map((d, i) => ({
       debt_id: d.id,
-      payment: d.minimum_payment + (order[0]?.id === d.id ? extraBudget : 0),
+      payment: d.minimum_payment + (i === 0 ? Math.max(0, monthlySurplus) : 0),
     })),
     estimated_payoff_date: payoffDate.toISOString().slice(0, 10),
     total_interest_paid: Math.round(totalInterest),
     explanation:
-      strategy === 'optimal'
-        ? `Порядок — по убыванию ставки (avalanche). На досрочное погашение направляется ~${Math.round(EXTRA_PAYMENT_SHARE.optimal * 100)}% свободного остатка, подушка безопасности сохраняется.`
-        : `Тот же порядок avalanche, но на досрочное погашение направляется ~${Math.round(EXTRA_PAYMENT_SHARE.aggressive * 100)}% свободного остатка — срок короче, подушка минимальна.`,
+      strategy === 'avalanche'
+        ? 'Порядок — по убыванию ставки (avalanche): весь свободный остаток идёт на самый дорогой долг, это экономит больше всего на процентах.'
+        : 'Порядок — по возрастанию остатка (snowball): весь свободный остаток идёт на самый маленький долг, чтобы он закрылся быстрее всего — на процентах это обычно проигрывает лавине.',
   }
 }
 
-/** Month-by-month combined balance for the payoff chart — see runAvalancheSimulation. */
+/** Month-by-month combined balance for the payoff chart — see runSimulation. */
 export function simulateDebtTimeline(input: SimulationInput): TimelinePoint[] {
-  return runAvalancheSimulation(input).timeline
+  return runSimulation(input).timeline
 }

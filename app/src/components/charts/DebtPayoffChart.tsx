@@ -6,8 +6,8 @@ import { formatMoney } from '@/lib/format'
 import type { Debt } from '@/types/domain'
 
 const CONFIG: ChartConfig = {
-  optimal: { label: 'Оптимальная', color: 'var(--chart-2)' },
-  aggressive: { label: 'Агрессивная', color: 'var(--chart-5)' },
+  avalanche: { label: 'Лавина', color: 'var(--chart-2)' },
+  snowball: { label: 'Снежный ком', color: 'var(--chart-5)' },
 }
 
 function compactMoney(value: number) {
@@ -18,14 +18,14 @@ function compactMoney(value: number) {
 
 export function DebtPayoffChart({ debts, monthlySurplus }: { debts: Debt[]; monthlySurplus: number }) {
   const data = useMemo(() => {
-    const optimal = simulateDebtTimeline({ debts, monthlySurplus, strategy: 'optimal' })
-    const aggressive = simulateDebtTimeline({ debts, monthlySurplus, strategy: 'aggressive' })
-    const length = Math.max(optimal.length, aggressive.length)
+    const avalanche = simulateDebtTimeline({ debts, monthlySurplus, strategy: 'avalanche' })
+    const snowball = simulateDebtTimeline({ debts, monthlySurplus, strategy: 'snowball' })
+    const length = Math.max(avalanche.length, snowball.length)
 
     return Array.from({ length }, (_, i) => ({
       month: i,
-      optimal: i < optimal.length ? optimal[i].balance : 0,
-      aggressive: i < aggressive.length ? aggressive[i].balance : 0,
+      avalanche: i < avalanche.length ? avalanche[i].balance : 0,
+      snowball: i < snowball.length ? snowball[i].balance : 0,
     }))
   }, [debts, monthlySurplus])
 
@@ -55,8 +55,8 @@ export function DebtPayoffChart({ debts, monthlySurplus }: { debts: Debt[]; mont
               />
             }
           />
-          <Area dataKey="optimal" type="monotone" stroke="var(--color-optimal)" fill="var(--color-optimal)" fillOpacity={0.15} strokeWidth={2} />
-          <Area dataKey="aggressive" type="monotone" stroke="var(--color-aggressive)" fill="var(--color-aggressive)" fillOpacity={0.15} strokeWidth={2} />
+          <Area dataKey="avalanche" type="monotone" stroke="var(--color-avalanche)" fill="var(--color-avalanche)" fillOpacity={0.15} strokeWidth={2} />
+          <Area dataKey="snowball" type="monotone" stroke="var(--color-snowball)" fill="var(--color-snowball)" fillOpacity={0.15} strokeWidth={2} />
         </AreaChart>
       </ChartContainer>
     </div>

@@ -117,7 +117,7 @@ export interface StatusInsight {
   recommendations: string[]
 }
 
-export type DebtStrategyKind = 'optimal' | 'aggressive'
+export type DebtStrategyKind = 'avalanche' | 'snowball'
 
 export interface DebtStrategyPlan {
   strategy: DebtStrategyKind
