@@ -20,26 +20,26 @@ export function TopBar({ title, action }: { title: string; action?: ReactNode })
   const initials = user.display_name.slice(0, 1).toUpperCase()
 
   return (
-    <header className="pt-safe sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/95 px-4 pb-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <h1 className="text-lg font-semibold">{title}</h1>
+    <header className="pt-safe sticky top-0 z-20 flex items-center justify-between border-b border-hf-line bg-hf-bar px-4 pb-3">
+      <h1 className="text-[15px] font-medium text-hf-text">{title}</h1>
       <div className="flex items-center gap-3">
         {action}
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger className="relative" aria-label="Профиль и настройки">
             <Avatar className="h-9 w-9">
               {user.avatar_url && <AvatarImage src={user.avatar_url} alt={user.display_name} />}
-              <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">{initials}</AvatarFallback>
+              <AvatarFallback className="bg-hf-card text-hf-text text-sm font-semibold">{initials}</AvatarFallback>
             </Avatar>
             {meta && (
               <span
-                className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-background', meta.dot)}
+                className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-hf-bar', meta.dot)}
                 aria-label={`Статус: ${meta.label}`}
               />
             )}
           </SheetTrigger>
           <SheetContent side="right" className="w-full sm:max-w-sm">
             <SheetHeader>
-              <SheetTitle>Настройки</SheetTitle>
+              <SheetTitle>Профиль</SheetTitle>
             </SheetHeader>
             <SettingsPanel />
           </SheetContent>
