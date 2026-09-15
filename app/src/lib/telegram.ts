@@ -81,7 +81,7 @@ export function getTelegramUser(): TelegramWebAppUser | null {
  * Call once on app boot: signals readiness, expands to full height, and
  * keeps --tg-height in sync with Telegram's own stable viewport height (the
  * safe scrollable area — CSS 100dvh alone doesn't account for the bot's
- * chrome around the WebView). Theme sync lives in lib/theme.ts.
+ * chrome around the WebView). No theme sync anymore — Hlow Flow is dark-only.
  */
 export function initTelegram() {
   const app = getTelegramWebApp()

@@ -52,8 +52,10 @@ const queryClient = new QueryClient({
 })
 
 // Resolve the Telegram session before the first render so every screen sees
-// the real user id from the start rather than flashing the mock one.
-await initSession()
+// the real user id from the start rather than flashing the mock one. Seeds
+// the query cache directly (see lib/auth.ts) so useCurrentUser() is a real
+// reactive hook now, not a closure over a module variable nothing re-renders on.
+await initSession(queryClient)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

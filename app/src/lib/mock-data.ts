@@ -24,6 +24,11 @@ export const mockUsers: User[] = [
     username: 'aiym',
     avatar_url: null,
     timezone: 'Asia/Almaty',
+    monthly_income: null,
+    payday: null,
+    daily_reminder_enabled: false,
+    daily_reminder_time: '21:00',
+    vacation_paused: false,
     created_at: '2026-01-05T00:00:00Z',
   },
   {
@@ -33,6 +38,11 @@ export const mockUsers: User[] = [
     username: 'daniyar',
     avatar_url: null,
     timezone: 'Asia/Almaty',
+    monthly_income: null,
+    payday: null,
+    daily_reminder_enabled: false,
+    daily_reminder_time: '21:00',
+    vacation_paused: false,
     created_at: '2026-01-05T00:00:00Z',
   },
 ]

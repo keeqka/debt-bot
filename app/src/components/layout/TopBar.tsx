@@ -4,7 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { useStatus } from '@/hooks/use-finance-data'
 import { STATUS_META } from '@/lib/status'
 import { cn } from '@/lib/utils'
-import { SettingsPanel } from '@/components/settings/SettingsPanel'
+import { ProfilePanel } from '@/components/profile/ProfilePanel'
 import { useCurrentUser } from '@/lib/auth'
 
 /**
@@ -41,7 +41,7 @@ export function TopBar({ title, action }: { title: string; action?: ReactNode })
             <SheetHeader>
               <SheetTitle>Профиль</SheetTitle>
             </SheetHeader>
-            <SettingsPanel />
+            <ProfilePanel />
           </SheetContent>
         </Sheet>
       </div>

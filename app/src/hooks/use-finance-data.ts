@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { computeMonth } from '@/lib/month'
-import type { ChatMessage, DebtStrategyKind } from '@/types/domain'
+import { useCurrentUser } from '@/lib/auth'
+import type { ChatMessage, DebtStrategyKind, User } from '@/types/domain'
 
 export const queryKeys = {
   status: ['status'] as const,
@@ -53,6 +54,7 @@ export const useChatMessages = () => useQuery({ queryKey: queryKeys.chatMessages
  * (expenses/incomes/debts/categories), same as any other derived useMemo.
  */
 export function useMonth() {
+  const user = useCurrentUser()
   const { data: debts } = useDebts()
   const { data: expenses } = useExpenses()
   const { data: incomes } = useIncomes()
@@ -60,8 +62,20 @@ export function useMonth() {
 
   return useMemo(() => {
     if (!debts || !expenses || !incomes || !categories) return undefined
-    return computeMonth(debts, expenses, incomes, categories)
-  }, [debts, expenses, incomes, categories])
+    return computeMonth(user, debts, expenses, incomes, categories)
+  }, [user, debts, expenses, incomes, categories])
+}
+
+export function useUpdateUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Pick<User, 'monthly_income' | 'payday' | 'daily_reminder_enabled' | 'daily_reminder_time' | 'vacation_paused'>> }) =>
+      api.updateUser(id, patch),
+    onSuccess: (user) => {
+      queryClient.setQueryData(['current-user'], user)
+      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
+    },
+  })
 }
 
 export const useDebtPayments = (debtId: string) =>

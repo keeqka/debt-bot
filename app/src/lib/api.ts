@@ -34,6 +34,23 @@ export async function getUsers(): Promise<User[]> {
   return data as User[]
 }
 
+export async function updateUser(id: string, patch: Partial<Omit<User, 'id'>>): Promise<User> {
+  if (!isBackendConfigured || !supabase) {
+    const index = mock.mockUsers.findIndex((u) => u.id === id)
+    if (index === -1) throw new Error('User not found')
+    // A new object, not Object.assign-in-place: useCurrentUser() is read via
+    // setQueryData (not invalidateQueries+refetch, unlike most mock mutations
+    // here), so anything downstream memoized on this reference (useMonth's
+    // useMemo) needs it to actually change identity to notice the update.
+    const updated = { ...mock.mockUsers[index], ...patch }
+    mock.mockUsers[index] = updated
+    return updated
+  }
+  const { data, error } = await supabase.from('users').update(patch).eq('id', id).select().single()
+  if (error) throw error
+  return data as User
+}
+
 export async function getDebts(): Promise<Debt[]> {
   // A fresh array copy on every read — mock.mockDebts is mutated in place by
   // add/update/delete below, so returning the same reference would make

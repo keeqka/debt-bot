@@ -1,4 +1,4 @@
-import type { Category, Debt, Expense, Income } from '@/types/domain'
+import type { Category, Debt, Expense, Income, User } from '@/types/domain'
 
 export interface MonthCategory {
   id: string
@@ -47,8 +47,16 @@ function isDueLaterThisMonth(dueDay: number, today: Date) {
  * already fetched by Overview's existing hooks. `limit` is intentionally
  * automatic (income minus obligations), not a value anyone sets by hand —
  * see the redesign plan for why no per-category budget field exists.
+ *
+ * Income source: `user.monthly_income` (set in onboarding step 2 or
+ * Профиль) when present — a stated recurring figure that doesn't wobble
+ * depending on which day of the month payday actually landed. Falls back to
+ * this month's recorded income transactions when it isn't set, so the
+ * screen still works (on a lesser footing) for someone who skipped that
+ * onboarding step but has logged income anyway.
  */
 export function computeMonth(
+  user: User | null,
   debts: Debt[],
   expenses: Expense[],
   incomes: Income[],
@@ -59,7 +67,7 @@ export function computeMonth(
   const monthExpenses = expenses.filter((e) => isThisMonth(e.spent_at, today) && e.is_confirmed)
   const monthIncomes = incomes.filter((i) => isThisMonth(i.received_at, today))
 
-  const monthIncomeTotal = monthIncomes.reduce((sum, i) => sum + i.amount, 0)
+  const monthIncomeTotal = user?.monthly_income ?? monthIncomes.reduce((sum, i) => sum + i.amount, 0)
   const totalMinPayments = activeDebts.reduce((sum, d) => sum + d.minimum_payment, 0)
   const pending = activeDebts
     .filter((d) => d.due_day != null && isDueLaterThisMonth(d.due_day, today))
@@ -105,6 +113,6 @@ export function computeMonth(
     available,
     perDay,
     categories: monthCategories,
-    hasIncome: incomes.length > 0,
+    hasIncome: user?.monthly_income != null || incomes.length > 0,
   }
 }

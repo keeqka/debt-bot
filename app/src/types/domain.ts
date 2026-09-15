@@ -9,6 +9,12 @@ export interface User {
   username: string | null
   avatar_url: string | null
   timezone: string
+  /** Set in onboarding step 2 or Профиль — Overview falls back to a facts-only view while this is null. */
+  monthly_income: number | null
+  payday: number | null
+  daily_reminder_enabled: boolean
+  daily_reminder_time: string
+  vacation_paused: boolean
   created_at: string
 }
 
