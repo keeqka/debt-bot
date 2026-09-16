@@ -8,8 +8,7 @@
 
 @theme {
     /* Hlow Flow — "бумага и чек": тёмный интерфейс, светлые бумажные карточки
-       для данных из чеков/выписок. Токены живут РЯДОМ с shadcn-токенами ниже
-       (не заменяют их) — диалоги/Select/Sheet из shadcn всё ещё на них завязаны. */
+       для данных из чеков/выписок. */
     --font-hf-sans: 'Space Grotesk Variable', Helvetica, system-ui, sans-serif;
     --font-hf-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
 
@@ -32,6 +31,8 @@
     --color-hf-accent: #3c82c8;
     --color-hf-accent-ink: #2c6497;
     --color-hf-accent-on-dark: #7fa9d4;
+    --color-hf-accent-soft: #8fafce;
+    --color-hf-accent-faint: #c5d6e8;
     --color-hf-warn: #c0632f;
     --color-hf-warn-ink: #a34e1f;
     --color-hf-warn-on-dark: #e08a4f;
@@ -41,6 +42,9 @@
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Space Grotesk Variable', Helvetica, system-ui, sans-serif;
+    /* Без этой строки класс font-mono (а это ВСЕ цифры в приложении) падал на
+       системный monospace — JetBrains Mono импортировался и не применялся. */
+    --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -81,110 +85,65 @@
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
 
-    /* Financial status scale (green -> red), see ТЗ раздел 6.2 */
-    --color-status-green: var(--status-green);
-    --color-status-green-foreground: var(--status-green-foreground);
-    --color-status-light-green: var(--status-light-green);
-    --color-status-light-green-foreground: var(--status-light-green-foreground);
-    --color-status-yellow: var(--status-yellow);
-    --color-status-yellow-foreground: var(--status-yellow-foreground);
-    --color-status-orange: var(--status-orange);
-    --color-status-orange-foreground: var(--status-orange-foreground);
-    --color-status-red: var(--status-red);
-    --color-status-red-foreground: var(--status-red-foreground);
+    --color-status-ok: var(--status-ok);
+    --color-status-warn: var(--status-warn);
+    --color-status-alarm: var(--status-alarm);
 }
 
+/*
+ * ВАЖНО: раньше здесь жила светлая тема, а класс .dark на <html> никто не ставил —
+ * поэтому каждый примитив shadcn (Dialog, Sheet, Input, Select, Card, Badge, Button)
+ * рисовался белым внутри тёмного hf-интерфейса. Теперь shadcn-токены маппятся на
+ * hf-палитру, и любой примитив по умолчанию в тон. Значения совпадают с --color-hf-*:
+ * менять цвет надо в ОДНОМ месте (блок @theme выше), здесь — только проброс.
+ */
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.62 0.19 255);
-    --chart-2: oklch(0.7 0.17 155);
-    --chart-3: oklch(0.75 0.16 75);
-    --chart-4: oklch(0.62 0.22 305);
-    --chart-5: oklch(0.68 0.2 20);
-    --chart-6: oklch(0.68 0.13 195);
+    --background: #17181c;
+    --foreground: #f2efe9;
+    --card: #22262d;
+    --card-foreground: #f2efe9;
+    --popover: #1c1e23;
+    --popover-foreground: #f2efe9;
+    --primary: #3c82c8;
+    --primary-foreground: #ffffff;
+    --secondary: #22262d;
+    --secondary-foreground: #e4e1db;
+    --muted: #22262d;
+    --muted-foreground: #98a2ae;
+    --accent: #2a3644;
+    --accent-foreground: #f2efe9;
+    --destructive: #c0632f;
+    --border: #2b3038;
+    --input: #2b3038;
+    --ring: #3c82c8;
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
 
-    --status-green: oklch(0.63 0.17 145);
-    --status-green-foreground: oklch(0.985 0 0);
-    --status-light-green: oklch(0.75 0.15 140);
-    --status-light-green-foreground: oklch(0.145 0 0);
-    --status-yellow: oklch(0.85 0.17 95);
-    --status-yellow-foreground: oklch(0.145 0 0);
-    --status-orange: oklch(0.72 0.19 55);
-    --status-orange-foreground: oklch(0.145 0 0);
-    --status-red: oklch(0.63 0.24 27);
-    --status-red-foreground: oklch(0.985 0 0);
+    /* Градации акцента вместо шести произвольных чартовых цветов:
+       читаются в один взгляд и не спорят с правилом "синий = данные". */
+    --chart-1: #3c82c8;
+    --chart-2: #8fafce;
+    --chart-3: #c5d6e8;
+    --chart-4: #7fbf8e;
+    --chart-5: #e08a4f;
+    --chart-6: #6b7a8c;
+
+    --sidebar: #1c1e23;
+    --sidebar-foreground: #f2efe9;
+    --sidebar-primary: #3c82c8;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #22262d;
+    --sidebar-accent-foreground: #f2efe9;
+    --sidebar-border: #2b3038;
+    --sidebar-ring: #3c82c8;
+
+    /* Шкала финансового статуса сведена к трём тонам палитры (см. status.ts). */
+    --status-ok: #7fbf8e;
+    --status-warn: #e08a4f;
+    --status-alarm: #d9694a;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.72 0.17 255);
-    --chart-2: oklch(0.78 0.16 155);
-    --chart-3: oklch(0.82 0.15 75);
-    --chart-4: oklch(0.72 0.2 305);
-    --chart-5: oklch(0.76 0.18 20);
-    --chart-6: oklch(0.76 0.12 195);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
-
-    --status-green: oklch(0.7 0.17 145);
-    --status-green-foreground: oklch(0.145 0 0);
-    --status-light-green: oklch(0.78 0.15 140);
-    --status-light-green-foreground: oklch(0.145 0 0);
-    --status-yellow: oklch(0.8 0.17 95);
-    --status-yellow-foreground: oklch(0.145 0 0);
-    --status-orange: oklch(0.7 0.19 55);
-    --status-orange-foreground: oklch(0.145 0 0);
-    --status-red: oklch(0.65 0.23 27);
-    --status-red-foreground: oklch(0.145 0 0);
+    color-scheme: dark;
 }
 
 @layer base {
@@ -198,6 +157,7 @@
     }
   html {
     @apply font-sans;
+    color-scheme: dark;
     }
   body {
     margin: 0;
@@ -205,7 +165,7 @@
   }
 }
 
-/* Safe-area helpers for the Telegram Mini App sheet on iOS (notch / Dynamic Island / home indicator) */
+/* Safe-area helpers for the Telegram Mini App sheet on iOS */
 .pt-safe {
   padding-top: max(0.75rem, env(safe-area-inset-top));
 }

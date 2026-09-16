@@ -343,7 +343,7 @@ function IdleView({
               <p className="text-[11px] text-hf-text-4">{formatDateShort(row.date)}</p>
             </div>
             <div className="flex shrink-0 items-center gap-2.5">
-              {row.needsReview && <span className="rounded-md border border-hf-warn-on-dark px-1.5 py-0.5 text-[10px] text-hf-warn-on-dark">уточнить</span>}
+              {row.needsReview && <span className="rounded-md border border-hf-warn-on-dark px-1.5 py-0.5 text-[11px] text-hf-warn-on-dark">уточнить</span>}
               <span className={cn('font-mono text-sm', row.type === 'income' ? 'text-hf-ok' : 'text-hf-text')}>
                 {row.type === 'income' ? '+' : '−'}
                 {formatMoney(row.amount, row.currency)}
@@ -622,7 +622,7 @@ function ParsedStatementView({
                   ))}
                 </select>
               )}
-              {row.confidence < 0.6 && <span className="shrink-0 rounded-md border border-hf-warn-on-dark px-1.5 py-0.5 text-[10px] text-hf-warn-on-dark">уточнить</span>}
+              {row.confidence < 0.6 && <span className="shrink-0 rounded-md border border-hf-warn-on-dark px-1.5 py-0.5 text-[11px] text-hf-warn-on-dark">уточнить</span>}
             </div>
           </div>
         ))}

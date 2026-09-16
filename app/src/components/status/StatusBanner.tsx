@@ -1,63 +1,65 @@
-import { AlertTriangle, Sparkles, RotateCw } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
+import { RotateCw } from 'lucide-react'
 import { useRefreshStatus, useStatus } from '@/hooks/use-finance-data'
 import { STATUS_META } from '@/lib/status'
 import { cn } from '@/lib/utils'
 
 /**
- * Dashboard status banner — the colored top strip described in ТЗ §5/§6.2.
- * Purely reads the last AI-computed status from the DB (updated weekly by
- * cron); the refresh button is the only other way to get a fresh one — this
- * screen never calls Claude on its own just because it was opened.
+ * Полоса статуса на «Обзоре». Читает последнюю оценку из БД (её раз в неделю
+ * считает бот) — экран никогда не зовёт Claude сам по факту открытия.
+ *
+ * Дизайн: тёмная карточка, как остальной интерфейс; цвет статуса живёт только
+ * в тонкой полосе сверху, точке и подписи-лейбле — не в фоне всей плашки,
+ * иначе она перебивает главную цифру, которая идёт сразу под ней.
  */
 export function StatusBanner() {
   const { data: status, isLoading } = useStatus()
   const refresh = useRefreshStatus()
 
   if (isLoading) {
-    return <Skeleton className="h-24 w-full rounded-2xl" />
+    return <div className="h-[72px] w-full animate-pulse rounded-[18px] bg-hf-card" />
   }
 
   if (!status) {
     return (
-      <Card className="border-dashed py-0">
-        <CardContent className="flex items-center justify-between gap-3 p-4">
-          <p className="text-muted-foreground text-sm">Оценки ещё нет — обновляется раз в неделю ботом, или запросите сейчас.</p>
-          <Button size="sm" variant="outline" onClick={() => refresh.mutate()} disabled={refresh.isPending} className="shrink-0">
-            <RotateCw className={cn('h-3.5 w-3.5', refresh.isPending && 'animate-spin')} />
-            Оценить
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-between gap-3 rounded-[18px] border border-dashed border-hf-track p-3.5">
+        <p className="text-[13px] leading-snug text-hf-text-3">
+          Оценки ещё нет — бот обновляет её раз в неделю. Можно запросить сейчас.
+        </p>
+        <button
+          type="button"
+          onClick={() => refresh.mutate()}
+          disabled={refresh.isPending}
+          className="shrink-0 rounded-[10px] bg-hf-card px-3 py-2 text-[13px] text-hf-text-2 disabled:opacity-50"
+        >
+          {refresh.isPending ? 'Считаю…' : 'Оценить'}
+        </button>
+      </div>
     )
   }
 
   const meta = STATUS_META[status.status]
-  const Icon = status.score >= 60 ? Sparkles : AlertTriangle
 
   return (
-    <Card className={cn('overflow-hidden border-0 py-0', meta.bg)}>
-      <div className={cn('h-1.5 w-full', meta.dot)} />
-      <CardContent className="flex items-start gap-3 p-4">
-        <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', meta.text)} />
+    <div className="overflow-hidden rounded-[18px] bg-hf-card">
+      <div className={cn('h-1 w-full', meta.dot)} />
+      <div className="flex items-start gap-3 p-3.5">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2">
-            <span className={cn('text-xs font-semibold uppercase tracking-wide', meta.text)}>{meta.label}</span>
-            <span className="text-muted-foreground text-xs">{status.score}/100</span>
+            <span className={cn('font-mono text-[11px] tracking-[0.1em] uppercase', meta.text)}>{meta.label}</span>
+            <span className="font-mono text-[11px] text-hf-text-4">{status.score}/100</span>
           </div>
-          <p className="text-sm leading-snug font-medium">{status.headline}</p>
+          <p className="text-[13px] leading-snug font-medium text-hf-text-2">{status.headline}</p>
         </div>
         <button
+          type="button"
           onClick={() => refresh.mutate()}
           disabled={refresh.isPending}
           aria-label="Обновить оценку"
-          className="text-muted-foreground hover:text-foreground shrink-0 rounded-md p-1 disabled:opacity-50"
+          className="shrink-0 rounded-md p-1 text-hf-text-4 disabled:opacity-50"
         >
           <RotateCw className={cn('h-4 w-4', refresh.isPending && 'animate-spin')} />
         </button>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

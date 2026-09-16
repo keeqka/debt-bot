@@ -5,9 +5,10 @@ import { simulateDebtTimeline } from '@/lib/debt-strategy'
 import { formatMoney } from '@/lib/format'
 import type { Debt } from '@/types/domain'
 
+/** Выбранная стратегия — акцентом, вторая — приглушённым тоном той же гаммы. */
 const CONFIG: ChartConfig = {
-  avalanche: { label: 'Лавина', color: 'var(--chart-2)' },
-  snowball: { label: 'Снежный ком', color: 'var(--chart-5)' },
+  avalanche: { label: 'Лавина', color: '#3c82c8' },
+  snowball: { label: 'Снежный ком', color: '#8fafce' },
 }
 
 function compactMoney(value: number) {
@@ -32,31 +33,32 @@ export function DebtPayoffChart({ debts, monthlySurplus }: { debts: Debt[]; mont
   if (debts.length === 0 || data.length < 2) return null
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-semibold">Погашение по месяцам</p>
+    <div className="space-y-2.5">
+      <p className="font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Погашение по месяцам</p>
       <ChartContainer config={CONFIG} className="h-[180px] w-full">
         <AreaChart data={data} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
-          <CartesianGrid vertical={false} />
+          <CartesianGrid vertical={false} stroke="#2e333b" />
           <XAxis
             dataKey="month"
-            tickFormatter={(m) => `${m} мес.`}
+            tickFormatter={(m) => `${m} мес`}
             tickLine={false}
             axisLine={false}
             tickMargin={6}
-            fontSize={10}
+            fontSize={11}
+            stroke="#98a2ae"
             interval="preserveStartEnd"
           />
-          <YAxis tickFormatter={compactMoney} tickLine={false} axisLine={false} tickMargin={4} fontSize={10} width={40} />
+          <YAxis tickFormatter={compactMoney} tickLine={false} axisLine={false} tickMargin={4} fontSize={11} stroke="#98a2ae" width={44} />
           <ChartTooltip
             content={
               <ChartTooltipContent
-                labelFormatter={(m) => `${m} мес.`}
+                labelFormatter={(m) => `${m} мес`}
                 formatter={(value, name) => [` ${formatMoney(Number(value))}`, CONFIG[name as string]?.label ?? String(name)]}
               />
             }
           />
-          <Area dataKey="avalanche" type="monotone" stroke="var(--color-avalanche)" fill="var(--color-avalanche)" fillOpacity={0.15} strokeWidth={2} />
-          <Area dataKey="snowball" type="monotone" stroke="var(--color-snowball)" fill="var(--color-snowball)" fillOpacity={0.15} strokeWidth={2} />
+          <Area dataKey="avalanche" type="monotone" stroke="var(--color-avalanche)" fill="var(--color-avalanche)" fillOpacity={0.18} strokeWidth={2} />
+          <Area dataKey="snowball" type="monotone" stroke="var(--color-snowball)" fill="var(--color-snowball)" fillOpacity={0.1} strokeWidth={2} />
         </AreaChart>
       </ChartContainer>
     </div>

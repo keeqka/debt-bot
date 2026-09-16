@@ -133,7 +133,7 @@ export function Debts() {
                 type="number"
                 value={surplusText ?? surplus}
                 onChange={(e) => setSurplusText(e.target.value)}
-                className="w-28 rounded-md border border-hf-receipt-line bg-white px-2 py-0.5 text-right font-mono text-[13px] text-hf-accent-ink"
+                className="w-28 rounded-md border border-hf-receipt-line bg-hf-receipt px-2 py-0.5 text-right font-mono text-[13px] text-hf-accent-ink"
               />
             </div>
           </Paper>

@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, X } from 'lucide-react'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
-import { Badge } from '@/components/ui/badge'
 import {
   useActivateSubscription,
   useAddCategory,
@@ -19,6 +13,7 @@ import {
 import { useCurrentUser } from '@/lib/auth'
 import { isBackendConfigured } from '@/lib/env'
 import { isInsideTelegram } from '@/lib/telegram'
+import { formatMoney } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { CategoryType } from '@/types/domain'
 
@@ -28,14 +23,30 @@ const FULL_TIER_FEATURES = [
   'Ежедневное напоминание загрузить чеки',
 ]
 
+const FREE_TIER_LIMIT = 30
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">{children}</h3>
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-[11px] text-hf-text-4">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+const inputClass =
+  'h-9 w-full rounded-[10px] border border-hf-line bg-hf-bar px-2.5 text-[13px] text-hf-text placeholder:text-hf-text-4 focus:border-hf-accent focus:outline-none'
+
 /**
- * Профиль — доход/дата зарплаты (Overview's budget math depends on this),
- * ежедневное напоминание о чеках, категории (уже был реальный CRUD).
- * Тема больше не выбирается (дизайн тёмный по умолчанию) — переключатель
- * убран. Валюта тоже убрана: в приложении нет никакой другой точки, которая
- * бы её реально учитывала (formatMoney всегда KZT), так что показывать
- * рабочий на вид, но ничего не значащий селектор было бы хуже, чем не
- * показывать его вовсе.
+ * Профиль — доход/дата зарплаты (от них считается «сколько можно тратить»),
+ * ежедневное напоминание о чеках, тариф, категории.
+ *
+ * Тариф показан бумажной карточкой: это данные о пользователе, а не элемент
+ * интерфейса — то же правило, что на «Обзоре» и в разборе чека.
  */
 export function ProfilePanel() {
   const user = useCurrentUser()
@@ -68,10 +79,7 @@ export function ProfilePanel() {
   function savePayday() {
     const n = Number(payday)
     const valid = payday.trim() && Number.isFinite(n) && n >= 1 && n <= 31
-    updateUser.mutate(
-      { id: user.id, patch: { payday: valid ? n : null } },
-      { onSuccess: () => toast.success('Дата зарплаты обновлена') },
-    )
+    updateUser.mutate({ id: user.id, patch: { payday: valid ? n : null } }, { onSuccess: () => toast.success('Дата зарплаты обновлена') })
   }
 
   async function handleAddCategory() {
@@ -86,133 +94,140 @@ export function ProfilePanel() {
     toast.success('Категория удалена')
   }
 
+  const isActive = subscription?.status === 'active'
+
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 pb-8">
       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-muted-foreground">Подключение</h3>
-        <div className="flex items-center justify-between rounded-xl border border-border p-3">
-          <span className="text-sm">Telegram</span>
-          <Badge variant={isInsideTelegram() ? 'default' : 'secondary'}>{isInsideTelegram() ? 'Подключено' : 'Открыто вне Telegram'}</Badge>
+        <SectionTitle>Подключение</SectionTitle>
+        <div className="flex items-center justify-between rounded-[14px] bg-hf-card px-3.5 py-3">
+          <span className="text-[13px] text-hf-text-2">Telegram</span>
+          <span className={cn('font-mono text-[11px]', isInsideTelegram() ? 'text-hf-ok' : 'text-hf-text-4')}>
+            {isInsideTelegram() ? 'подключено' : 'вне Telegram'}
+          </span>
         </div>
-        <div className="flex items-center justify-between rounded-xl border border-border p-3">
-          <span className="text-sm">Backend (Supabase)</span>
-          <Badge variant={isBackendConfigured ? 'default' : 'secondary'}>{isBackendConfigured ? 'Подключено' : 'Демо-режим'}</Badge>
+        <div className="flex items-center justify-between rounded-[14px] bg-hf-card px-3.5 py-3">
+          <span className="text-[13px] text-hf-text-2">Backend</span>
+          <span className={cn('font-mono text-[11px]', isBackendConfigured ? 'text-hf-ok' : 'text-hf-warn-on-dark')}>
+            {isBackendConfigured ? 'подключено' : 'демо-режим'}
+          </span>
         </div>
       </section>
 
-      <Separator />
-
-      <section className="space-y-3">
+      <section className="space-y-2.5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-muted-foreground">Тариф</h3>
-          <Badge variant={subscription?.status === 'active' ? 'default' : 'secondary'}>
-            {subscription?.status === 'active' ? 'Полный' : 'Бесплатный'}
-          </Badge>
+          <SectionTitle>Тариф</SectionTitle>
+          <span className={cn('font-mono text-[11px]', isActive ? 'text-hf-accent-on-dark' : 'text-hf-text-4')}>
+            {isActive ? 'полный' : 'бесплатный'}
+          </span>
         </div>
-        {subscription?.status === 'active' ? (
-          <p className="text-xs text-muted-foreground">Чеки и выписки без лимита, разбор подписок, ежедневные напоминания.</p>
+
+        {isActive ? (
+          <p className="text-[13px] leading-relaxed text-hf-text-3">
+            Чеки и выписки без лимита, разбор подписок, ежедневные напоминания.
+          </p>
         ) : (
-          <div className="space-y-3 rounded-xl border border-border p-3">
-            <p className="text-xs text-muted-foreground">
-              Использовано {scanCount} из 30 бесплатных чеков в этом месяце.
-            </p>
-            <ul className="space-y-1 text-xs text-muted-foreground">
+          <div className="flex flex-col gap-3 rounded-[18px] bg-hf-receipt p-4 text-hf-ink">
+            <div className="flex items-baseline justify-between gap-2.5">
+              <span className="font-mono text-[11px] tracking-[0.1em] text-hf-ink-soft uppercase">Полный</span>
+              <span className="font-mono text-[11px] text-hf-ink-soft">
+                {scanCount} / {FREE_TIER_LIMIT} чеков
+              </span>
+            </div>
+            <ul className="space-y-1.5 text-[13px] leading-snug">
               {FULL_TIER_FEATURES.map((f) => (
-                <li key={f}>· {f}</li>
+                <li key={f}>{f}</li>
               ))}
             </ul>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-semibold">2 990 ₸</span>
-              <span className="text-xs text-muted-foreground">в месяц</span>
+            <div className="h-px bg-hf-receipt-line" />
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[13px]">В месяц</span>
+              <span className="font-mono text-[15px] font-medium text-hf-accent-ink">{formatMoney(2990)}</span>
             </div>
-            <Button
-              className="w-full"
+            <button
+              type="button"
               disabled={activateSubscription.isPending}
               onClick={() => activateSubscription.mutate(undefined, { onSuccess: () => toast.success('Тариф «Полный» активирован') })}
+              className="rounded-[13px] bg-hf-accent py-3 text-[15px] font-medium text-white disabled:opacity-50"
             >
-              {activateSubscription.isPending ? 'Активация...' : 'Активировать'}
-            </Button>
-            <p className="text-[11px] text-muted-foreground">Оплата внутри Telegram появится позже — пока это демонстрация тарифа.</p>
+              {activateSubscription.isPending ? 'Активация…' : 'Активировать'}
+            </button>
+            <p className="text-[11px] leading-snug text-hf-ink-soft">
+              Оплата внутри Telegram появится позже — пока это демонстрация тарифа.
+            </p>
           </div>
         )}
       </section>
 
-      <Separator />
-
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-muted-foreground">Доход</h3>
-        <p className="text-xs text-muted-foreground">
-          Используется для «Обзора» — сколько можно тратить в день. Без этого поля приложение показывает только факты, без прогноза.
+        <SectionTitle>Доход</SectionTitle>
+        <p className="text-[13px] leading-relaxed text-hf-text-3">
+          От него считается «сколько можно тратить в день». Без дохода приложение показывает только факты, без прогноза.
         </p>
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Доход в месяц, ₸</Label>
-            <Input type="number" value={income} onChange={(e) => setIncome(e.target.value)} onBlur={saveIncome} placeholder="Не указан" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">День зарплаты</Label>
-            <Input type="number" min={1} max={31} value={payday} onChange={(e) => setPayday(e.target.value)} onBlur={savePayday} placeholder="1-31" />
-          </div>
+          <Field label="Доход в месяц">
+            <input type="number" value={income} onChange={(e) => setIncome(e.target.value)} onBlur={saveIncome} placeholder="Не указан" className={inputClass} />
+          </Field>
+          <Field label="День зарплаты">
+            <input type="number" min={1} max={31} value={payday} onChange={(e) => setPayday(e.target.value)} onBlur={savePayday} placeholder="1—31" className={inputClass} />
+          </Field>
         </div>
       </section>
 
-      <Separator />
-
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold">Напоминание о чеках</h3>
-            <p className="text-xs text-muted-foreground">Бот напишет вечером, если сегодня не было ни одного чека.</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <h3 className="text-[13px] font-medium text-hf-text">Напоминание о чеках</h3>
+            <p className="text-[11px] leading-snug text-hf-text-4">Бот напишет вечером, если за день не было ни одного чека.</p>
           </div>
           <button
             type="button"
             role="switch"
             aria-checked={user.daily_reminder_enabled}
+            aria-label="Ежедневное напоминание загрузить чеки"
             onClick={() => updateUser.mutate({ id: user.id, patch: { daily_reminder_enabled: !user.daily_reminder_enabled } })}
             className={cn(
               'relative h-6 w-11 shrink-0 rounded-full transition-colors',
-              user.daily_reminder_enabled ? 'bg-primary' : 'bg-muted',
+              user.daily_reminder_enabled ? 'bg-hf-accent' : 'bg-hf-track',
             )}
           >
             <span
               className={cn(
-                'absolute top-0.5 h-5 w-5 rounded-full bg-background transition-transform',
+                'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
                 user.daily_reminder_enabled ? 'translate-x-[22px]' : 'translate-x-0.5',
               )}
             />
           </button>
         </div>
         {user.daily_reminder_enabled && (
-          <div className="space-y-1.5">
-            <Label className="text-xs">Время напоминания</Label>
+          <Field label="Время напоминания">
             <input
               type="time"
               value={user.daily_reminder_time.slice(0, 5)}
               onChange={(e) => updateUser.mutate({ id: user.id, patch: { daily_reminder_time: e.target.value } })}
-              className="border-input h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+              className={inputClass}
             />
-          </div>
+          </Field>
         )}
       </section>
 
-      <Separator />
-
       <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-muted-foreground">Категории</h3>
+        <SectionTitle>Категории</SectionTitle>
         <ul className="space-y-1.5">
           {categories?.map((c) => (
-            <li key={c.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+            <li key={c.id} className="flex items-center justify-between gap-2 rounded-[12px] bg-hf-card px-3 py-2.5">
               <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate">{c.name}</span>
-                <span className="text-muted-foreground shrink-0 text-[10px] uppercase">{c.type === 'expense' ? 'расход' : 'доход'}</span>
+                <span className="truncate text-[13px] text-hf-text-2">{c.name}</span>
+                <span className="shrink-0 font-mono text-[11px] text-hf-text-4">{c.type === 'expense' ? 'расход' : 'доход'}</span>
               </span>
               {c.is_system ? (
-                <span className="text-muted-foreground shrink-0 text-xs">системная</span>
+                <span className="shrink-0 font-mono text-[11px] text-hf-text-4">системная</span>
               ) : (
                 <button
+                  type="button"
                   onClick={() => handleDeleteCategory(c.id)}
                   aria-label={`Удалить категорию ${c.name}`}
-                  className="text-muted-foreground hover:text-destructive shrink-0"
+                  className="shrink-0 text-hf-text-4"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -222,26 +237,38 @@ export function ProfilePanel() {
         </ul>
 
         <div className="space-y-2 pt-1">
-          <Select value={newCategoryType} onValueChange={(v) => setNewCategoryType((v ?? 'expense') as CategoryType)}>
-            <SelectTrigger className="w-full">
-              <SelectValue>{(value: CategoryType) => (value === 'expense' ? 'Новая: расход' : 'Новая: доход')}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="expense">Новая категория расхода</SelectItem>
-              <SelectItem value="income">Новая категория дохода</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className={cn('flex items-center gap-2')}>
-            <Input
+          <div className="flex rounded-[12px] bg-hf-card p-1">
+            {(['expense', 'income'] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => setNewCategoryType(kind)}
+                className={cn(
+                  'flex-1 rounded-[9px] py-2 text-[13px] transition-colors',
+                  newCategoryType === kind ? 'bg-hf-accent font-medium text-white' : 'text-hf-text-4',
+                )}
+              >
+                {kind === 'expense' ? 'Расход' : 'Доход'}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               placeholder="Название категории"
-              className="min-w-0 flex-1"
+              className={cn(inputClass, 'min-w-0 flex-1')}
               onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
             />
-            <Button size="icon" variant="outline" className="shrink-0" onClick={handleAddCategory} disabled={addCategory.isPending}>
+            <button
+              type="button"
+              onClick={handleAddCategory}
+              disabled={addCategory.isPending}
+              aria-label="Добавить категорию"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-hf-card text-hf-text-2 disabled:opacity-50"
+            >
               <Plus className="h-4 w-4" />
-            </Button>
+            </button>
           </div>
         </div>
       </section>

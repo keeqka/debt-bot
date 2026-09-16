@@ -2,47 +2,53 @@ import type { FinancialStatus } from '@/types/domain'
 
 interface StatusMeta {
   label: string
-  emoji: string
-  bg: string
+  /** Текст на тёмном фоне. */
   text: string
+  /** Заливка точки/полосы. */
   dot: string
+  /** Подложка карточки. */
+  bg: string
 }
 
-/** Central mapping so the status color is defined once and reused everywhere (ТЗ §6.2). */
+/**
+ * Пять статусов из ТЗ остаются как данные, но в цвете сведены к трём тонам
+ * палитры: ok / warn / alarm. Пять произвольных цветов (зелёный, салатовый,
+ * жёлтый, оранжевый, красный) ломали правило «тревожный цвет максимум один раз
+ * на экран» — на «Обзоре» под баннером уже есть красная категория и
+ * инсайт-карточка. Числовой score всё ещё показывается рядом, так что
+ * разрешение шкалы не теряется.
+ *
+ * Эмодзи убраны: в дизайне их нет ни в одном состоянии.
+ */
 export const STATUS_META: Record<FinancialStatus, StatusMeta> = {
   green: {
     label: 'Отлично',
-    emoji: '🟢',
-    bg: 'bg-status-green/15',
-    text: 'text-status-green',
-    dot: 'bg-status-green',
+    text: 'text-status-ok',
+    dot: 'bg-status-ok',
+    bg: 'bg-status-ok/12',
   },
   light_green: {
     label: 'Хорошо',
-    emoji: '🟢',
-    bg: 'bg-status-light-green/15',
-    text: 'text-status-light-green',
-    dot: 'bg-status-light-green',
+    text: 'text-status-ok',
+    dot: 'bg-status-ok',
+    bg: 'bg-status-ok/12',
   },
   yellow: {
     label: 'Внимание',
-    emoji: '🟡',
-    bg: 'bg-status-yellow/15',
-    text: 'text-status-yellow',
-    dot: 'bg-status-yellow',
+    text: 'text-status-warn',
+    dot: 'bg-status-warn',
+    bg: 'bg-status-warn/12',
   },
   orange: {
     label: 'Риск',
-    emoji: '🟠',
-    bg: 'bg-status-orange/15',
-    text: 'text-status-orange',
-    dot: 'bg-status-orange',
+    text: 'text-status-warn',
+    dot: 'bg-status-warn',
+    bg: 'bg-status-warn/12',
   },
   red: {
     label: 'Тревога',
-    emoji: '🔴',
-    bg: 'bg-status-red/15',
-    text: 'text-status-red',
-    dot: 'bg-status-red',
+    text: 'text-status-alarm',
+    dot: 'bg-status-alarm',
+    bg: 'bg-status-alarm/12',
   },
 }
