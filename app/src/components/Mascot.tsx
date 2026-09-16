@@ -1,4 +1,6 @@
+import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { useReducedMotion } from '@/hooks/use-reduced-motion'
 
 export type Expression = 'calm' | 'focused' | 'happy' | 'alert' | 'thinking'
 
@@ -20,51 +22,72 @@ const PRINT_ROWS = [
   { y: 142.5, labelW: 20, amountW: 14 },
 ]
 
-function Face({ expression }: { expression: Expression }) {
-  const ink = '#191C21'
-
+function faceShapes(expression: Expression) {
   if (expression === 'focused') {
     return (
-      <g fill={ink}>
+      <>
         <rect x="21" y="29.5" width="15" height="4.5" rx="2.2" />
         <rect x="64" y="29.5" width="15" height="4.5" rx="2.2" />
         <rect x="43" y="55" width="14" height="3.5" rx="1.5" />
-      </g>
+      </>
     )
   }
   if (expression === 'happy') {
     return (
-      <g fill={ink}>
+      <>
         <path d="M20,36 a8,7 0 0 1 16,0 Z" />
         <path d="M64,36 a8,7 0 0 1 16,0 Z" />
         <path d="M34,52 h32 a16,9 0 0 1 -32,0 Z" />
-      </g>
+      </>
     )
   }
   if (expression === 'alert') {
     return (
-      <g fill={ink}>
+      <>
         <ellipse cx="28" cy="33" rx="8" ry="7.5" />
         <ellipse cx="72" cy="33" rx="8" ry="7.5" />
         <ellipse cx="50" cy="57" rx="6" ry="5.5" />
-      </g>
+      </>
     )
   }
   if (expression === 'thinking') {
     return (
-      <g fill={ink}>
+      <>
         <ellipse cx="33" cy="31" rx="7" ry="5.5" />
         <ellipse cx="77" cy="31" rx="7" ry="5.5" />
         <rect x="44" y="55" width="19" height="3.5" rx="1.5" transform="rotate(-6 53.5 56.75)" />
-      </g>
+      </>
     )
   }
   return (
-    <g fill={ink}>
+    <>
       <ellipse cx="28.5" cy="31" rx="7.5" ry="5.5" />
       <ellipse cx="71.5" cy="31" rx="7.5" ry="5.5" />
       <rect x="40" y="55" width="20" height="3.8" rx="1.6" />
-    </g>
+    </>
+  )
+}
+
+/**
+ * Cross-fades between expressions (ANIMATIONS.md §1) instead of an instant
+ * swap — the face is the one thing on the mascot that changes on its own,
+ * so a hard cut reads as a glitch rather than an emotion change.
+ */
+function Face({ expression }: { expression: Expression }) {
+  const reduced = useReducedMotion()
+  return (
+    <AnimatePresence mode="popLayout" initial={false}>
+      <motion.g
+        key={expression}
+        fill="#191C21"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: reduced ? 0 : 0.15, ease: 'easeOut' }}
+      >
+        {faceShapes(expression)}
+      </motion.g>
+    </AnimatePresence>
   )
 }
 
@@ -72,14 +95,38 @@ export function Mascot({
   expression = 'calm',
   className,
   title = 'Чек — маскот Hlow Flow',
+  bounce = false,
 }: {
   expression?: Expression
   className?: string
   title?: string
+  /**
+   * One-shot celebratory bounce (ANIMATIONS.md §1, e.g. a debt just closed) —
+   * flip this from false to true to play it; framer-motion only replays a
+   * keyframe animation when its target actually changes, so the "already
+   * shown" flag belongs in the calling screen's state, not here.
+   */
+  bounce?: boolean
 }) {
+  const reduced = useReducedMotion()
+  const isThinking = expression === 'thinking'
+
   return (
     <svg viewBox="0 0 100 250" className={cn('h-full w-full', className)} role="img" aria-label={title}>
-      <g transform="rotate(-2.5 50 125)">
+      <motion.g
+        style={{ transformOrigin: '50px 125px' }}
+        animate={{
+          rotate: isThinking && !reduced ? [-2.5, -1.5, -2.5] : -2.5,
+          y: bounce && !reduced ? [0, -6, 0] : 0,
+        }}
+        transition={{
+          rotate:
+            isThinking && !reduced
+              ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }
+              : { duration: reduced ? 0 : 0.3 },
+          y: { duration: reduced ? 0 : 0.5, ease: 'easeOut' },
+        }}
+      >
         <path d={TORN} fill="#F6F1E8" />
         <rect x="20" y="11" width="60" height="4" rx="1" fill="#BDB4A5" />
 
@@ -101,7 +148,7 @@ export function Mascot({
         <rect x="20" y="205" width="60" height="2.8" rx="1" fill="#E2DACC" />
         <rect x="20" y="217" width="34" height="2.8" rx="1" fill="#E2DACC" />
         <rect x="20" y="229" width="24" height="2.8" rx="1" fill="#E2DACC" />
-      </g>
+      </motion.g>
     </svg>
   )
 }

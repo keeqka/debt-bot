@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Send, Copy, Check, CreditCard, Trash2 } from 'lucide-react'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Paper } from '@/components/chrome/Paper'
@@ -10,6 +11,7 @@ import { formatMoney } from '@/lib/format'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
 import { useHeaderAction } from '@/lib/header-action'
+import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import type { ChatDataWidgetRow, ProposedDebt } from '@/types/domain'
 
 const SUGGESTIONS = ['Могу я купить MacBook за 750 000₸?', 'Как быстрее закрыть долги?', 'Сколько я трачу на еду в месяц?']
@@ -38,6 +40,16 @@ export function Chat() {
   const [debtPrefill, setDebtPrefill] = useState<ProposedDebt | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const reduced = useReducedMotion()
+
+  // Only newly-arrived messages slide in (ANIMATIONS.md §5) — the history
+  // loaded on first mount would otherwise all animate in together, which
+  // reads as a flood rather than a smooth initial render. Captured lazily,
+  // once, the first time messages are actually available.
+  const seenOnLoadRef = useRef<Set<string> | null>(null)
+  if (seenOnLoadRef.current === null && !isLoading && messages) {
+    seenOnLoadRef.current = new Set(messages.map((m) => m.id))
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -88,21 +100,25 @@ export function Chat() {
         {isLoading ? (
           <div className="h-16 w-3/4 animate-pulse rounded-2xl bg-hf-card" />
         ) : (
-          messages?.map((m) =>
-            m.role === 'user' ? (
-              <div key={m.id} className="flex justify-end pb-2">
+          messages?.map((m) => {
+            // New messages slide in from below; history already on screen at
+            // load doesn't replay it (ANIMATIONS.md §5).
+            const isNew = !seenOnLoadRef.current?.has(m.id)
+            const entrance = isNew && !reduced ? { opacity: 0, y: 8 } : false
+            return m.role === 'user' ? (
+              <motion.div key={m.id} initial={entrance} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex justify-end pb-2">
                 <p className="max-w-[82%] rounded-[16px_16px_4px_16px] bg-hf-accent px-3.5 py-2.5 text-sm leading-snug break-words whitespace-pre-wrap text-white">
                   {m.content}
                 </p>
-              </div>
+              </motion.div>
             ) : (
-              <div key={m.id} className="flex flex-col gap-1 pb-2">
+              <motion.div key={m.id} initial={entrance} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex flex-col gap-1 pb-2">
                 <div className="flex items-end gap-2">
                   <MascotAvatar size={26} expression="focused" className="shrink-0" />
                   {m.data_widget && m.data_widget.length > 0 ? (
                     <div className="min-w-0 max-w-[82%] space-y-2">
                       {m.content && <p className="text-sm leading-snug text-hf-text-2">{m.content}</p>}
-                      <DataWidget rows={m.data_widget} />
+                      <DataWidget rows={m.data_widget} delayMs={isNew ? 150 : 0} />
                     </div>
                   ) : (
                     <div className="min-w-0 max-w-[82%] rounded-[16px_16px_16px_4px] bg-hf-card px-3.5 py-2.5 text-sm leading-relaxed break-words text-hf-text-2">
@@ -120,16 +136,21 @@ export function Chat() {
                 >
                   {copiedId === m.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 </button>
-              </div>
-            ),
-          )
+              </motion.div>
+            )
+          })
         )}
         {sendMessage.isPending && (
           <div className="flex items-center gap-2 pb-2">
             <MascotAvatar size={26} expression="thinking" />
             <div className="flex items-center gap-1 rounded-[16px_16px_16px_4px] bg-hf-card px-3.5 py-3">
               {[0, 1, 2].map((i) => (
-                <span key={i} className="h-1.5 w-1.5 animate-pulse rounded-full bg-hf-text-4" style={{ animationDelay: `${i * 150}ms` }} />
+                <motion.span
+                  key={i}
+                  className="h-1.5 w-1.5 rounded-full bg-hf-text-4"
+                  animate={reduced ? undefined : { scale: [0.6, 1, 0.6] }}
+                  transition={{ duration: 0.9, repeat: Infinity, ease: 'easeInOut', delay: i * 0.12 }}
+                />
               ))}
             </div>
           </div>
@@ -147,15 +168,30 @@ export function Chat() {
         </div>
       )}
 
-      {quickReplies && quickReplies.length > 0 && (
-        <div className="flex flex-wrap gap-2 pb-2 pl-9">
-          {quickReplies.map((q) => (
-            <button key={q} onClick={() => handleSend(q)} className="rounded-[9px] border border-hf-line px-3 py-1.5 text-[13px] text-hf-accent-on-dark">
-              {q}
-            </button>
-          ))}
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {quickReplies && quickReplies.length > 0 && (
+          <motion.div
+            key={lastMessage?.id}
+            className="flex flex-wrap gap-2 pb-2 pl-9"
+            initial="hidden"
+            animate="visible"
+            exit={{ opacity: 0, transition: { duration: reduced ? 0 : 0.1 } }}
+            variants={{ visible: { transition: { staggerChildren: reduced ? 0 : 0.04 } } }}
+          >
+            {quickReplies.map((q) => (
+              <motion.button
+                key={q}
+                variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}
+                transition={{ duration: reduced ? 0 : 0.15 }}
+                onClick={() => handleSend(q)}
+                className="rounded-[9px] border border-hf-line px-3 py-1.5 text-[13px] text-hf-accent-on-dark"
+              >
+                {q}
+              </motion.button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <form
         onSubmit={(e) => {
@@ -194,7 +230,7 @@ export function Chat() {
   )
 }
 
-function DataWidget({ rows }: { rows: ChatDataWidgetRow[] }) {
+function DataWidget({ rows, delayMs = 0 }: { rows: ChatDataWidgetRow[]; delayMs?: number }) {
   return (
     <Paper className="flex flex-col gap-2.5 rounded-[16px] p-3.5">
       {rows.map((r) => (
@@ -203,7 +239,7 @@ function DataWidget({ rows }: { rows: ChatDataWidgetRow[] }) {
             <span>{r.name}</span>
             <span className="font-mono">{formatMoney(r.amount)}</span>
           </div>
-          <ProgressBar pct={r.pct} onPaper height={6} />
+          <ProgressBar pct={r.pct} onPaper height={6} delayMs={delayMs} />
         </div>
       ))}
     </Paper>

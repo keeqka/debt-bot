@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, FileText, ChevronRight } from 'lucide-react'
 import { Eyebrow } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
@@ -10,6 +11,8 @@ import { useMonth, useExpenses, useDebts, useStatus, useDebtStrategy } from '@/h
 import { computeInsight } from '@/lib/insight'
 import { STATUS_META } from '@/lib/status'
 import { formatMoney, formatMoneyCompact, formatMonthYear, formatPercent } from '@/lib/format'
+import { useAnimatedNumber } from '@/hooks/use-animated-number'
+import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { cn } from '@/lib/utils'
 
 /**
@@ -37,6 +40,11 @@ export function Overview() {
 
   const activeDebts = (debts ?? []).filter((d) => d.status === 'active')
   const { data: plan } = useDebtStrategy('avalanche', 0)
+  const reduced = useReducedMotion()
+  // Hooks must run unconditionally, before month's own loading-state early
+  // return below — 0 is a harmless placeholder until real data lands, since
+  // useAnimatedNumber never animates the very first value it sees anyway.
+  const animatedAvailable = useAnimatedNumber(month?.available ?? 0)
 
   if (!month) {
     return (
@@ -85,10 +93,10 @@ export function Overview() {
               <span
                 className={cn(
                   'text-[34px] leading-none font-bold tracking-[-0.03em]',
-                  month.available >= 0 ? 'text-hf-text' : 'text-hf-warn-on-dark',
+                  animatedAvailable >= 0 ? 'text-hf-text' : 'text-hf-warn-on-dark',
                 )}
               >
-                {formatMoneyCompact(month.available)}
+                {formatMoneyCompact(animatedAvailable)}
               </span>
               <span className="font-mono text-xs text-hf-ok">в плане</span>
             </div>
@@ -136,21 +144,29 @@ export function Overview() {
         </Paper>
       )}
 
-      {insight && (
-        <div className="flex items-start gap-3 rounded-[18px] bg-hf-card p-3.5">
-          <MascotAvatar size={34} expression={insightFace} />
-          <div className="flex min-w-0 flex-col gap-2.5">
-            <p className="text-[13px] leading-snug text-hf-text-2">{insight.text}</p>
-            <button
-              type="button"
-              onClick={() => navigate(insight.action.to)}
-              className="self-start text-[13px] font-medium text-hf-accent-on-dark"
-            >
-              {insight.action.label} →
-            </button>
-          </div>
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {insight && (
+          <motion.div
+            key={insight.text}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: reduced ? 0 : 0.15 } }}
+            exit={{ opacity: 0, y: -4, transition: { duration: reduced ? 0 : 0.12 } }}
+            className="flex items-start gap-3 rounded-[18px] bg-hf-card p-3.5"
+          >
+            <MascotAvatar size={34} expression={insightFace} />
+            <div className="flex min-w-0 flex-col gap-2.5">
+              <p className="text-[13px] leading-snug text-hf-text-2">{insight.text}</p>
+              <button
+                type="button"
+                onClick={() => navigate(insight.action.to)}
+                className="self-start text-[13px] font-medium text-hf-accent-on-dark"
+              >
+                {insight.action.label} →
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex gap-2.5">
         <button

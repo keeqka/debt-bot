@@ -17,11 +17,14 @@ export function ProgressBar({
   tone = 'accent',
   onPaper = false,
   height = 7,
+  delayMs = 0,
 }: {
   pct: number
   tone?: keyof typeof FILL
   onPaper?: boolean
   height?: number
+  /** e.g. the chat data-widget's bars starting 150ms after the bubble itself (ANIMATIONS.md §5) — text first, numbers after. */
+  delayMs?: number
 }) {
   return (
     <div className={cn('overflow-hidden rounded-full', onPaper ? 'bg-hf-receipt-line' : 'bg-hf-track')} style={{ height }}>
@@ -30,7 +33,7 @@ export function ProgressBar({
           'h-full rounded-full transition-[width] duration-400 ease-out motion-reduce:transition-none',
           FILL[tone],
         )}
-        style={{ width: Math.min(pct, 100) + '%' }}
+        style={{ width: Math.min(pct, 100) + '%', transitionDelay: delayMs ? `${delayMs}ms` : undefined }}
       />
     </div>
   )
