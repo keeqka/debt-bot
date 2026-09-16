@@ -81,7 +81,18 @@ Deno.serve(async (req) => {
       tool: STRATEGY_TOOL,
     })
 
-    const payload = { strategy, payoff_order: order.map((d) => d.id), ...result }
+    // Claude's tool schema only *describes* estimated_payoff_date as "ISO
+    // date" — nothing enforces it. A debt whose minimum payment doesn't
+    // cover its own interest has no real payoff date at all (0 monthly
+    // surplus, in particular, is Overview's default query), and Claude can
+    // reasonably answer with something that isn't a parseable date. The
+    // frontend used to feed this straight into Intl.DateTimeFormat, which
+    // throws on an invalid date and crashed the whole screen — never store
+    // or return a value that can't actually be parsed as a date.
+    const parsedDate = new Date((result as { estimated_payoff_date?: string }).estimated_payoff_date ?? '')
+    const safeResult = { ...result, estimated_payoff_date: Number.isNaN(parsedDate.getTime()) ? null : result.estimated_payoff_date }
+
+    const payload = { strategy, payoff_order: order.map((d) => d.id), ...safeResult }
     await supabase.from('ai_insights').insert({ type: 'debt_strategy', payload })
 
     return jsonResponse(payload)

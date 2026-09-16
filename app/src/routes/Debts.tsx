@@ -17,7 +17,7 @@ import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar } from '@/components/Mascot'
 import { useDebts, useDebtStrategy, useDeleteDebt, useExpenses, useIncomes } from '@/hooks/use-finance-data'
 import { debtPayoffNote, simulateDebtStrategy } from '@/lib/debt-strategy'
-import { formatMoney } from '@/lib/format'
+import { formatMoney, formatMonthYear } from '@/lib/format'
 import type { Debt, DebtStrategyKind } from '@/types/domain'
 import { cn } from '@/lib/utils'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
@@ -75,7 +75,7 @@ export function Debts() {
     () => (activeDebts.length ? simulateDebtStrategy({ debts: activeDebts, monthlySurplus: 0, strategy: 'avalanche' }).estimated_payoff_date : null),
     [activeDebts],
   )
-  const aheadBy = plan && baselineDate ? monthsBetween(baselineDate, plan.estimated_payoff_date) : 0
+  const aheadBy = plan?.estimated_payoff_date && baselineDate ? monthsBetween(baselineDate, plan.estimated_payoff_date) : 0
 
   const [addOpen, setAddOpen] = useState(false)
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
@@ -118,9 +118,7 @@ export function Debts() {
             {planLoading || !plan ? (
               <div className="h-9 w-40 animate-pulse rounded bg-hf-receipt-line" />
             ) : (
-              <div className="text-[30px] font-bold tracking-[-0.03em]">
-                {new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date(plan.estimated_payoff_date))}
-              </div>
+              <div className="text-[30px] font-bold tracking-[-0.03em]">{formatMonthYear(plan.estimated_payoff_date)}</div>
             )}
             <div className="h-px bg-hf-receipt-line" />
             <div className="flex justify-between gap-2.5 text-[13px]">

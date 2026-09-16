@@ -139,7 +139,8 @@ export interface DebtStrategyPlan {
   strategy: DebtStrategyKind
   payoff_order: Uuid[]
   monthly_plan: { debt_id: Uuid; payment: number }[]
-  estimated_payoff_date: string
+  /** null when there's no real payoff date to give (e.g. a minimum payment that doesn't cover its own interest) — never an unparseable placeholder string. */
+  estimated_payoff_date: string | null
   total_interest_paid: number
   explanation: string
 }

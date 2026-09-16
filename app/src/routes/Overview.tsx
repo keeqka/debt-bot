@@ -9,7 +9,7 @@ import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
 import { useMonth, useExpenses, useDebts, useStatus, useDebtStrategy } from '@/hooks/use-finance-data'
 import { computeInsight } from '@/lib/insight'
 import { STATUS_META } from '@/lib/status'
-import { formatMoney, formatMoneyCompact, formatPercent } from '@/lib/format'
+import { formatMoney, formatMoneyCompact, formatMonthYear, formatPercent } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /**
@@ -180,9 +180,7 @@ export function Overview() {
           <span className="min-w-0">
             <span className="block font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Свобода от долгов</span>
             <span className="mt-1 block text-[15px] font-medium text-hf-text">
-              {plan
-                ? new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(new Date(plan.estimated_payoff_date))
-                : 'считаю…'}
+              {plan ? formatMonthYear(plan.estimated_payoff_date) : 'считаю…'}
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-2">

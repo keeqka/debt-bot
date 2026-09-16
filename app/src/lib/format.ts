@@ -55,6 +55,26 @@ export function formatDateShort(iso: string) {
   }
 }
 
+/**
+ * "август 2026" for a payoff date — `estimated_payoff_date` comes from
+ * Claude (debts-strategy edge function), not a deterministic computation,
+ * so it isn't guaranteed to be a parseable date (e.g. a debt whose minimum
+ * payment doesn't cover its own interest has no real payoff date at all).
+ * Never feed an unchecked value straight into Intl.DateTimeFormat — an
+ * Invalid Date throws "date value is not finite", which crashes the whole
+ * screen (this is a real production crash this guarded, not hypothetical).
+ */
+export function formatMonthYear(iso: string | null | undefined, fallback = 'дата не определена') {
+  if (!iso) return fallback
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return fallback
+  try {
+    return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(date)
+  } catch {
+    return fallback
+  }
+}
+
 export function formatPercent(value: number) {
   try {
     return new Intl.NumberFormat('ru-RU', { style: 'percent', maximumFractionDigits: 0 }).format(value)
