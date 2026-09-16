@@ -6,6 +6,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <title>Финансы</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+      // Tell Telegram we're ready as early as physically possible — before
+      // any of our own bundled JS even starts loading. Telegram shows its
+      // own dark loading placeholder until ready() fires; if anything in
+      // our bundle throws before reaching that call (a crash, an
+      // unsupported syntax feature in an older in-app WebView, a hung
+      // network request), Telegram is left showing that placeholder
+      // forever with nothing on screen to tell the difference from a
+      // genuine crash. Calling ready()/expand() here, inline, decouples
+      // "Telegram's splash is gone" from "our app actually worked" — a
+      // real crash then at least surfaces through our own ErrorBoundary
+      // instead of an indistinguishable dark screen. Safe no-op outside Telegram.
+      if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.ready()
+        window.Telegram.WebApp.expand()
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
