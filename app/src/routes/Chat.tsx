@@ -88,12 +88,11 @@ export function Chat() {
   const quickReplies = !sendMessage.isPending && lastMessage?.role === 'assistant' ? lastMessage.quick_replies : null
 
   return (
-    // AppShell's shell is min-h-dvh (grows with content, page itself scrolls) —
-    // every other screen wants that, but Chat needs a bounded height so the
-    // message list scrolls in place and the input stays put at the bottom.
-    // --tg-height (Phase 1, lib/telegram.ts) is Telegram's actual stable
-    // viewport, more accurate than 100dvh alone inside the WebView.
-    <div className="flex flex-col" style={{ height: 'calc(var(--tg-height, 100dvh) - 8.5rem)' }}>
+    // AppShell's <main> is already a bounded, independently-scrolling region
+    // between the fixed TopBar/BottomTabBar (see AppShell.tsx) — h-full just
+    // fills exactly that, so the message list scrolls in place below and the
+    // input stays pinned at the bottom of the tab.
+    <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-2">
         {isLoading ? (
           <div className="h-16 w-3/4 animate-pulse rounded-2xl bg-hf-card" />

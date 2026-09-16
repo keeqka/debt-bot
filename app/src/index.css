@@ -172,6 +172,3 @@
 .pb-safe {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
-.pb-tabbar {
-  padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
-}

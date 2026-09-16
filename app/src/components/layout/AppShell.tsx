@@ -29,9 +29,14 @@ export function AppShell() {
   const [headerAction, setHeaderAction] = useState<ReactNode>(null)
   const user = useCurrentUser()
 
+  // Fixed to the real Telegram viewport height (--tg-height, lib/telegram.ts)
+  // rather than min-h-dvh: TopBar/BottomTabBar need to be actual non-scrolling
+  // flex siblings pinned top and bottom, with only the middle region
+  // scrolling — a min-h-dvh shell just grows with content instead, so both
+  // bars scroll away with everything else on any screen taller than one page.
   if (!user.onboarding_completed_at) {
     return (
-      <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-hf-bg">
+      <div className="mx-auto flex max-w-md flex-col bg-hf-bg" style={{ height: 'var(--tg-height, 100dvh)' }}>
         <Onboarding onDone={() => {}} />
       </div>
     )
@@ -41,9 +46,9 @@ export function AppShell() {
 
   return (
     <HeaderActionSetterContext.Provider value={setHeaderAction}>
-      <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-hf-bg">
+      <div className="mx-auto flex max-w-md flex-col bg-hf-bg" style={{ height: 'var(--tg-height, 100dvh)' }}>
         <TopBar subtitle={subtitleFor(location.pathname)} action={headerAction} face={isChat ? 'focused' : 'calm'} />
-        <main className="pb-tabbar flex-1 px-4 pt-4.5">
+        <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4.5">
           <Outlet />
         </main>
         <BottomTabBar />

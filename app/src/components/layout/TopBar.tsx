@@ -24,7 +24,7 @@ export function TopBar({
   face?: 'calm' | 'focused' | 'thinking'
 }) {
   return (
-    <header className="pt-safe sticky top-0 z-20 flex items-center justify-between gap-2.5 border-b border-hf-line bg-hf-bar px-4 pb-3">
+    <header className="pt-safe shrink-0 flex items-center justify-between gap-2.5 border-b border-hf-line bg-hf-bar px-4 pb-3">
       <div className="flex min-w-0 items-center gap-2.5">
         <MascotAvatar size={28} expression={face} />
         <div className="min-w-0">

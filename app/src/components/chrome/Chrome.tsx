@@ -31,7 +31,7 @@ export function TopBar({ title, subtitle, avatar = false }: { title: string; sub
 
 export function TabBar() {
   return (
-    <nav className="flex border-t border-hf-line bg-hf-bar px-2 pt-2.5 pb-3.5">
+    <nav className="pb-safe shrink-0 flex border-t border-hf-line bg-hf-bar px-2 pt-2.5">
       {TABS.map(({ to, label, icon: Icon, end }) => (
         <NavLink
           key={to}
