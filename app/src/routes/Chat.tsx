@@ -1,16 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Send, Copy, Check, CreditCard, Trash2 } from 'lucide-react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar } from '@/components/Mascot'
@@ -190,20 +181,15 @@ export function Chat() {
 
       <AddDebtDialog open={Boolean(debtPrefill)} onOpenChange={(open) => !open && setDebtPrefill(null)} prefill={debtPrefill ?? undefined} />
 
-      <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Очистить историю чата?</AlertDialogTitle>
-            <AlertDialogDescription>Вся переписка с AI-советником удалится безвозвратно — для обоих участников, чат общий.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmClearChat} disabled={clearChat.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {clearChat.isPending ? 'Удаление...' : 'Очистить'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmSheet
+        open={confirmClear}
+        onOpenChange={setConfirmClear}
+        title="Очистить историю чата?"
+        description="Вся переписка с AI-советником удалится безвозвратно — для обоих участников, чат общий."
+        confirmLabel="Очистить"
+        pending={clearChat.isPending}
+        onConfirm={confirmClearChat}
+      />
     </div>
   )
 }

@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { FormSheet, FormField, Segmented, SaveButton, formInputClass } from '@/components/chrome/FormSheet'
 import { useAddExpense, useAddIncome, useCategories } from '@/hooks/use-finance-data'
 import { useCurrentUserId } from '@/lib/auth'
 
 type TxType = 'expense' | 'income'
 
+/**
+ * Ручной ввод траты/дохода — резервный путь, спека §1: «вход — чек, не
+ * форма». Поэтому это лист, а не отдельный экран, и открывается кнопкой
+ * «Добавить вручную» на «Чеках», а не как равноценная альтернатива фото.
+ */
 export function AddTransactionDialog({
   open,
   onOpenChange,
@@ -42,7 +42,7 @@ export function AddTransactionDialog({
   async function handleSubmit() {
     const numericAmount = Number(amount)
     if (!numericAmount || numericAmount <= 0) {
-      toast.error('Укажите сумму больше нуля')
+      toast.error('Укажи сумму больше нуля')
       return
     }
     const today = new Date().toISOString().slice(0, 10)
@@ -79,70 +79,63 @@ export function AddTransactionDialog({
   }
 
   return (
-    <Dialog
+    <FormSheet
       open={open}
       onOpenChange={(next) => {
         if (!next) reset()
         onOpenChange(next)
       }}
+      title="Запись вручную"
+      footer={
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit() }}>
+          <SaveButton pending={isPending} pendingLabel="Сохраняю…">
+            Сохранить
+          </SaveButton>
+        </form>
+      }
     >
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Новая запись</DialogTitle>
-        </DialogHeader>
+      <Segmented
+        value={type}
+        onChange={setType}
+        options={[
+          { value: 'expense', label: 'Расход' },
+          { value: 'income', label: 'Доход' },
+        ]}
+      />
 
-        <Tabs value={type} onValueChange={(v) => setType(v as TxType)}>
-          <TabsList className="w-full">
-            <TabsTrigger value="expense">Расход</TabsTrigger>
-            <TabsTrigger value="income">Доход</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <FormField label="Сумма, ₸">
+        <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" autoFocus className={formInputClass} />
+      </FormField>
 
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="amount">Сумма, ₸</Label>
-            <Input id="amount" type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+      {type === 'expense' ? (
+        <FormField label="Категория">
+          <div className="flex flex-wrap gap-2">
+            {expenseCategories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCategoryId(c.id)}
+                className={
+                  'rounded-[10px] px-3.5 py-2 text-[13px] ' +
+                  (c.id === categoryId ? 'bg-hf-accent text-white' : 'bg-hf-card text-hf-text-4')
+                }
+              >
+                {c.name}
+              </button>
+            ))}
           </div>
+        </FormField>
+      ) : (
+        <FormField label="Источник">
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Зарплата, фриланс…" className={formInputClass} />
+        </FormField>
+      )}
 
-          {type === 'expense' ? (
-            <div className="space-y-1.5">
-              <Label>Категория</Label>
-              <Select value={categoryId} onValueChange={(v) => setCategoryId(v ?? '')}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Выбрать категорию">
-                    {(value: string | null) => (value ? expenseCategories.find((c) => c.id === value)?.name : null) ?? 'Выбрать категорию'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {expenseCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <Label htmlFor="source">Источник</Label>
-              <Input id="source" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Зарплата, фриланс..." />
-            </div>
-          )}
-
-          {type === 'expense' && (
-            <div className="space-y-1.5">
-              <Label htmlFor="note">Заметка (необязательно)</Label>
-              <Input id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например, аренда за сентябрь" />
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button onClick={handleSubmit} disabled={isPending} className="w-full">
-            {isPending ? 'Сохранение...' : 'Сохранить'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {type === 'expense' && (
+        <FormField label="Заметка (необязательно)">
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Например, аренда за сентябрь" className={formInputClass} />
+        </FormField>
+      )}
+    </FormSheet>
   )
 }

@@ -1,16 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, CircleDollarSign, Pencil, Trash2 } from 'lucide-react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
@@ -217,22 +208,15 @@ export function Debts() {
       <AddDebtDialog open={Boolean(editingDebt)} onOpenChange={(open) => !open && setEditingDebt(null)} debt={editingDebt ?? undefined} />
       <RecordPaymentDialog open={Boolean(payingDebt)} onOpenChange={(open) => !open && setPayingDebt(null)} debt={payingDebt} />
 
-      <AlertDialog open={Boolean(deletingDebt)} onOpenChange={(open) => !open && setDeletingDebt(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Удалить «{deletingDebt?.title}»?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Долг и вся история платежей по нему удалятся безвозвратно. Если он просто погашен — лучше отредактировать и поставить статус «Закрыт».
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} disabled={deleteDebt.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {deleteDebt.isPending ? 'Удаление...' : 'Удалить'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmSheet
+        open={Boolean(deletingDebt)}
+        onOpenChange={(open) => !open && setDeletingDebt(null)}
+        title={`Удалить «${deletingDebt?.title}»?`}
+        description="Долг и вся история платежей по нему удалятся безвозвратно. Если он просто погашен — лучше отредактировать и поставить статус «Закрыт»."
+        confirmLabel="Удалить"
+        pending={deleteDebt.isPending}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

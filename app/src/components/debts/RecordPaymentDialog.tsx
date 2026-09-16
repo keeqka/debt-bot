@@ -1,14 +1,11 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { FormSheet, FormField, SaveButton, formInputClass } from '@/components/chrome/FormSheet'
 import { useAddDebtPayment } from '@/hooks/use-finance-data'
 import { formatMoney } from '@/lib/format'
 import type { Debt } from '@/types/domain'
+import { cn } from '@/lib/utils'
 
-/** Records a payment against a debt (ТЗ §5 экран 2: "история платежей"). */
 export function RecordPaymentDialog({ open, onOpenChange, debt }: { open: boolean; onOpenChange: (open: boolean) => void; debt: Debt | null }) {
   const addPayment = useAddDebtPayment()
   const [amount, setAmount] = useState('')
@@ -23,7 +20,7 @@ export function RecordPaymentDialog({ open, onOpenChange, debt }: { open: boolea
     if (!debt) return
     const numericAmount = Number(amount)
     if (!numericAmount || numericAmount <= 0) {
-      toast.error('Укажите сумму больше нуля')
+      toast.error('Укажи сумму больше нуля')
       return
     }
 
@@ -40,36 +37,37 @@ export function RecordPaymentDialog({ open, onOpenChange, debt }: { open: boolea
   }
 
   return (
-    <Dialog
+    <FormSheet
       open={open}
       onOpenChange={(next) => {
         if (!next) reset()
         onOpenChange(next)
       }}
+      title={debt ? `Платёж · ${debt.title}` : 'Платёж по долгу'}
+      footer={
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit() }}>
+          <SaveButton pending={addPayment.isPending} pendingLabel="Сохраняю…">
+            Записать платёж
+          </SaveButton>
+        </form>
+      }
     >
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Платёж по долгу{debt ? `: ${debt.title}` : ''}</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          {debt && <p className="text-muted-foreground text-xs">Текущий остаток: {formatMoney(debt.current_balance, debt.currency)}</p>}
-          <div className="space-y-1.5">
-            <Label htmlFor="payment-amount">Сумма платежа, ₸</Label>
-            <Input id="payment-amount" type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" autoFocus />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={isExtra} onChange={(e) => setIsExtra(e.target.checked)} className="h-4 w-4 rounded border-input" />
-            Сверх минимального платежа (досрочное погашение)
-          </label>
-        </div>
-
-        <DialogFooter>
-          <Button onClick={handleSubmit} disabled={addPayment.isPending} className="w-full">
-            {addPayment.isPending ? 'Сохранение...' : 'Записать платёж'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      {debt && <p className="text-[13px] text-hf-text-3">Текущий остаток: {formatMoney(debt.current_balance, debt.currency)}</p>}
+      <FormField label="Сумма платежа, ₸">
+        <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" autoFocus className={formInputClass} />
+      </FormField>
+      <button
+        type="button"
+        onClick={() => setIsExtra((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 rounded-[12px] bg-hf-card px-3.5 py-3 text-left"
+      >
+        <span className="text-[13px] text-hf-text-2">Сверх минимального платежа (досрочное)</span>
+        <span
+          className={cn('relative h-6 w-11 shrink-0 rounded-full transition-colors', isExtra ? 'bg-hf-accent' : 'bg-hf-track')}
+        >
+          <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform', isExtra ? 'translate-x-[22px]' : 'translate-x-0.5')} />
+        </span>
+      </button>
+    </FormSheet>
   )
 }

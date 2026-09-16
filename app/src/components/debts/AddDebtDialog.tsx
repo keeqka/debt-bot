@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Sparkles, Loader2, TriangleAlert } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Sparkles, Loader2 } from 'lucide-react'
+import { FormSheet, FormField, Segmented, SaveButton, formInputClass } from '@/components/chrome/FormSheet'
 import { useAddDebt, useUpdateDebt } from '@/hooks/use-finance-data'
 import { useCurrentUserId } from '@/lib/auth'
 import { assistDebtDraft } from '@/lib/api'
@@ -45,9 +41,14 @@ const EMPTY_FORM: FormState = {
 }
 
 /**
- * Create or edit a debt (ТЗ §5 экран 2: "Добавление/редактирование долга").
- * Pass `debt` to edit an existing one, or `prefill` to seed a new one (e.g.
- * from a chat proposal) — the user still reviews/edits before saving either way.
+ * Добавление/редактирование долга — нижний лист, как и всё остальное в
+ * приложении (было: центральный shadcn Dialog с Input/Select/Label —
+ * единственное место в «Долгах», выглядевшее чужим десктопным попапом).
+ *
+ * AI-разбор скриншота — бумажная логика (это данные, которые ИИ прочитал с
+ * фото), но лежит на тёмной форме, поэтому оформлен акцентной рамкой, а не
+ * светлой карточкой: полноценная бумага здесь неуместна, это всего одна
+ * кнопка и заметка результата, не документ.
  */
 export function AddDebtDialog({
   open,
@@ -125,9 +126,9 @@ export function AddDebtDialog({
         notes: f.notes,
       }))
       setDraftNote(draft)
-      toast.success('Черновик заполнен — проверьте данные перед сохранением')
+      toast.success('Черновик заполнен — проверь перед сохранением')
     } catch {
-      toast.error('Не удалось разобрать данные — заполните вручную')
+      toast.error('Не удалось разобрать — заполни вручную')
     } finally {
       setIsAssisting(false)
     }
@@ -135,12 +136,12 @@ export function AddDebtDialog({
 
   async function handleSubmit() {
     if (!form.title.trim() || !form.creditor.trim()) {
-      toast.error('Укажите название и кредитора')
+      toast.error('Укажи название и кредитора')
       return
     }
     const principal = Number(form.principalAmount)
     if (!principal || principal <= 0) {
-      toast.error('Укажите сумму долга больше нуля')
+      toast.error('Укажи сумму долга больше нуля')
       return
     }
 
@@ -168,129 +169,102 @@ export function AddDebtDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? 'Редактировать долг' : 'Новый долг'}</DialogTitle>
-        </DialogHeader>
-
-        <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
-          <div className="bg-muted/50 space-y-2 rounded-xl p-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) handleAiAssist(file)
-                e.target.value = ''
-              }}
-            />
-            <div className="flex flex-col gap-2">
-              <Input
-                value={hint}
-                onChange={(e) => setHint(e.target.value)}
-                placeholder="Уточнение (необязательно), напр. «Kaspi Bank»"
-                className="h-9 w-full bg-background"
-              />
-              <Button type="button" size="sm" variant="secondary" disabled={isAssisting} onClick={() => fileInputRef.current?.click()}>
-                {isAssisting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                {isAssisting ? 'Разбираю...' : 'Скриншот → AI'}
-              </Button>
-            </div>
-            <p className="text-muted-foreground text-[11px]">
-              Загрузите скриншот кредита — AI заполнит поля ниже (при необходимости уточнит ставку в интернете). Запускается только по кнопке, ничего не сохраняет само.
-            </p>
-            {draftNote && (
-              <div className="flex items-start gap-1.5 rounded-lg border border-status-yellow/40 bg-status-yellow/10 p-2 text-[11px]">
-                {draftNote.used_web_search && <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-status-yellow" />}
-                <span>{draftNote.source_note}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="debt-title">Название</Label>
-            <Input id="debt-title" value={form.title} onChange={(e) => update('title', e.target.value)} placeholder="Кредит на авто" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="debt-creditor">Кредитор</Label>
-            <Input id="debt-creditor" value={form.creditor} onChange={(e) => update('creditor', e.target.value)} placeholder="Kaspi Bank" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="debt-principal">Сумма долга, ₸</Label>
-              <Input
-                id="debt-principal"
-                type="number"
-                inputMode="decimal"
-                value={form.principalAmount}
-                onChange={(e) => update('principalAmount', e.target.value)}
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="debt-balance">Остаток, ₸</Label>
-              <Input
-                id="debt-balance"
-                type="number"
-                inputMode="decimal"
-                value={form.currentBalance}
-                onChange={(e) => update('currentBalance', e.target.value)}
-                placeholder={form.principalAmount || '0'}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="debt-rate">Ставка, % годовых</Label>
-              <Input id="debt-rate" type="number" inputMode="decimal" value={form.interestRate} onChange={(e) => update('interestRate', e.target.value)} placeholder="0" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="debt-min-payment">Мин. платёж, ₸</Label>
-              <Input
-                id="debt-min-payment"
-                type="number"
-                inputMode="decimal"
-                value={form.minimumPayment}
-                onChange={(e) => update('minimumPayment', e.target.value)}
-                placeholder="0"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="debt-due-day">День платежа</Label>
-              <Input id="debt-due-day" type="number" min={1} max={31} value={form.dueDay} onChange={(e) => update('dueDay', e.target.value)} placeholder="5" />
-            </div>
-            {isEdit && (
-              <div className="space-y-1.5">
-                <Label>Статус</Label>
-                <Select value={form.status} onValueChange={(v) => update('status', (v ?? 'active') as DebtStatus)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue>{(value: DebtStatus) => (value === 'active' ? 'Активен' : 'Закрыт')}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Активен</SelectItem>
-                    <SelectItem value="closed">Закрыт</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="debt-notes">Заметка (необязательно)</Label>
-            <Input id="debt-notes" value={form.notes} onChange={(e) => update('notes', e.target.value)} placeholder="Например, беспроцентная рассрочка" />
-          </div>
+    <FormSheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEdit ? 'Редактировать долг' : 'Новый долг'}
+      footer={
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit() }}>
+          <SaveButton pending={isPending} pendingLabel="Сохраняю…">
+            {isEdit ? 'Сохранить изменения' : 'Добавить долг'}
+          </SaveButton>
+        </form>
+      }
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) handleAiAssist(file)
+          e.target.value = ''
+        }}
+      />
+      <div className="space-y-2 rounded-[14px] border border-hf-line bg-hf-card p-3">
+        <div className="flex items-center gap-2">
+          <input
+            value={hint}
+            onChange={(e) => setHint(e.target.value)}
+            placeholder="Уточнение, напр. «Kaspi Bank» (необязательно)"
+            className={formInputClass + ' min-w-0 flex-1 bg-hf-bar'}
+          />
+          <button
+            type="button"
+            disabled={isAssisting}
+            onClick={() => fileInputRef.current?.click()}
+            className="flex shrink-0 items-center gap-1.5 rounded-[10px] bg-hf-bar px-3 py-2.5 text-[13px] text-hf-accent-on-dark disabled:opacity-50"
+          >
+            {isAssisting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {isAssisting ? 'Разбираю…' : 'Скриншот'}
+          </button>
         </div>
+        <p className="text-[11px] leading-snug text-hf-text-4">
+          Загрузи скриншот кредита — заполню поля ниже. Запускается только по кнопке, ничего не сохраняет само.
+        </p>
+        {draftNote && <p className="text-[11px] leading-snug text-hf-accent-on-dark">{draftNote.source_note}</p>}
+      </div>
 
-        <DialogFooter>
-          <Button onClick={handleSubmit} disabled={isPending} className="w-full">
-            {isPending ? 'Сохранение...' : isEdit ? 'Сохранить изменения' : 'Добавить долг'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <FormField label="Название">
+        <input value={form.title} onChange={(e) => update('title', e.target.value)} placeholder="Кредит на авто" className={formInputClass} />
+      </FormField>
+      <FormField label="Кредитор">
+        <input value={form.creditor} onChange={(e) => update('creditor', e.target.value)} placeholder="Kaspi Bank" className={formInputClass} />
+      </FormField>
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Сумма долга, ₸">
+          <input type="number" inputMode="decimal" value={form.principalAmount} onChange={(e) => update('principalAmount', e.target.value)} placeholder="0" className={formInputClass} />
+        </FormField>
+        <FormField label="Остаток, ₸">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={form.currentBalance}
+            onChange={(e) => update('currentBalance', e.target.value)}
+            placeholder={form.principalAmount || '0'}
+            className={formInputClass}
+          />
+        </FormField>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Ставка, % годовых">
+          <input type="number" inputMode="decimal" value={form.interestRate} onChange={(e) => update('interestRate', e.target.value)} placeholder="0" className={formInputClass} />
+        </FormField>
+        <FormField label="Мин. платёж, ₸">
+          <input type="number" inputMode="decimal" value={form.minimumPayment} onChange={(e) => update('minimumPayment', e.target.value)} placeholder="0" className={formInputClass} />
+        </FormField>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="День платежа">
+          <input type="number" min={1} max={31} value={form.dueDay} onChange={(e) => update('dueDay', e.target.value)} placeholder="5" className={formInputClass} />
+        </FormField>
+        {isEdit && (
+          <FormField label="Статус">
+            <Segmented
+              value={form.status}
+              onChange={(v) => update('status', v)}
+              options={[
+                { value: 'active', label: 'Активен' },
+                { value: 'closed', label: 'Закрыт' },
+              ]}
+            />
+          </FormField>
+        )}
+      </div>
+      <FormField label="Заметка (необязательно)">
+        <input value={form.notes} onChange={(e) => update('notes', e.target.value)} placeholder="Например, беспроцентная рассрочка" className={formInputClass} />
+      </FormField>
+    </FormSheet>
   )
 }
