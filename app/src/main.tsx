@@ -51,12 +51,6 @@ const queryClient = new QueryClient({
   },
 })
 
-// Resolve the Telegram session before the first render so every screen sees
-// the real user id from the start rather than flashing the mock one. Seeds
-// the query cache directly (see lib/auth.ts) so useCurrentUser() is a real
-// reactive hook now, not a closure over a module variable nothing re-renders on.
-await initSession(queryClient)
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
@@ -66,3 +60,13 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 )
+
+// Resolves the Telegram session in the background and seeds the query cache
+// once it's done (see lib/auth.ts) — useCurrentUser() is a real reactive
+// hook, so every screen picks up the real user the moment it lands, no
+// re-render plumbing needed here. Deliberately NOT a top-level `await`
+// blocking the render above: Telegram's in-app WebView (especially on
+// Android — often a dated bundled Chromium) is known to choke on top-level
+// await in the entry module, and a stuck/slow/failing auth call must never
+// leave the whole WebView on a permanently blank screen either way.
+initSession(queryClient)
