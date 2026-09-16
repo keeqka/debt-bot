@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
+import { motion } from 'framer-motion'
 import { Home, CreditCard, Receipt as ReceiptIcon, MessageCircle } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { MascotAvatar } from '@/components/Mascot'
 import { haptic, closeApp } from '@/lib/telegram'
+import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { cn } from '@/lib/utils'
 
 const TABS = [
@@ -30,6 +32,7 @@ export function TopBar({ title, subtitle, avatar = false }: { title: string; sub
 }
 
 export function TabBar() {
+  const reduced = useReducedMotion()
   return (
     <nav className="pb-safe shrink-0 flex border-t border-hf-line bg-hf-bar px-2 pt-2.5">
       {TABS.map(({ to, label, icon: Icon, end }) => (
@@ -42,7 +45,16 @@ export function TabBar() {
         >
           {({ isActive }) => (
             <>
-              <Icon className={cn('h-5 w-5', isActive ? 'text-hf-accent' : 'text-hf-text-4')} strokeWidth={2} />
+              <span className="relative flex h-8 w-8 items-center justify-center">
+                {isActive && (
+                  <motion.span
+                    layoutId="tab-pill"
+                    className="absolute inset-0 rounded-full bg-hf-accent/15"
+                    transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+                <Icon className={cn('relative h-5 w-5', isActive ? 'text-hf-accent' : 'text-hf-text-4')} strokeWidth={2} />
+              </span>
               <span className={cn('text-[11px]', isActive ? 'text-hf-text' : 'text-hf-text-4')}>{label}</span>
             </>
           )}
@@ -91,7 +103,7 @@ export function Action({
         onClick?.()
       }}
       className={cn(
-        'flex-1 rounded-[13px] py-3.5 text-[15px] disabled:opacity-50',
+        'flex-1 rounded-[13px] py-3.5 text-[15px] transition-transform duration-150 active:scale-[0.97] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100',
         variant === 'accent' ? 'bg-hf-accent font-medium text-white' : 'bg-hf-card text-hf-text-2',
       )}
     >

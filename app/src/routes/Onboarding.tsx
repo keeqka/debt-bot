@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Mascot } from '@/components/Mascot'
 import { Eyebrow } from '@/components/chrome/Chrome'
 import { useAddExpense, useCategories, useLogReceiptScan, useUpdateUser } from '@/hooks/use-finance-data'
@@ -7,6 +8,8 @@ import { useCurrentUser, useCurrentUserId } from '@/lib/auth'
 import { parseReceipt } from '@/lib/api'
 import { fileToBase64 } from '@/lib/file-to-base64'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
+import { useReducedMotion } from '@/hooks/use-reduced-motion'
+import { cn } from '@/lib/utils'
 
 type Step = 'receipt' | 'income' | 'debts'
 
@@ -20,6 +23,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<Step>('receipt')
   const user = useCurrentUser()
   const updateUser = useUpdateUser()
+  const reduced = useReducedMotion()
 
   function finish() {
     updateUser.mutate({ id: user.id, patch: { onboarding_completed_at: new Date().toISOString() } })
@@ -30,13 +34,30 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     <div className="flex h-full flex-col bg-hf-bg px-4 pt-6 pb-4">
       <div className="mb-5 flex gap-1.5">
         {(['receipt', 'income', 'debts'] as const).map((s) => (
-          <div key={s} className={s === step || stepIndex(s) < stepIndex(step) ? 'h-1 flex-1 rounded-full bg-hf-accent' : 'h-1 flex-1 rounded-full bg-hf-card'} />
+          <div
+            key={s}
+            className={cn(
+              'h-1 flex-1 rounded-full transition-colors duration-200',
+              s === step || stepIndex(s) < stepIndex(step) ? 'bg-hf-accent' : 'bg-hf-card',
+            )}
+          />
         ))}
       </div>
 
-      {step === 'receipt' && <ReceiptStep onNext={() => setStep('income')} />}
-      {step === 'income' && <IncomeStep onNext={() => setStep('debts')} onSkip={() => setStep('debts')} />}
-      {step === 'debts' && <DebtsStep onFinish={finish} />}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={step}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: reduced ? 0 : 0.15 }}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          {step === 'receipt' && <ReceiptStep onNext={() => setStep('income')} />}
+          {step === 'income' && <IncomeStep onNext={() => setStep('debts')} onSkip={() => setStep('debts')} />}
+          {step === 'debts' && <DebtsStep onFinish={finish} />}
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }

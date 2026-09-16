@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, CircleDollarSign, Pencil, Trash2 } from 'lucide-react'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
@@ -9,6 +10,8 @@ import { MascotAvatar } from '@/components/Mascot'
 import { useDebts, useDebtStrategy, useDeleteDebt, useExpenses, useIncomes } from '@/hooks/use-finance-data'
 import { debtPayoffNote, simulateDebtStrategy } from '@/lib/debt-strategy'
 import { formatMoney, formatMonthYear } from '@/lib/format'
+import { useAnimatedNumber } from '@/hooks/use-animated-number'
+import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import type { Debt, DebtStrategyKind } from '@/types/domain'
 import { cn } from '@/lib/utils'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
@@ -26,6 +29,12 @@ function monthsBetween(fromIso: string, toIso: string) {
   const a = new Date(fromIso)
   const b = new Date(toIso)
   return (a.getFullYear() - b.getFullYear()) * 12 + (a.getMonth() - b.getMonth())
+}
+
+function addMonths(date: Date, months: number) {
+  const d = new Date(date)
+  d.setMonth(d.getMonth() + months)
+  return d
 }
 
 export function Debts() {
@@ -68,6 +77,16 @@ export function Debts() {
   )
   const aheadBy = plan?.estimated_payoff_date && baselineDate ? monthsBetween(baselineDate, plan.estimated_payoff_date) : 0
 
+  // The payoff date animates the same way as Overview's main number (§2/§3):
+  // count the month offset from today rather than jump straight to the new
+  // date, so dragging "Свободно в месяц" visibly pulls the date with it
+  // instead of it just flickering to a new string.
+  const reduced = useReducedMotion()
+  const today = useMemo(() => new Date(), [])
+  const monthsUntilPayoff = plan?.estimated_payoff_date ? monthsBetween(plan.estimated_payoff_date, today.toISOString().slice(0, 10)) : 0
+  const animatedMonthsUntilPayoff = useAnimatedNumber(monthsUntilPayoff, 600, 1)
+  const animatedPayoffDate = plan?.estimated_payoff_date ? addMonths(today, animatedMonthsUntilPayoff).toISOString() : null
+
   const [addOpen, setAddOpen] = useState(false)
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
   const [payingDebt, setPayingDebt] = useState<Debt | null>(null)
@@ -109,7 +128,7 @@ export function Debts() {
             {planLoading || !plan ? (
               <div className="h-9 w-40 animate-pulse rounded bg-hf-receipt-line" />
             ) : (
-              <div className="text-[30px] font-bold tracking-[-0.03em]">{formatMonthYear(plan.estimated_payoff_date)}</div>
+              <div className="text-[30px] font-bold tracking-[-0.03em]">{formatMonthYear(animatedPayoffDate)}</div>
             )}
             <div className="h-px bg-hf-receipt-line" />
             <div className="flex justify-between gap-2.5 text-[13px]">
@@ -147,12 +166,18 @@ export function Debts() {
 
           <div className="flex flex-col gap-2.5">
             <Eyebrow>Порядок выплат</Eyebrow>
+            <AnimatePresence initial={false}>
             {(plan?.payoff_order ?? activeDebts.map((d) => d.id)).map((id, i) => {
               const debt = activeDebts.find((d) => d.id === id)
               if (!debt) return null
               const progress = ((debt.principal_amount - debt.current_balance) / debt.principal_amount) * 100
               return (
-                <div key={debt.id} className="flex flex-col gap-2.5 rounded-[16px] bg-hf-card p-3.5">
+                <motion.div
+                  key={debt.id}
+                  layout
+                  exit={{ opacity: 0, scale: 0.96, transition: { duration: reduced ? 0 : 0.25 } }}
+                  transition={{ layout: { duration: reduced ? 0 : 0.3, ease: 'easeInOut' } }}
+                  className="flex flex-col gap-2.5 rounded-[16px] bg-hf-card p-3.5">
                   <div className="flex items-center justify-between gap-2.5">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span className={cn('font-mono text-[11px]', i === 0 ? 'text-hf-accent-on-dark' : 'text-hf-text-4')}>{i + 1}</span>
@@ -188,9 +213,10 @@ export function Debts() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                </div>
+                </motion.div>
               )
             })}
+            </AnimatePresence>
           </div>
 
           <DebtPayoffChart debts={activeDebts} monthlySurplus={surplus} />

@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { TopBar } from '@/components/layout/TopBar'
 import { BottomTabBar } from '@/components/layout/BottomTabBar'
 import { Toaster } from '@/components/ui/sonner'
 import { HeaderActionSetterContext } from '@/lib/header-action'
 import { Onboarding } from '@/routes/Onboarding'
 import { useCurrentUser } from '@/lib/auth'
+import { useReducedMotion } from '@/hooks/use-reduced-motion'
 
 /**
  * Подзаголовок шапки вместо заголовка-названия экрана: какой экран открыт,
@@ -28,6 +30,7 @@ export function AppShell() {
   const location = useLocation()
   const [headerAction, setHeaderAction] = useState<ReactNode>(null)
   const user = useCurrentUser()
+  const reduced = useReducedMotion()
 
   // Fixed to the real Telegram viewport height (--tg-height, lib/telegram.ts)
   // rather than min-h-dvh: TopBar/BottomTabBar need to be actual non-scrolling
@@ -49,7 +52,18 @@ export function AppShell() {
       <div className="mx-auto flex max-w-md flex-col bg-hf-bg" style={{ height: 'var(--tg-height, 100dvh)' }}>
         <TopBar subtitle={subtitleFor(location.pathname)} action={headerAction} face={isChat ? 'focused' : 'calm'} />
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4.5">
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: reduced ? 0 : 0.15 }}
+              className="h-full"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
         <BottomTabBar />
         <Toaster position="top-center" />

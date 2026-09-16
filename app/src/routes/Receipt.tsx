@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, FileStack, Plus, Trash2 } from 'lucide-react'
+import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { Mascot } from '@/components/Mascot'
@@ -59,6 +61,8 @@ export function Receipt() {
   const { data: subscription } = useSubscription()
   const { data: scanCount = 0 } = useReceiptScanCount()
   const logScan = useLogReceiptScan()
+
+  const reduced = useReducedMotion()
 
   const isFreeTier = subscription?.status !== 'active'
   const scansLeft = FREE_TIER_LIMIT - scanCount
@@ -231,46 +235,60 @@ export function Receipt() {
         </div>
       )}
 
-      {draft.status === 'idle' && (
-        <IdleView
-          onReceipt={() => receiptInputRef.current?.click()}
-          onStatement={() => statementInputRef.current?.click()}
-          onManual={() => setManualOpen(true)}
-          expenses={expenses ?? []}
-          incomes={incomes ?? []}
-          categories={categories ?? []}
-          onDeleteExpense={(id) => deleteExpense.mutateAsync(id).then(() => toast.success('Расход удалён'))}
-          onDeleteIncome={(id) => deleteIncome.mutateAsync(id).then(() => toast.success('Доход удалён'))}
-        />
-      )}
+      <AnimatePresence mode="wait">
+        {/* uploading/reading share one visual (ReadingView) — grouping them
+            under one key avoids a pointless crossfade between two identical
+            frames while the file is still being read (ANIMATIONS.md §4). */}
+        <motion.div
+          key={draft.status === 'uploading' ? 'reading' : draft.status}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: reduced ? 0 : 0.2 }}
+          className="space-y-3.5"
+        >
+          {draft.status === 'idle' && (
+            <IdleView
+              onReceipt={() => receiptInputRef.current?.click()}
+              onStatement={() => statementInputRef.current?.click()}
+              onManual={() => setManualOpen(true)}
+              expenses={expenses ?? []}
+              incomes={incomes ?? []}
+              categories={categories ?? []}
+              onDeleteExpense={(id) => deleteExpense.mutateAsync(id).then(() => toast.success('Расход удалён'))}
+              onDeleteIncome={(id) => deleteIncome.mutateAsync(id).then(() => toast.success('Доход удалён'))}
+            />
+          )}
 
-      {(draft.status === 'uploading' || draft.status === 'reading') && <ReadingView />}
+          {(draft.status === 'uploading' || draft.status === 'reading') && <ReadingView />}
 
-      {draft.status === 'error' && <ErrorView message={draft.message} onRetry={reset} />}
+          {draft.status === 'error' && <ErrorView message={draft.message} onRetry={reset} />}
 
-      {draft.status === 'parsed-receipt' && (
-        <ParsedReceiptView
-          result={draft.result}
-          categoryId={draft.categoryId}
-          categories={expenseCategories}
-          expenses={expenses ?? []}
-          onChange={(patch) => setDraft({ ...draft, ...patch })}
-          onCancel={reset}
-          onSave={saveReceipt}
-          saving={addExpense.isPending}
-        />
-      )}
+          {draft.status === 'parsed-receipt' && (
+            <ParsedReceiptView
+              result={draft.result}
+              categoryId={draft.categoryId}
+              categories={expenseCategories}
+              expenses={expenses ?? []}
+              onChange={(patch) => setDraft({ ...draft, ...patch })}
+              onCancel={reset}
+              onSave={saveReceipt}
+              saving={addExpense.isPending}
+            />
+          )}
 
-      {draft.status === 'parsed-statement' && (
-        <ParsedStatementView
-          rows={draft.rows}
-          categories={expenseCategories}
-          onChange={(rows) => setDraft({ status: 'parsed-statement', rows })}
-          onCancel={reset}
-          onSave={saveStatement}
-          saving={addExpensesBulk.isPending || addIncomesBulk.isPending}
-        />
-      )}
+          {draft.status === 'parsed-statement' && (
+            <ParsedStatementView
+              rows={draft.rows}
+              categories={expenseCategories}
+              onChange={(rows) => setDraft({ status: 'parsed-statement', rows })}
+              onCancel={reset}
+              onSave={saveStatement}
+              saving={addExpensesBulk.isPending || addIncomesBulk.isPending}
+            />
+          )}
+        </motion.div>
+      </AnimatePresence>
 
       <AddTransactionDialog open={manualOpen} onOpenChange={setManualOpen} />
     </div>
@@ -374,7 +392,11 @@ function ReadingView() {
       <p className="text-[13px] text-hf-text-3">Разбираю...</p>
       <div className="w-full space-y-2">
         {[100, 80, 90].map((w, i) => (
-          <div key={i} className="h-3 animate-pulse rounded bg-hf-receipt-line/20" style={{ width: `${w}%` }} />
+          <div
+            key={i}
+            className="h-3 animate-pulse rounded bg-hf-receipt-line/20"
+            style={{ width: `${w}%`, animationDelay: `${i * 150}ms` }}
+          />
         ))}
       </div>
     </div>
@@ -420,6 +442,7 @@ function ParsedReceiptView({
   onSave: () => void
   saving: boolean
 }) {
+  const reduced = useReducedMotion()
   const items = result.line_items
   const itemsTotal = items.reduce((s, it) => s + it.amount, 0)
   const total = result.total_amount ?? itemsTotal
@@ -462,15 +485,33 @@ function ParsedReceiptView({
         </div>
       </div>
 
-      {isDuplicate && (
-        <div className="rounded-[12px] bg-hf-receipt-warn px-3.5 py-2.5 text-[13px] text-hf-warn-ink">
-          Похоже, этот чек уже загружен — сумма, магазин и дата совпадают с существующей записью.
-        </div>
-      )}
+      <AnimatePresence>
+        {isDuplicate && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="rounded-[12px] bg-hf-receipt-warn px-3.5 py-2.5 text-[13px] text-hf-warn-ink">
+              Похоже, этот чек уже загружен — сумма, магазин и дата совпадают с существующей записью.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Paper className="flex flex-col gap-2.5">
         {items.map((item, i) => (
-          <div key={i} className="flex items-center gap-2 text-[13px]">
+          <motion.div
+            key={i}
+            className="flex items-center gap-2 rounded-md text-[13px]"
+            // Literal hex, not a var() reference — framer-motion needs an
+            // actual color value to interpolate between frames, not a CSS
+            // custom property it can't resolve mid-animation.
+            initial={!item.name ? { backgroundColor: '#fbefdd' } : false}
+            animate={{ backgroundColor: 'rgba(251,239,221,0)' }}
+            transition={{ duration: reduced ? 0 : 0.8 }}
+          >
             <input
               value={item.name}
               onChange={(e) => updateItem(i, { name: e.target.value })}
@@ -486,7 +527,7 @@ function ParsedReceiptView({
             <button type="button" onClick={() => removeItem(i)} aria-label="Удалить позицию" className="shrink-0 text-hf-ink-soft">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
-          </div>
+          </motion.div>
         ))}
         <button type="button" onClick={addItem} className="self-start text-[13px] text-hf-accent-ink">
           + Добавить позицию
