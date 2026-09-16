@@ -1,49 +1,42 @@
-import { useState, type ReactNode } from 'react'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
-import { useStatus } from '@/hooks/use-finance-data'
-import { STATUS_META } from '@/lib/status'
-import { cn } from '@/lib/utils'
-import { ProfilePanel } from '@/components/profile/ProfilePanel'
-import { useCurrentUser } from '@/lib/auth'
+import type { ReactNode } from 'react'
+import { MascotAvatar } from '@/components/Mascot'
+import { closeApp } from '@/lib/telegram'
 
 /**
- * Header with the current user's avatar + a live status dot (ТЗ §5: "точка
- * на аватарке" as part of the status color threading through the whole UI).
- * Settings lives behind this avatar rather than a bottom-tab slot.
+ * Шапка как в макете: аватар маскота + «Hlow Flow / мини-апп» + «Закрыть».
+ *
+ * Профиля пользователя здесь больше нет (аватар с буквой и точкой статуса
+ * убраны): в приложении один хозяйственный аккаунт на двоих, персональная
+ * страница ничего не решала, а её аватар занимал место маскота — то есть
+ * бренда. Настройки дохода и напоминаний переехали в «Обзор» и открываются
+ * оттуда по делу, а не через безымянную иконку.
+ *
+ * subtitle задаёт экран (Chat ставит «читает твои цифры»), action — правый
+ * слот (Chat кладёт туда очистку истории).
  */
-export function TopBar({ title, action }: { title: string; action?: ReactNode }) {
-  const { data: status } = useStatus()
-  const user = useCurrentUser()
-  const [open, setOpen] = useState(false)
-  const meta = status ? STATUS_META[status.status] : null
-  const initials = user.display_name.slice(0, 1).toUpperCase()
-
+export function TopBar({
+  subtitle = 'мини-апп',
+  action,
+  face = 'calm',
+}: {
+  subtitle?: string
+  action?: ReactNode
+  face?: 'calm' | 'focused' | 'thinking'
+}) {
   return (
-    <header className="pt-safe sticky top-0 z-20 flex items-center justify-between border-b border-hf-line bg-hf-bar px-4 pb-3">
-      <h1 className="text-[15px] font-medium text-hf-text">{title}</h1>
-      <div className="flex items-center gap-3">
+    <header className="pt-safe sticky top-0 z-20 flex items-center justify-between gap-2.5 border-b border-hf-line bg-hf-bar px-4 pb-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <MascotAvatar size={28} expression={face} />
+        <div className="min-w-0">
+          <div className="truncate text-[15px] font-medium text-hf-text">Hlow Flow</div>
+          <div className="truncate text-[11px] text-hf-text-4">{subtitle}</div>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-3.5">
         {action}
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger className="relative" aria-label="Профиль и настройки">
-            <Avatar className="h-9 w-9">
-              {user.avatar_url && <AvatarImage src={user.avatar_url} alt={user.display_name} />}
-              <AvatarFallback className="bg-hf-card text-hf-text text-sm font-semibold">{initials}</AvatarFallback>
-            </Avatar>
-            {meta && (
-              <span
-                className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-hf-bar', meta.dot)}
-                aria-label={`Статус: ${meta.label}`}
-              />
-            )}
-          </SheetTrigger>
-          <SheetContent side="right" className="w-full sm:max-w-sm">
-            <SheetHeader>
-              <SheetTitle>Профиль</SheetTitle>
-            </SheetHeader>
-            <ProfilePanel />
-          </SheetContent>
-        </Sheet>
+        <button type="button" onClick={closeApp} className="text-[13px] text-hf-accent-on-dark">
+          Закрыть
+        </button>
       </div>
     </header>
   )

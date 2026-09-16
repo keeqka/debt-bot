@@ -72,7 +72,7 @@ async function handleReceiptMessage(message: AnyRecord) {
   }
   if (!fileId) return
 
-  await sendTelegramMessage(chatId, '🔍 Разбираю чек...')
+  await sendTelegramMessage(chatId, 'Разбираю чек...')
 
   const admin = getAdminClient()
   const user = await getOrCreateUser(admin, message.from)
@@ -104,7 +104,7 @@ async function handleReceiptMessage(message: AnyRecord) {
   if (error) throw error
 
   const lines = [
-    `🧾 *${draftPayload.merchant ?? 'Расход'}*`,
+    `*${draftPayload.merchant ?? 'Расход'}*`,
     `Сумма: ${draftPayload.amount} ${draftPayload.currency}`,
     `Дата: ${draftPayload.spent_at}`,
     `Категория: ${draftPayload.category_name ?? 'не определена'}`,
@@ -114,8 +114,8 @@ async function handleReceiptMessage(message: AnyRecord) {
   await sendTelegramMessage(chatId, lines.join('\n'), {
     inline_keyboard: [
       [
-        { text: '✅ Добавить', callback_data: `confirm_expense:${draft.id}` },
-        { text: '❌ Отмена', callback_data: `cancel_expense:${draft.id}` },
+        { text: 'Добавить', callback_data: `confirm_expense:${draft.id}` },
+        { text: 'Отмена', callback_data: `cancel_expense:${draft.id}` },
       ],
     ],
   })
@@ -135,7 +135,7 @@ async function handleCallbackQuery(callbackQuery: AnyRecord) {
   if (data === 'disable_daily_reminder') {
     const admin = getAdminClient()
     await admin.from('users').update({ daily_reminder_enabled: false }).eq('telegram_id', fromId)
-    await editMessageText(chatId, messageId, '🔕 Напоминания выключены — включить обратно можно в Профиле.')
+    await editMessageText(chatId, messageId, 'Напоминания выключены. Включить обратно можно в приложении, в «Обзоре».')
     await answerCallbackQuery(callbackQuery.id, 'Выключено')
     return
   }
@@ -156,7 +156,7 @@ async function handleCallbackQuery(callbackQuery: AnyRecord) {
 
   if (action === 'cancel_expense') {
     await admin.from('pending_expense_drafts').delete().eq('id', draftId)
-    await editMessageText(chatId, messageId, '❌ Отменено.')
+    await editMessageText(chatId, messageId, 'Отменено.')
     await answerCallbackQuery(callbackQuery.id)
     return
   }
@@ -180,12 +180,12 @@ async function handleCallbackQuery(callbackQuery: AnyRecord) {
 
   if (error) {
     console.error('failed to insert expense from telegram', error)
-    await editMessageText(chatId, messageId, '⚠️ Не удалось сохранить расход, попробуйте через приложение.')
+    await editMessageText(chatId, messageId, 'Не удалось сохранить расход — попробуйте через приложение.')
     await answerCallbackQuery(callbackQuery.id)
     return
   }
 
-  await editMessageText(chatId, messageId, `✅ Добавлено: ${payload.merchant ?? 'расход'} — ${payload.amount} ${payload.currency}`)
+  await editMessageText(chatId, messageId, `Добавлено: ${payload.merchant ?? 'расход'} — ${payload.amount} ${payload.currency}`)
   await answerCallbackQuery(callbackQuery.id, 'Добавлено')
 }
 
@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
       await sendTelegramMessage(
         message.chat.id,
         isAllowed
-          ? 'Привет! Открой Mini App из меню бота, чтобы посмотреть свои финансы. Еженедельные и ежемесячные сводки теперь будут приходить сюда.\n\nТакже можно прислать мне сюда прямо в чат фото или PDF чека — разберу и предложу добавить расход.'
+          ? 'Открой Mini App из меню бота, чтобы посмотреть свои финансы. Еженедельные и ежемесячные сводки будут приходить сюда.\n\nТакже можно прислать мне сюда прямо в чат фото или PDF чека — разберу и предложу добавить расход.'
           : 'Это приложение настроено для конкретных пользователей — обратитесь к тем, кто его подключал.',
       )
       return jsonResponse({ ok: true })

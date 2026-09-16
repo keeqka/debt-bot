@@ -12,6 +12,7 @@ import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getPeriodMetrics, metricsToPrompt, SUMMARY_TOOL } from '../_shared/summary.ts'
 import { computeAndStoreStatus } from '../_shared/compute-status.ts'
 import { resolveBaseCurrency } from '../_shared/currency.ts'
+import { PERSONA } from '../_shared/persona.ts'
 
 Deno.serve(async (req) => {
   try {
@@ -37,8 +38,7 @@ Deno.serve(async (req) => {
     ])
 
     const summary = await callClaudeTool({
-      system:
-        'Составь еженедельный итог для семьи из двух человек: как прошла неделя по расходам/доходам/долгам, один конкретный совет на следующую неделю. Пиши по-русски, тепло, но по делу, без воды. telegram_text должен быть готов к прямой отправке в Telegram.',
+      system: `${PERSONA}\n\nСоставь еженедельный итог для семьи из двух человек: как прошла неделя по расходам/доходам/долгам, один конкретный следующий шаг. period=week. telegram_text должен быть готов к прямой отправке в Telegram.`,
       messages: [{ role: 'user', content: `period=week\n${metricsToPrompt(current, previous, currency)}` }],
       tool: SUMMARY_TOOL,
     })
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const { data: users } = await supabase.from('users').select('telegram_id')
     const results = await Promise.all(
       (users ?? []).map((u: { telegram_id: number }) =>
-        sendTelegramMessageWithRetry(u.telegram_id, `${summary.status_emoji} *Итоги недели*\n\n${summary.telegram_text}`),
+        sendTelegramMessageWithRetry(u.telegram_id, `*Итоги недели*\n\n${summary.telegram_text}`),
       ),
     )
 

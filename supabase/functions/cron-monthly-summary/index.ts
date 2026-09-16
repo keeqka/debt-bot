@@ -8,6 +8,7 @@ import { callClaudeTool } from '../_shared/claude.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { getPeriodMetrics, metricsToPrompt, SUMMARY_TOOL } from '../_shared/summary.ts'
 import { resolveBaseCurrency } from '../_shared/currency.ts'
+import { PERSONA } from '../_shared/persona.ts'
 
 function isLastDayOfMonth(date: Date): boolean {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate() === date.getDate()
@@ -33,8 +34,7 @@ Deno.serve(async (req) => {
     ])
 
     const summary = await callClaudeTool({
-      system:
-        'Составь итог месяца для семьи из двух человек: доходы/расходы/платежи по долгам, изменения по категориям, один приоритетный совет на следующий месяц. Пиши по-русски, по делу. telegram_text должен быть готов к прямой отправке в Telegram.',
+      system: `${PERSONA}\n\nСоставь итог месяца для семьи из двух человек: доходы/расходы/платежи по долгам, изменения по категориям, один приоритетный следующий шаг. period=month. telegram_text должен быть готов к прямой отправке в Telegram.`,
       messages: [{ role: 'user', content: `period=month\n${metricsToPrompt(current, previous, currency)}` }],
       tool: SUMMARY_TOOL,
     })
@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     const { data: users } = await supabase.from('users').select('telegram_id')
     const results = await Promise.all(
       (users ?? []).map((u: { telegram_id: number }) =>
-        sendTelegramMessageWithRetry(u.telegram_id, `${summary.status_emoji} *Итоги месяца*\n\n${summary.telegram_text}`),
+        sendTelegramMessageWithRetry(u.telegram_id, `*Итоги месяца*\n\n${summary.telegram_text}`),
       ),
     )
 

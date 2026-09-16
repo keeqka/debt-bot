@@ -4,22 +4,22 @@ export interface MonthCategory {
   id: string
   name: string
   amount: number
+  /** Доля от ПОТРАЧЕННОГО за месяц (0-100) — то, что рисует полоса. */
   pct: number
+  /** Доля от лимита месяца — по ней решается tone, но она не рисуется. */
+  pctOfLimit: number
   tone: 'accent' | 'warn'
 }
 
 export interface Month {
   label: string
   daysLeft: number
-  /** Auto: this month's recorded income minus active debts' minimum payments. Never user-set (confirmed decision — no per-category budget input). */
   limit: number
   spent: number
-  /** Minimum payments on debts not yet due this month — "reserved", not spent yet. */
   pending: number
   available: number
   perDay: number
   categories: MonthCategory[]
-  /** False before the user has ever logged an income — Overview falls back to a facts-only view instead of promising a budget it can't back up. */
   hasIncome: boolean
 }
 
@@ -37,23 +37,21 @@ function isThisMonth(iso: string, today: Date) {
   return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth()
 }
 
-/** True if this debt's due day this month hasn't passed yet — its minimum payment is "reserved", not spent. */
 function isDueLaterThisMonth(dueDay: number, today: Date) {
   return dueDay >= today.getDate()
 }
 
 /**
- * Pure client-side aggregation — no edge function, everything here is
- * already fetched by Overview's existing hooks. `limit` is intentionally
- * automatic (income minus obligations), not a value anyone sets by hand —
- * see the redesign plan for why no per-category budget field exists.
+ * Чистая клиентская агрегация. limit — автоматический (доход минус
+ * обязательные платежи), руками его никто не задаёт.
  *
- * Income source: `user.monthly_income` (set in onboarding step 2 or
- * Профиль) when present — a stated recurring figure that doesn't wobble
- * depending on which day of the month payday actually landed. Falls back to
- * this month's recorded income transactions when it isn't set, so the
- * screen still works (on a lesser footing) for someone who skipped that
- * onboarding step but has logged income anyway.
+ * ВАЖНО про pct категорий: раньше полоса считалась от лимита всего месяца.
+ * При доходе 1 055 000 и тратой 210 000 самая крупная категория давала 20%,
+ * остальные — по 2-3%, и блок «По категориям» выглядел пустым и сломанным
+ * (см. скриншот). Полоса теперь показывает долю от потраченного — тот же
+ * смысл, что у дата-виджета в чате: «на что ушли деньги». Порог тревоги
+ * по-прежнему считается от лимита (pctOfLimit), так что предупреждение
+ * не потеряно.
  */
 export function computeMonth(
   user: User | null,
@@ -91,14 +89,15 @@ export function computeMonth(
       id,
       name: categories.find((c) => c.id === id)?.name ?? 'Без категории',
       amount,
-      pct: limit > 0 ? (amount / limit) * 100 : 0,
+      pct: spent > 0 ? (amount / spent) * 100 : 0,
+      pctOfLimit: limit > 0 ? (amount / limit) * 100 : 0,
     }))
-    .sort((a, b) => b.pct - a.pct)
+    .sort((a, b) => b.amount - a.amount)
     .slice(0, 5)
 
-  // Only the single worst category over 90% is flagged — never more than one
-  // warning color on screen at once (ТЗ FUNCTIONAL.md §3).
-  const worstOverIndex = categoryRows.findIndex((c) => c.pct >= 90)
+  // Только одна худшая категория выше 90% от лимита — не больше одного
+  // тревожного цвета на экран.
+  const worstOverIndex = categoryRows.findIndex((c) => c.pctOfLimit >= 90)
   const monthCategories: MonthCategory[] = categoryRows.map((c, i) => ({
     ...c,
     tone: i === worstOverIndex ? 'warn' : 'accent',

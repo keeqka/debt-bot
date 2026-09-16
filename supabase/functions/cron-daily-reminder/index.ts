@@ -65,14 +65,12 @@ Deno.serve(async (req) => {
       const dayBefore = localDateStr(new Date(now.getTime() - 48 * 60 * 60 * 1000), user.timezone)
       const threeDayStreak = !scanDates.has(yesterday) && !scanDates.has(dayBefore)
 
-      const text = threeDayStreak
-        ? '⏰ Уже третий день без чеков — картина бюджета устарела. Закинь хотя бы то, что накопилось, когда будет минутка.'
-        : '⏰ Сегодня ещё не было ни одного чека — закинь фото, когда будет минутка.'
+      const text = threeDayStreak ? 'Три дня без чеков — бюджет уже неточный.' : 'Закинь чеки за сегодня.'
 
       const ok = await sendTelegramMessageWithRetry(user.telegram_id, text, 3, {
         inline_keyboard: [
-          [{ text: '🧾 Загрузить чек', web_app: { url: `${env.miniAppUrl}/#/receipt` } }],
-          [{ text: '🔕 Выключить напоминания', callback_data: 'disable_daily_reminder' }],
+          [{ text: 'Загрузить чек', web_app: { url: `${env.miniAppUrl}/#/receipt` } }],
+          [{ text: 'Больше не напоминать', callback_data: 'disable_daily_reminder' }],
         ],
       })
       if (ok) sent++

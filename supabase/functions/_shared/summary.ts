@@ -12,8 +12,7 @@ export const SUMMARY_TOOL = {
     type: 'object',
     properties: {
       period: { type: 'string', enum: ['week', 'month'] },
-      status_emoji: { type: 'string', description: 'один эмодзи: 🟢🟡🟠🔴' },
-      telegram_text: { type: 'string', description: 'Markdown, до 700 символов, по-русски' },
+      telegram_text: { type: 'string', description: 'Markdown, до 700 символов, по-русски, без эмодзи' },
       top_category_changes: {
         type: 'array',
         items: {
@@ -24,7 +23,7 @@ export const SUMMARY_TOOL = {
       },
       one_recommendation: { type: 'string' },
     },
-    required: ['period', 'status_emoji', 'telegram_text', 'top_category_changes', 'one_recommendation'],
+    required: ['period', 'telegram_text', 'top_category_changes', 'one_recommendation'],
   },
 }
 

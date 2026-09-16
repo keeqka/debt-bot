@@ -28,7 +28,7 @@ export function computeInsight(categories: MonthCategory[], debts: Debt[], month
   const overCategory = categories.find((c) => c.tone === 'warn')
   if (overCategory) {
     return {
-      text: `«${overCategory.name}» почти выбрал лимит — ${Math.round(overCategory.pct)}% от бюджета месяца.`,
+      text: `«${overCategory.name}» почти выбрал лимит — ${Math.round(overCategory.pctOfLimit)}% от бюджета месяца.`,
       action: { label: 'Разобрать', to: '/receipt' },
     }
   }

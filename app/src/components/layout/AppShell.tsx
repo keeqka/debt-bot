@@ -7,17 +7,21 @@ import { HeaderActionSetterContext } from '@/lib/header-action'
 import { Onboarding } from '@/routes/Onboarding'
 import { useCurrentUser } from '@/lib/auth'
 
-const TITLES: Record<string, string> = {
-  '/overview': 'Обзор',
-  '/debts': 'Долги',
-  '/receipt': 'Чеки',
-  '/chat': 'Чат',
+/**
+ * Подзаголовок шапки вместо заголовка-названия экрана: какой экран открыт,
+ * уже видно по подсвеченному табу снизу — дублировать это заголовком значит
+ * отдать единственное место, где может стоять имя продукта.
+ */
+const SUBTITLES: Record<string, string> = {
+  '/overview': 'мини-апп',
+  '/debts': 'план погашения',
+  '/receipt': 'чеки и выписки',
+  '/chat': 'читает твои цифры',
 }
 
-function titleFor(pathname: string) {
-  if (TITLES[pathname]) return TITLES[pathname]
+function subtitleFor(pathname: string) {
   const base = '/' + pathname.split('/')[1]
-  return TITLES[base] ?? 'Hlow Flow'
+  return SUBTITLES[pathname] ?? SUBTITLES[base] ?? 'мини-апп'
 }
 
 export function AppShell() {
@@ -26,9 +30,6 @@ export function AppShell() {
   const user = useCurrentUser()
 
   if (!user.onboarding_completed_at) {
-    // useUpdateUser's onSuccess writes onboarding_completed_at straight into the
-    // query cache, which re-renders this component past the gate on its own —
-    // onDone needs nothing to do.
     return (
       <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-hf-bg">
         <Onboarding onDone={() => {}} />
@@ -36,11 +37,13 @@ export function AppShell() {
     )
   }
 
+  const isChat = location.pathname.startsWith('/chat')
+
   return (
     <HeaderActionSetterContext.Provider value={setHeaderAction}>
       <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-hf-bg">
-        <TopBar title={titleFor(location.pathname)} action={headerAction} />
-        <main className="pb-tabbar flex-1 px-4 pt-4">
+        <TopBar subtitle={subtitleFor(location.pathname)} action={headerAction} face={isChat ? 'focused' : 'calm'} />
+        <main className="pb-tabbar flex-1 px-4 pt-4.5">
           <Outlet />
         </main>
         <BottomTabBar />

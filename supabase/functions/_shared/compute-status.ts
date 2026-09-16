@@ -6,6 +6,7 @@
 
 import { callClaudeTool } from './claude.ts'
 import { buildFinancialSnapshot, snapshotToPrompt } from './finance-context.ts'
+import { PERSONA } from './persona.ts'
 
 // deno-lint-ignore no-explicit-any
 type SupabaseLike = any
@@ -18,7 +19,10 @@ export const STATUS_TOOL = {
     properties: {
       status: { type: 'string', enum: ['green', 'light_green', 'yellow', 'orange', 'red'] },
       score: { type: 'number', description: '0 to 100' },
-      headline: { type: 'string', description: 'до 80 символов' },
+      headline: {
+        type: 'string',
+        description: 'до 80 символов, голосом PERSONA: одна строка, цифра/причина и следующий шаг, без "рекомендуется" и без эмодзи — показывается на "Обзоре" как реплика маскота',
+      },
       key_risks: { type: 'array', items: { type: 'string' } },
       recommendations: { type: 'array', items: { type: 'string' } },
     },
@@ -38,8 +42,7 @@ export interface StatusResult {
 export async function computeAndStoreStatus(supabase: SupabaseLike): Promise<StatusResult> {
   const snapshot = await buildFinancialSnapshot(supabase)
   const result = await callClaudeTool<StatusResult>({
-    system:
-      'Ты финансовый ассистент. Оцени текущее финансовое положение семьи по шкале от зелёного (отлично) до красного (тревога), опираясь на доходы, расходы, долги и цели за последние 30 дней. Учитывай долю обязательных платежей по долгам в доходе и скорость роста/снижения расходов. headline — по-русски, конкретно и без воды.',
+    system: `${PERSONA}\n\nОцени текущее финансовое положение семьи по шкале от зелёного (отлично) до красного (тревога), опираясь на доходы, расходы, долги и цели за последние 30 дней. Учитывай долю обязательных платежей по долгам в доходе и скорость роста/снижения расходов.`,
     messages: [{ role: 'user', content: snapshotToPrompt(snapshot) }],
     tool: STATUS_TOOL,
   })
