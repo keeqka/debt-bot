@@ -7,6 +7,19 @@ import { initTelegram } from '@/lib/telegram'
 import { initSession } from '@/lib/auth'
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 
+// Telegram delivers its own initData/theme/version via the URL hash on the
+// very first load — e.g. "#tgWebAppData=...&tgWebAppVersion=9.6
+// &tgWebAppPlatform=web&tgWebAppThemeParams=..." (confirmed via a real
+// console log from inside Telegram). telegram-web-app.js reads that hash to
+// populate Telegram.WebApp.initData but never clears it afterward. Routing
+// here is hash-based (HashRouter, App.tsx), so that leftover data then gets
+// parsed as OUR route next — "No routes matched location
+// /tgWebAppData=..." — and nothing renders. This IS the dark-screen bug:
+// strip it before the router (or anything else reading the hash) ever sees it.
+if (window.location.hash.includes('tgWebApp')) {
+  window.location.hash = ''
+}
+
 initTelegram()
 
 // Hlow Flow's design is dark-only (paper cards for user data sit on a dark

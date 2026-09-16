@@ -17,6 +17,10 @@ function App() {
           <Route path="debts" element={<Debts />} />
           <Route path="receipt" element={<Receipt />} />
           <Route path="chat" element={<Chat />} />
+          {/* Defense-in-depth: any unrecognized hash (stray Telegram params that
+              slipped past main.tsx's stripping, a bad deep link, anything) lands
+              on a working screen instead of react-router rendering nothing. */}
+          <Route path="*" element={<Navigate to="/overview" replace />} />
         </Route>
       </Routes>
     </HashRouter>
