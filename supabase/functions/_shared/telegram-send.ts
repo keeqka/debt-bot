@@ -1,13 +1,13 @@
 import { env } from './env.ts'
 
 /** ТЗ §9: 3 retries with backoff before giving up on a notification send. */
-export async function sendTelegramMessageWithRetry(chatId: number, text: string, attempts = 3): Promise<boolean> {
+export async function sendTelegramMessageWithRetry(chatId: number, text: string, attempts = 3, replyMarkup?: unknown): Promise<boolean> {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const res = await fetch(`https://api.telegram.org/bot${env.telegramBotToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown', reply_markup: replyMarkup }),
       })
       if (res.ok) return true
       console.error(`Telegram send failed (attempt ${attempt}): ${res.status} ${await res.text()}`)

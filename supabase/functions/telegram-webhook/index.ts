@@ -132,6 +132,14 @@ async function handleCallbackQuery(callbackQuery: AnyRecord) {
     return
   }
 
+  if (data === 'disable_daily_reminder') {
+    const admin = getAdminClient()
+    await admin.from('users').update({ daily_reminder_enabled: false }).eq('telegram_id', fromId)
+    await editMessageText(chatId, messageId, '🔕 Напоминания выключены — включить обратно можно в Профиле.')
+    await answerCallbackQuery(callbackQuery.id, 'Выключено')
+    return
+  }
+
   const [action, draftId] = data.split(':')
   if (!draftId || (action !== 'confirm_expense' && action !== 'cancel_expense')) {
     await answerCallbackQuery(callbackQuery.id)

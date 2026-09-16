@@ -1,7 +1,8 @@
 /**
  * Typed access to Edge Function secrets. Set these with:
  *   supabase secrets set TELEGRAM_BOT_TOKEN=... ANTHROPIC_API_KEY=... \
- *     SESSION_JWT_SECRET=... CRON_SECRET=... TELEGRAM_ALLOWED_USER_IDS=111,222
+ *     SESSION_JWT_SECRET=... CRON_SECRET=... TELEGRAM_ALLOWED_USER_IDS=111,222 \
+ *     MINI_APP_URL=https://debt-bot.pages.dev
  *
  * Note: this is the *value* of the project's JWT Secret (Settings → API →
  * JWT Keys), but it can't be stored under the name SUPABASE_JWT_SECRET —
@@ -42,5 +43,9 @@ export const env = {
       .split(',')
       .map((id) => Number(id.trim()))
       .filter((id) => Number.isFinite(id))
+  },
+  /** Deployed Mini App origin (no trailing slash), e.g. https://debt-bot.pages.dev — used for the daily reminder's web_app deep link. */
+  get miniAppUrl() {
+    return required('MINI_APP_URL')
   },
 }
