@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { Home, CreditCard, Receipt as ReceiptIcon, MessageCircle } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { MascotAvatar } from '@/components/Mascot'
 import { haptic, closeApp } from '@/lib/telegram'
@@ -8,10 +7,10 @@ import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { cn } from '@/lib/utils'
 
 const TABS = [
-  { to: '/overview', label: 'Обзор', icon: Home, end: true },
-  { to: '/debts', label: 'Долги', icon: CreditCard, end: false },
-  { to: '/receipt', label: 'Чеки', icon: ReceiptIcon, end: false },
-  { to: '/chat', label: 'Чат', icon: MessageCircle, end: false },
+  { to: '/overview', label: 'Обзор', end: true },
+  { to: '/debts', label: 'Долги', end: false },
+  { to: '/receipt', label: 'Чеки', end: false },
+  { to: '/chat', label: 'Чат', end: false },
 ] as const
 
 export function TopBar({ title, subtitle, avatar = false }: { title: string; subtitle?: string; avatar?: boolean }) {
@@ -31,11 +30,19 @@ export function TopBar({ title, subtitle, avatar = false }: { title: string; sub
   )
 }
 
+/**
+ * Tabs are plain colored squares, not icons — matches the actual design
+ * reference (a screenshot of it, not the older fincore-redesign mock code,
+ * whose "replace with icons from your set" comment turned out to be stale).
+ * The active square carries the shared layoutId, so switching tabs slides
+ * it to the new position instead of just toggling color in place
+ * (ANIMATIONS.md §6's "sliding pill" — here the indicator IS the square).
+ */
 export function TabBar() {
   const reduced = useReducedMotion()
   return (
     <nav className="pb-safe shrink-0 flex border-t border-hf-line bg-hf-bar px-2 pt-2.5">
-      {TABS.map(({ to, label, icon: Icon, end }) => (
+      {TABS.map(({ to, label, end }) => (
         <NavLink
           key={to}
           to={to}
@@ -43,21 +50,23 @@ export function TabBar() {
           onClick={() => haptic('light')}
           className="flex flex-1 flex-col items-center gap-1.5"
         >
-          {({ isActive }) => (
-            <>
-              <span className="relative flex h-8 w-8 items-center justify-center">
-                {isActive && (
-                  <motion.span
-                    layoutId="tab-pill"
-                    className="absolute inset-0 rounded-full bg-hf-accent/15"
-                    transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 30 }}
-                  />
-                )}
-                <Icon className={cn('relative h-5 w-5', isActive ? 'text-hf-accent' : 'text-hf-text-4')} strokeWidth={2} />
-              </span>
-              <span className={cn('text-[11px]', isActive ? 'text-hf-text' : 'text-hf-text-4')}>{label}</span>
-            </>
-          )}
+          {({ isActive }) =>
+            isActive ? (
+              <>
+                <motion.span
+                  layoutId="tab-pill"
+                  className="h-5 w-5 rounded-md bg-hf-accent"
+                  transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 30 }}
+                />
+                <span className="text-[11px] text-hf-text">{label}</span>
+              </>
+            ) : (
+              <>
+                <span className="h-5 w-5 rounded-md bg-[#3A3F47]" />
+                <span className="text-[11px] text-hf-text-4">{label}</span>
+              </>
+            )
+          }
         </NavLink>
       ))}
     </nav>
