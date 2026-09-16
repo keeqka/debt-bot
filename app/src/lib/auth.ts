@@ -3,6 +3,7 @@ import { currentMockUser } from '@/lib/mock-data'
 import { getInitData, isInsideTelegram } from '@/lib/telegram'
 import { isBackendConfigured } from '@/lib/env'
 import { callFunction, setSessionJwt } from '@/lib/supabase'
+import { markSessionReady } from '@/lib/session-ready'
 import type { User } from '@/types/domain'
 
 interface AuthTelegramResponse {
@@ -27,6 +28,7 @@ let fallbackUser: User = currentMockUser
 export async function initSession(queryClient: QueryClient): Promise<void> {
   if (!isBackendConfigured) {
     queryClient.setQueryData(CURRENT_USER_KEY, currentMockUser)
+    markSessionReady()
     return
   }
 
@@ -34,6 +36,7 @@ export async function initSession(queryClient: QueryClient): Promise<void> {
   if (!isInsideTelegram() || !initData) {
     console.warn('initSession: not running inside Telegram, staying on the mock user')
     queryClient.setQueryData(CURRENT_USER_KEY, currentMockUser)
+    markSessionReady()
     return
   }
 
@@ -45,6 +48,11 @@ export async function initSession(queryClient: QueryClient): Promise<void> {
   } catch (error) {
     console.error('initSession failed — falling back to mock user', error)
     queryClient.setQueryData(CURRENT_USER_KEY, currentMockUser)
+  } finally {
+    // Every real data query gates on this (lib/supabase.ts) — must fire
+    // exactly once no matter which branch above was taken, or those queries
+    // wait forever instead of falling back.
+    markSessionReady()
   }
 }
 

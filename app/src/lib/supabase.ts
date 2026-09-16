@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { env, isBackendConfigured } from '@/lib/env'
+import { sessionReady } from '@/lib/session-ready'
 
 let sessionJwt: string | null = null
 
@@ -32,7 +33,13 @@ export const supabase = isBackendConfigured
   ? createClient(env.supabaseUrl!, env.supabaseAnonKey!, {
       auth: { persistSession: false },
       global: {
-        fetch: (input, init) => {
+        // Waits for initSession (lib/auth.ts) to settle before every table
+        // request — see lib/session-ready.ts. Without this, a query fired
+        // on mount (before the async auth round trip finishes) goes out
+        // with no JWT, RLS silently returns an empty result instead of an
+        // error, and the screen looks like nothing loaded.
+        fetch: async (input, init) => {
+          await sessionReady
           const headers = new Headers(init?.headers)
           if (sessionJwt) headers.set('Authorization', `Bearer ${sessionJwt}`)
           return fetch(input, { ...init, headers })
@@ -45,6 +52,12 @@ export const supabase = isBackendConfigured
 export async function callFunction<TResponse>(name: string, body: unknown): Promise<TResponse> {
   if (!isBackendConfigured) {
     throw new Error(`callFunction("${name}") invoked without Supabase configured`)
+  }
+  // Same gate as the table-fetch wrapper above, except for auth-telegram
+  // itself — that IS the call initSession is waiting on, so waiting here
+  // too would deadlock.
+  if (name !== 'auth-telegram') {
+    await sessionReady
   }
   const res = await fetch(`${env.supabaseUrl}/functions/v1/${name}`, {
     method: 'POST',
