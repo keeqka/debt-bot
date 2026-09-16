@@ -109,6 +109,21 @@ export const mockDebts: Debt[] = [
     notes: null,
     created_at: '2026-02-10T00:00:00Z',
   },
+  {
+    id: 'd4',
+    owner_user_id: 'u2',
+    title: 'Рассрочка на телефон',
+    creditor: 'Kaspi Red',
+    principal_amount: 180_000,
+    current_balance: 0,
+    currency: 'KZT',
+    interest_rate: 0,
+    minimum_payment: 0,
+    due_day: 15,
+    status: 'closed',
+    notes: 'Погашена в июле',
+    created_at: '2025-11-01T00:00:00Z',
+  },
 ]
 
 export const mockDebtPayments: DebtPayment[] = [
@@ -308,15 +323,83 @@ export const mockSubscription: Subscription = {
 }
 
 /** created_at of every past receipt/statement parse attempt — see receipt_scans in 0012_subscription_stub.sql. */
-export const mockReceiptScans: string[] = []
+export const mockReceiptScans: string[] = [
+  '2026-09-03T08:12:00Z',
+  '2026-09-05T14:40:00Z',
+  '2026-09-07T19:05:00Z',
+  '2026-09-09T07:55:00Z',
+  '2026-09-10T09:02:00Z',
+]
 
 export const mockChatMessages: ChatMessage[] = [
   {
     id: 'm1',
     user_id: 'u1',
     role: 'assistant',
-    content: 'Привет! Я вижу ваши доходы, расходы и долги — спрашивайте что угодно, например «Могу ли я купить MacBook за 750 000₸?» или «Запиши долг перед Kaspi на 200 000».',
+    content: 'Привет. Вижу ваши доходы, расходы и долги — спрашивайте что угодно, например «Могу ли я купить MacBook за 750 000₸?» или «Запиши долг перед Kaspi на 200 000».',
     model: 'claude-sonnet-5',
     created_at: '2026-09-10T09:00:00Z',
+  },
+  {
+    id: 'm2',
+    user_id: 'u1',
+    role: 'user',
+    content: 'На что уходят деньги в этом месяце?',
+    created_at: '2026-09-15T18:20:00Z',
+  },
+  {
+    id: 'm3',
+    user_id: 'u1',
+    role: 'assistant',
+    content: 'Больше всего съедает жильё — 210 000 ₸ за месяц.',
+    model: 'claude-sonnet-5',
+    data_widget: [
+      { name: 'Жильё', amount: 210_000, pct: 79 },
+      { name: 'Здоровье', amount: 32_000, pct: 12 },
+      { name: 'Продукты', amount: 18_400, pct: 7 },
+      { name: 'Транспорт', amount: 6_500, pct: 2 },
+    ],
+    quick_replies: ['А по всем категориям?', 'Сколько осталось до конца месяца?'],
+    created_at: '2026-09-15T18:20:08Z',
+  },
+  {
+    id: 'm4',
+    user_id: 'u1',
+    role: 'user',
+    content: 'Могу я купить MacBook за 750 000₸?',
+    created_at: '2026-09-15T18:22:00Z',
+  },
+  {
+    id: 'm5',
+    user_id: 'u1',
+    role: 'assistant',
+    content: 'После этой покупки свободный остаток снизится до **56 100 ₸** в месяц — впритык, но выполнимо, если без крупных трат до конца месяца.',
+    model: 'claude-sonnet-5',
+    quick_replies: ['А в рассрочку на 6 месяцев?', 'Лучше сначала закрыть долг?'],
+    created_at: '2026-09-15T18:22:09Z',
+  },
+  {
+    id: 'm6',
+    user_id: 'u2',
+    role: 'user',
+    content: 'Запиши долг перед Kaspi на 200000, ставка 22%',
+    created_at: '2026-09-16T07:05:00Z',
+  },
+  {
+    id: 'm7',
+    user_id: 'u2',
+    role: 'assistant',
+    content: 'Проверь цифры и подтверди в форме — сам ничего не сохраняю.',
+    model: 'claude-sonnet-5',
+    proposed_debt: {
+      title: 'Новый долг перед Kaspi',
+      creditor: 'Kaspi Bank',
+      principal_amount: 200_000,
+      current_balance: 200_000,
+      interest_rate: 22,
+      minimum_payment: null,
+      due_day: null,
+    },
+    created_at: '2026-09-16T07:05:07Z',
   },
 ]
