@@ -26,6 +26,22 @@ export function formatMoneyCompact(amount: number, currency = 'KZT') {
   return formatMoney(amount, currency)
 }
 
+/**
+ * Ещё короче, чем compact: тысячи тоже сворачиваются («540 тыс ₸»). Только для
+ * тесных строк списка, где сумма делит ряд с названием. Главную цифру экрана
+ * так печатать нельзя — «386 тыс ₸» вместо «386 000 ₸» отнимает точность там,
+ * где место есть.
+ */
+export function formatMoneyShort(amount: number, currency = 'KZT') {
+  const abs = Math.abs(amount)
+  if (abs >= 1_000_000) return formatMoneyCompact(amount, currency)
+  if (abs >= 100_000) {
+    const thousands = Math.round(amount / 1_000)
+    return `${new Intl.NumberFormat('ru-RU').format(thousands)} тыс ${currencySymbol(currency)}`
+  }
+  return formatMoney(amount, currency)
+}
+
 export function currencySymbol(currency = 'KZT') {
   try {
     const parts = new Intl.NumberFormat('ru-RU', { style: 'currency', currency, currencyDisplay: 'narrowSymbol' }).formatToParts(0)

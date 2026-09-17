@@ -14,7 +14,6 @@ import {
   useAddIncomesBulk,
   useCategories,
   useExpenses,
-  useDeleteExpense,
   useDeleteIncome,
   useIncomes,
   useLogReceiptScan,
@@ -26,6 +25,7 @@ import { parseReceipt, parseStatement } from '@/lib/api'
 import { fileToBase64 } from '@/lib/file-to-base64'
 import { formatMoney, formatDateShort } from '@/lib/format'
 import { AddTransactionDialog } from '@/components/finances/AddTransactionDialog'
+import { ExpenseDetailSheet } from '@/components/finances/ExpenseDetailSheet'
 import { cn } from '@/lib/utils'
 import type { Category, Expense, Income, ReceiptParseResult } from '@/types/domain'
 
@@ -56,13 +56,14 @@ export function Receipt() {
   const addExpense = useAddExpense()
   const addExpensesBulk = useAddExpensesBulk()
   const addIncomesBulk = useAddIncomesBulk()
-  const deleteExpense = useDeleteExpense()
   const deleteIncome = useDeleteIncome()
   const { data: subscription } = useSubscription()
   const { data: scanCount = 0 } = useReceiptScanCount()
   const logScan = useLogReceiptScan()
 
   const reduced = useReducedMotion()
+  const [openExpenseId, setOpenExpenseId] = useState<string | null>(null)
+  const openExpense = expenses?.find((e) => e.id === openExpenseId) ?? null
 
   const isFreeTier = subscription?.status !== 'active'
   const scansLeft = FREE_TIER_LIMIT - scanCount
@@ -255,7 +256,7 @@ export function Receipt() {
               expenses={expenses ?? []}
               incomes={incomes ?? []}
               categories={categories ?? []}
-              onDeleteExpense={(id) => deleteExpense.mutateAsync(id).then(() => toast.success('Расход удалён'))}
+              onOpenExpense={setOpenExpenseId}
               onDeleteIncome={(id) => deleteIncome.mutateAsync(id).then(() => toast.success('Доход удалён'))}
             />
           )}
@@ -291,6 +292,7 @@ export function Receipt() {
       </AnimatePresence>
 
       <AddTransactionDialog open={manualOpen} onOpenChange={setManualOpen} />
+      <ExpenseDetailSheet expense={openExpense} open={Boolean(openExpense)} onOpenChange={(open) => !open && setOpenExpenseId(null)} />
     </div>
   )
 }
@@ -302,7 +304,7 @@ function IdleView({
   expenses,
   incomes,
   categories,
-  onDeleteExpense,
+  onOpenExpense,
   onDeleteIncome,
 }: {
   onReceipt: () => void
@@ -311,7 +313,7 @@ function IdleView({
   expenses: Expense[]
   incomes: Income[]
   categories: Category[]
-  onDeleteExpense: (id: string) => void
+  onOpenExpense: (id: string) => void
   onDeleteIncome: (id: string) => void
 }) {
   const rows = [
@@ -354,29 +356,45 @@ function IdleView({
 
       <Eyebrow>Последнее</Eyebrow>
       <div className="flex flex-col gap-2">
-        {rows.map((row) => (
-          <div key={`${row.type}-${row.id}`} className="flex items-center justify-between gap-2.5 rounded-[14px] bg-hf-card px-3.5 py-3">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-hf-text">{row.label}</p>
-              <p className="text-[11px] text-hf-text-4">{formatDateShort(row.date)}</p>
+        {rows.map((row) =>
+          row.type === 'expense' ? (
+            <button
+              key={`expense-${row.id}`}
+              type="button"
+              onClick={() => onOpenExpense(row.id)}
+              className="flex w-full items-center justify-between gap-2.5 rounded-[14px] bg-hf-card px-3.5 py-3 text-left"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-hf-text">{row.label}</p>
+                <p className="text-[11px] text-hf-text-4">{formatDateShort(row.date)}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2.5">
+                {row.needsReview && (
+                  <span className="rounded-md border border-hf-warn-on-dark px-1.5 py-0.5 text-[11px] text-hf-warn-on-dark">уточнить</span>
+                )}
+                <span className="font-mono text-sm text-hf-text">−{formatMoney(row.amount, row.currency)}</span>
+              </div>
+            </button>
+          ) : (
+            <div key={`income-${row.id}`} className="flex items-center justify-between gap-2.5 rounded-[14px] bg-hf-card px-3.5 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-hf-text">{row.label}</p>
+                <p className="text-[11px] text-hf-text-4">{formatDateShort(row.date)}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2.5">
+                <span className="font-mono text-sm text-hf-ok">+{formatMoney(row.amount, row.currency)}</span>
+                <button
+                  type="button"
+                  onClick={() => onDeleteIncome(row.id)}
+                  aria-label={`Удалить: ${row.label}`}
+                  className="text-hf-text-4"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2.5">
-              {row.needsReview && <span className="rounded-md border border-hf-warn-on-dark px-1.5 py-0.5 text-[11px] text-hf-warn-on-dark">уточнить</span>}
-              <span className={cn('font-mono text-sm', row.type === 'income' ? 'text-hf-ok' : 'text-hf-text')}>
-                {row.type === 'income' ? '+' : '−'}
-                {formatMoney(row.amount, row.currency)}
-              </span>
-              <button
-                type="button"
-                onClick={() => (row.type === 'expense' ? onDeleteExpense(row.id) : onDeleteIncome(row.id))}
-                aria-label={`Удалить: ${row.label}`}
-                className="text-hf-text-4"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        ))}
+          ),
+        )}
         {rows.length === 0 && <p className="py-8 text-center text-[13px] text-hf-text-4">Записей пока нет — загрузи первый чек</p>}
       </div>
     </>

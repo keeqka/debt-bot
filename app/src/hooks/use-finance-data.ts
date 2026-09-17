@@ -235,6 +235,20 @@ export function useDeleteExpense() {
   })
 }
 
+export function useUpdateExpense() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Parameters<typeof api.updateExpense>[1] }) => api.updateExpense(id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses })
+      queryClient.invalidateQueries({ queryKey: queryKeys.status })
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Не удалось сохранить трату')
+    },
+  })
+}
+
 export function useDeleteIncome() {
   const queryClient = useQueryClient()
   return useMutation({

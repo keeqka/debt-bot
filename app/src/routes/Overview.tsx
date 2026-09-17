@@ -7,6 +7,7 @@ import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar, Mascot } from '@/components/Mascot'
 import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
+import { GoalsSection } from '@/components/goals/GoalsSection'
 import { useMonth, useExpenses, useDebts, useStatus, useDebtStrategy } from '@/hooks/use-finance-data'
 import { computeInsight } from '@/lib/insight'
 import { STATUS_META } from '@/lib/status'
@@ -207,6 +208,8 @@ export function Overview() {
           </span>
         </button>
       )}
+
+      <GoalsSection />
 
       <button
         type="button"

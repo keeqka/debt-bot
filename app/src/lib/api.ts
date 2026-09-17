@@ -222,6 +222,18 @@ export async function deleteExpense(id: string): Promise<void> {
   if (error) throw error
 }
 
+export async function updateExpense(id: string, patch: Partial<Omit<Expense, 'id' | 'user_id'>>): Promise<Expense> {
+  if (!isBackendConfigured || !supabase) {
+    const index = mock.mockExpenses.findIndex((e) => e.id === id)
+    if (index === -1) throw new Error('Трата не найдена')
+    mock.mockExpenses[index] = { ...mock.mockExpenses[index], ...patch }
+    return mock.mockExpenses[index]
+  }
+  const { data, error } = await supabase.from('expenses').update(patch).eq('id', id).select().single()
+  if (error) throw error
+  return data as Expense
+}
+
 export async function deleteIncome(id: string): Promise<void> {
   if (!isBackendConfigured || !supabase) {
     const index = mock.mockIncomes.findIndex((i) => i.id === id)
