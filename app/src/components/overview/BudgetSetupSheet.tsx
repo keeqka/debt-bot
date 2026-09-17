@@ -1,29 +1,35 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { Plus, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { useUpdateUser } from '@/hooks/use-finance-data'
+import { useAddCategory, useCategories, useDeleteCategory, useUpdateUser } from '@/hooks/use-finance-data'
 import { useCurrentUser } from '@/lib/auth'
 import { currencySymbol } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import type { CategoryType } from '@/types/domain'
 
 const inputClass =
   'h-10 w-full rounded-[10px] border border-hf-line bg-hf-bar px-3 text-[13px] text-hf-text placeholder:text-hf-text-4 focus:border-hf-accent focus:outline-none'
 
 /**
- * Замена «профилю пользователя»: три настройки, от которых реально зависят
- * цифры на «Обзоре» — доход, день зарплаты, ежедневное напоминание о чеках.
- * Ни аватара, ни имени, ни темы: в приложении один общий аккаунт, личная
- * страница ничего не решала.
- *
- * Категориями управляет экран «Чеки» (там они и выбираются), поэтому их
- * список сюда не переехал.
+ * Замена «профилю пользователя»: настройки, от которых реально зависят
+ * цифры на «Обзоре» — доход, день зарплаты, ежедневное напоминание о чеках —
+ * плюс категории (раньше жили в неиспользуемом ProfilePanel.tsx без входа
+ * в него; экран «Чеки» их только выбирает для строки, не создаёт и не
+ * удаляет). Ни аватара, ни имени, ни темы: в приложении один общий аккаунт,
+ * личная страница ничего не решала.
  */
 export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const user = useCurrentUser()
   const updateUser = useUpdateUser()
+  const { data: categories } = useCategories()
+  const addCategory = useAddCategory()
+  const deleteCategory = useDeleteCategory()
 
   const [income, setIncome] = useState(user.monthly_income?.toString() ?? '')
   const [payday, setPayday] = useState(user.payday?.toString() ?? '')
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [newCategoryType, setNewCategoryType] = useState<CategoryType>('expense')
 
   useEffect(() => {
     setIncome(user.monthly_income?.toString() ?? '')
@@ -44,14 +50,26 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
     updateUser.mutate({ id: user.id, patch: { payday: valid ? n : null } }, { onSuccess: () => toast.success('День зарплаты обновлён') })
   }
 
+  async function handleAddCategory() {
+    if (!newCategoryName.trim()) return
+    await addCategory.mutateAsync({ name: newCategoryName.trim(), icon: 'tag', type: newCategoryType })
+    setNewCategoryName('')
+    toast.success('Категория добавлена')
+  }
+
+  async function handleDeleteCategory(id: string) {
+    await deleteCategory.mutateAsync(id)
+    toast.success('Категория удалена')
+  }
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-[24px] border-hf-line bg-hf-bg">
+      <SheetContent side="bottom" className="flex max-h-[85vh] flex-col rounded-t-[24px] border-hf-line bg-hf-bg">
         <SheetHeader className="px-4 pt-1 pb-0">
           <SheetTitle className="text-[15px] font-medium text-hf-text">Бюджет и напоминания</SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-5 px-4 pb-8">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-8">
           <p className="text-[13px] leading-relaxed text-hf-text-3">
             От дохода считается «сколько можно тратить в день». Без него приложение показывает только факты.
           </p>
@@ -121,6 +139,66 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
               />
             </label>
           )}
+
+          <div className="space-y-3 border-t border-hf-line pt-4">
+            <p className="text-[13px] font-medium text-hf-text">Категории</p>
+            <ul className="space-y-1.5">
+              {categories?.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-2 rounded-[12px] bg-hf-card px-3 py-2.5">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-[13px] text-hf-text-2">{c.name}</span>
+                    <span className="shrink-0 font-mono text-[11px] text-hf-text-4">{c.type === 'expense' ? 'расход' : 'доход'}</span>
+                  </span>
+                  {c.is_system ? (
+                    <span className="shrink-0 font-mono text-[11px] text-hf-text-4">системная</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(c.id)}
+                      aria-label={`Удалить категорию ${c.name}`}
+                      className="shrink-0 text-hf-text-4"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex rounded-[12px] bg-hf-card p-1">
+              {(['expense', 'income'] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => setNewCategoryType(kind)}
+                  className={cn(
+                    'flex-1 rounded-[9px] py-2 text-[13px] transition-colors',
+                    newCategoryType === kind ? 'bg-hf-accent font-medium text-white' : 'text-hf-text-4',
+                  )}
+                >
+                  {kind === 'expense' ? 'Расход' : 'Доход'}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="Название категории"
+                className={cn(inputClass, 'min-w-0 flex-1')}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+              />
+              <button
+                type="button"
+                onClick={handleAddCategory}
+                disabled={addCategory.isPending}
+                aria-label="Добавить категорию"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-hf-card text-hf-text-2 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
       </SheetContent>
     </Sheet>

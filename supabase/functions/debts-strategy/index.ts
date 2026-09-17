@@ -11,26 +11,17 @@ import { requireSession } from '../_shared/auth.ts'
 import { callClaudeTool } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
 import { resolveBaseCurrency, currencyInstruction } from '../_shared/currency.ts'
+import { simulateDebtPayoff } from '../_shared/debt-simulation.ts'
 
-const STRATEGY_TOOL = {
+const EXPLANATION_TOOL = {
   name: 'report_debt_strategy',
-  description: 'Prices a debt payoff plan whose order is already decided.',
+  description: 'Explains an already-priced debt payoff plan in a couple of sentences.',
   input_schema: {
     type: 'object',
     properties: {
-      monthly_plan: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: { debt_id: { type: 'string' }, payment: { type: 'number' } },
-          required: ['debt_id', 'payment'],
-        },
-      },
-      estimated_payoff_date: { type: 'string', description: 'ISO date' },
-      total_interest_paid: { type: 'number' },
       explanation: { type: 'string', description: 'по-русски, 2-3 предложения, суммы в указанной валюте' },
     },
-    required: ['monthly_plan', 'estimated_payoff_date', 'total_interest_paid', 'explanation'],
+    required: ['explanation'],
   },
 }
 
@@ -68,31 +59,37 @@ Deno.serve(async (req) => {
 
     const currency = await resolveBaseCurrency(supabase)
     const algorithmLabel = strategy === 'avalanche' ? 'по убыванию ставки (avalanche)' : 'по возрастанию остатка (snowball)'
-    const result = await callClaudeTool({
-      system: `Долги уже упорядочены ${algorithmLabel} — не меняй этот порядок. Весь свободный остаток сверх минимальных платежей направляй на первый долг в списке, пока он не закроется, затем на следующий. Верни план ежемесячных платежей (по id долга), ожидаемую дату полного погашения и итоговую переплату по процентам. ${currencyInstruction(currency)}`,
+
+    // The payoff date, monthly plan and total interest are exact multi-month
+    // arithmetic — computed here, not asked of Claude (it used to invent
+    // values like estimated_payoff_date: "2000-01-15" when asked to do this
+    // itself). Claude only turns the already-correct numbers into prose.
+    const { monthlyPlan, estimatedPayoffDate, totalInterestPaid } = simulateDebtPayoff(
+      order.map((d) => ({ id: d.id, current_balance: d.current_balance, interest_rate: d.interest_rate, minimum_payment: d.minimum_payment })),
+      monthly_surplus,
+    )
+
+    const { explanation } = await callClaudeTool({
+      system: `Долги упорядочены ${algorithmLabel}. Объясни план своими словами, не пересчитывая и не называя других цифр, кроме уже данных. ${currencyInstruction(currency)}`,
       messages: [
         {
           role: 'user',
-          content: `Свободный остаток в месяц: ${monthly_surplus}\nДолги в порядке погашения (id, название, остаток, ставка %, мин. платёж):\n${order
-            .map((d) => `${d.id} | ${d.title} | ${d.current_balance} | ${d.interest_rate ?? 0}% | ${d.minimum_payment}`)
-            .join('\n')}`,
+          content: `Свободный остаток в месяц: ${monthly_surplus}\nДолги в порядке погашения (название, остаток, ставка %, мин. платёж):\n${order
+            .map((d) => `${d.title} | ${d.current_balance} | ${d.interest_rate ?? 0}% | ${d.minimum_payment}`)
+            .join('\n')}\n\nУже посчитано: дата полного погашения — ${estimatedPayoffDate ?? 'не наступит, минимальный платёж не покрывает проценты'}, переплата по процентам — ${totalInterestPaid}.`,
         },
       ],
-      tool: STRATEGY_TOOL,
+      tool: EXPLANATION_TOOL,
     })
 
-    // Claude's tool schema only *describes* estimated_payoff_date as "ISO
-    // date" — nothing enforces it. A debt whose minimum payment doesn't
-    // cover its own interest has no real payoff date at all (0 monthly
-    // surplus, in particular, is Overview's default query), and Claude can
-    // reasonably answer with something that isn't a parseable date. The
-    // frontend used to feed this straight into Intl.DateTimeFormat, which
-    // throws on an invalid date and crashed the whole screen — never store
-    // or return a value that can't actually be parsed as a date.
-    const parsedDate = new Date((result as { estimated_payoff_date?: string }).estimated_payoff_date ?? '')
-    const safeResult = { ...result, estimated_payoff_date: Number.isNaN(parsedDate.getTime()) ? null : result.estimated_payoff_date }
-
-    const payload = { strategy, payoff_order: order.map((d) => d.id), ...safeResult }
+    const payload = {
+      strategy,
+      payoff_order: order.map((d) => d.id),
+      monthly_plan: monthlyPlan,
+      estimated_payoff_date: estimatedPayoffDate,
+      total_interest_paid: totalInterestPaid,
+      explanation,
+    }
     await supabase.from('ai_insights').insert({ type: 'debt_strategy', payload })
 
     return jsonResponse(payload)

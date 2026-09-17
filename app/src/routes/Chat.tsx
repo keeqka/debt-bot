@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Copy, Check, CreditCard, Trash2 } from 'lucide-react'
+import { Send, Copy, Check, CreditCard, Tag, Trash2 } from 'lucide-react'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar } from '@/components/Mascot'
-import { useChatMessages, useClearChat, useSendChatMessage } from '@/hooks/use-finance-data'
+import { useAddCategory, useChatMessages, useClearChat, useSendChatMessage } from '@/hooks/use-finance-data'
 import { formatMoney } from '@/lib/format'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
 import { useHeaderAction } from '@/lib/header-action'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
-import type { ChatDataWidgetRow, ProposedDebt } from '@/types/domain'
+import type { ChatDataWidgetRow, ProposedCategory, ProposedDebt } from '@/types/domain'
 
 const SUGGESTIONS = ['Могу я купить MacBook за 750 000₸?', 'Как быстрее закрыть долги?', 'Сколько я трачу на еду в месяц?']
 
@@ -35,9 +35,11 @@ export function Chat() {
   const { data: messages, isLoading } = useChatMessages()
   const sendMessage = useSendChatMessage()
   const clearChat = useClearChat()
+  const addCategory = useAddCategory()
   const [draft, setDraft] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [debtPrefill, setDebtPrefill] = useState<ProposedDebt | null>(null)
+  const [addedCategoryIds, setAddedCategoryIds] = useState<Set<string>>(new Set())
   const [confirmClear, setConfirmClear] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const reduced = useReducedMotion()
@@ -69,6 +71,12 @@ export function Chat() {
     setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 1500)
   }
 
+  async function handleAddCategory(messageId: string, category: ProposedCategory) {
+    await addCategory.mutateAsync({ name: category.name, icon: 'tag', type: category.type })
+    setAddedCategoryIds((prev) => new Set(prev).add(messageId))
+    toast.success('Категория добавлена')
+  }
+
   async function confirmClearChat() {
     await clearChat.mutateAsync()
     toast.success('История чата очищена')
@@ -95,7 +103,7 @@ export function Chat() {
     // between the fixed TopBar/BottomTabBar (see AppShell.tsx) — h-full just
     // fills exactly that, so the message list scrolls in place below and the
     // input stays pinned at the bottom of the tab.
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col pb-3">
       <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-2">
         {isLoading ? (
           <div className="h-16 w-3/4 animate-pulse rounded-2xl bg-hf-card" />
@@ -128,6 +136,14 @@ export function Chat() {
                 </div>
 
                 {m.proposed_debt && <ProposedDebtCard debt={m.proposed_debt} onAdd={() => setDebtPrefill(m.proposed_debt!)} />}
+                {m.proposed_category && (
+                  <ProposedCategoryCard
+                    category={m.proposed_category}
+                    added={addedCategoryIds.has(m.id)}
+                    pending={addCategory.isPending}
+                    onAdd={() => handleAddCategory(m.id, m.proposed_category!)}
+                  />
+                )}
 
                 <button
                   onClick={() => handleCopy(m.id, m.content)}
@@ -262,6 +278,37 @@ function ProposedDebtCard({ debt, onAdd }: { debt: ProposedDebt; onAdd: () => vo
       </div>
       <button type="button" onClick={onAdd} className="w-full rounded-[10px] bg-hf-accent py-2 text-xs font-medium text-white">
         Добавить долг
+      </button>
+    </div>
+  )
+}
+
+function ProposedCategoryCard({
+  category,
+  added,
+  pending,
+  onAdd,
+}: {
+  category: ProposedCategory
+  added: boolean
+  pending: boolean
+  onAdd: () => void
+}) {
+  return (
+    <div className="ml-9 flex w-fit max-w-[82%] items-center gap-3 rounded-[16px_16px_16px_4px] bg-hf-card p-3">
+      <div className="flex min-w-0 items-center gap-1.5 text-xs text-hf-text">
+        <Tag className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">
+          {category.name} · {category.type === 'expense' ? 'расход' : 'доход'}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onAdd}
+        disabled={added || pending}
+        className="shrink-0 rounded-[8px] bg-hf-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+      >
+        {added ? 'Добавлена' : 'Добавить'}
       </button>
     </div>
   )

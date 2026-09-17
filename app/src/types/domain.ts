@@ -156,6 +156,12 @@ export interface ProposedDebt {
   due_day: number | null
 }
 
+/** What the chat advisor proposed when the user asked it to add a category — one tap to actually create it, no form (unlike a debt, there's nothing here worth reviewing first). */
+export interface ProposedCategory {
+  name: string
+  type: CategoryType
+}
+
 export interface ChatDataWidgetRow {
   name: string
   amount: number
@@ -170,6 +176,7 @@ export interface ChatMessage {
   /** Which Claude model produced this reply (assistant messages only). */
   model?: string | null
   proposed_debt?: ProposedDebt | null
+  proposed_category?: ProposedCategory | null
   /** A numeric breakdown rendered on paper inside the bubble instead of text with percentages (ТЗ FUNCTIONAL.md §6). */
   data_widget?: ChatDataWidgetRow[] | null
   /** 2-3 suggested follow-up questions shown under this message. */

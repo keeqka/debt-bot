@@ -394,6 +394,7 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
     await new Promise((r) => setTimeout(r, 700))
 
     const wantsDebt = /долг|кредит|рассрочк/i.test(content)
+    const wantsCategory = /категори/i.test(content)
     const wantsBreakdown = /сколько.*(трачу|уходит)|на что.*деньги|разбивк/i.test(content)
     const reply: ChatMessage = wantsDebt
       ? {
@@ -414,7 +415,17 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
           quick_replies: ['Какая ставка обычно у такого долга?', 'Добавь ещё один долг'],
           created_at: new Date().toISOString(),
         }
-      : wantsBreakdown
+      : wantsCategory
+        ? {
+            id: crypto.randomUUID(),
+            user_id: mock.currentMockUser.id,
+            role: 'assistant',
+            content: 'Добавить такую категорию?',
+            model: 'claude-sonnet-5',
+            proposed_category: { name: 'Подписки (демо)', type: 'expense' },
+            created_at: new Date().toISOString(),
+          }
+        : wantsBreakdown
         ? {
             id: crypto.randomUUID(),
             user_id: mock.currentMockUser.id,

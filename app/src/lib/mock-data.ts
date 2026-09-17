@@ -402,4 +402,20 @@ export const mockChatMessages: ChatMessage[] = [
     },
     created_at: '2026-09-16T07:05:07Z',
   },
+  {
+    id: 'm8',
+    user_id: 'u2',
+    role: 'user',
+    content: 'Добавь категорию Подписки',
+    created_at: '2026-09-16T07:06:00Z',
+  },
+  {
+    id: 'm9',
+    user_id: 'u2',
+    role: 'assistant',
+    content: 'Добавить категорию «Подписки» на расходы?',
+    model: 'claude-sonnet-5',
+    proposed_category: { name: 'Подписки', type: 'expense' },
+    created_at: '2026-09-16T07:06:04Z',
+  },
 ]

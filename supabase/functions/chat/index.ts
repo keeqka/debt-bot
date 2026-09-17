@@ -1,13 +1,16 @@
 // ТЗ §7.7: AI advisor chat. The financial snapshot is re-attached to every
 // call (not "remembered" by the model across turns) so it never goes stale.
 //
-// Two client tools the model can reach for:
+// Client tools the model can reach for — this is what makes it an assistant
+// for the whole app, not just a Q&A box:
 //  - model_purchase_impact — "могу ли я купить MacBook за X?" gets a computed
 //    projection instead of a guess; the frontend renders it as a card.
 //  - propose_debt — "запиши мне долг перед Kaspi на 350 000" gets turned into
 //    a pre-filled "Новый долг" form for the user to review and save
 //    themselves. The model NEVER writes to the database directly — same
 //    confirm-before-save rule as receipts and the screenshot debt-assist.
+//  - propose_category — "добавь категорию Подписки" gets a one-tap confirm
+//    card (no form: unlike a debt there's nothing here worth reviewing).
 // web_search is also available (server-side, no client handling needed) so
 // the advisor isn't limited to what's in the database for general questions.
 
@@ -53,6 +56,21 @@ const PROPOSE_DEBT_TOOL = {
   },
 }
 
+const PROPOSE_CATEGORY_TOOL = {
+  name: 'propose_category',
+  description:
+    'Propose creating a new expense/income category the user asked for in chat ("добавь категорию Подписки"). Shown as a one-tap confirm in the bubble — nothing is created until the user taps it.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      type: { type: 'string', enum: ['expense', 'income'] },
+      confirmation_text: { type: 'string', description: 'по-русски: короткая фраза с предложением добавить эту категорию' },
+    },
+    required: ['name', 'type', 'confirmation_text'],
+  },
+}
+
 const DATA_WIDGET_TOOL = {
   name: 'render_data_widget',
   description:
@@ -90,7 +108,7 @@ const SUGGEST_FOLLOWUPS_TOOL = {
   },
 }
 
-const ALL_TOOLS = [PURCHASE_IMPACT_TOOL, PROPOSE_DEBT_TOOL, DATA_WIDGET_TOOL, SUGGEST_FOLLOWUPS_TOOL, WEB_SEARCH_TOOL]
+const ALL_TOOLS = [PURCHASE_IMPACT_TOOL, PROPOSE_DEBT_TOOL, PROPOSE_CATEGORY_TOOL, DATA_WIDGET_TOOL, SUGGEST_FOLLOWUPS_TOOL, WEB_SEARCH_TOOL]
 
 function computePurchaseImpact(
   input: { item_name: string; amount: number; payment_type: 'one_time' | 'installments'; installment_months?: number },
@@ -143,7 +161,8 @@ Deno.serve(async (req) => {
     const history = (historyDesc ?? []).slice().reverse()
 
     const snapshot = await buildFinancialSnapshot(supabase)
-    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.`
+    const categoryNames = snapshot.expensesByCategory.map((c) => c.category).join(', ') || '—'
+    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.`
 
     const messages: ClaudeMessage[] = history
       .filter((m: { role: string }) => m.role === 'user' || m.role === 'assistant')
@@ -153,6 +172,7 @@ Deno.serve(async (req) => {
 
     let finalText = ''
     let proposedDebt: Record<string, unknown> | null = null
+    let proposedCategory: Record<string, unknown> | null = null
     let dataWidget: unknown[] | null = null
     // Which response to scan for suggest_followups — the second (post-tool-result)
     // turn when one happened, otherwise the first. Claude can emit multiple
@@ -163,6 +183,7 @@ Deno.serve(async (req) => {
 
     const purchaseToolUse = findToolUse(first.content, 'model_purchase_impact')
     const proposeDebtToolUse = findToolUse(first.content, 'propose_debt')
+    const proposeCategoryToolUse = findToolUse(first.content, 'propose_category')
     const dataWidgetToolUse = findToolUse(first.content, 'render_data_widget')
 
     if (purchaseToolUse && first.stop_reason === 'tool_use') {
@@ -183,6 +204,10 @@ Deno.serve(async (req) => {
       const { confirmation_text, ...draft } = proposeDebtToolUse.input as Record<string, unknown> & { confirmation_text: string }
       finalText = confirmation_text || 'Проверьте предложенные данные и подтвердите добавление долга в форме.'
       proposedDebt = draft
+    } else if (proposeCategoryToolUse) {
+      const { confirmation_text, ...draft } = proposeCategoryToolUse.input as Record<string, unknown> & { confirmation_text: string }
+      finalText = confirmation_text || 'Добавить такую категорию?'
+      proposedCategory = draft
     } else if (dataWidgetToolUse) {
       const { caption, rows } = dataWidgetToolUse.input as { caption?: string; rows: unknown[] }
       finalText = caption || (first.content.find((b) => b.type === 'text') as { text: string } | undefined)?.text || ''
@@ -203,6 +228,7 @@ Deno.serve(async (req) => {
         context_snapshot: snapshot,
         model: CLAUDE_MODEL_DEFAULT,
         proposed_debt: proposedDebt,
+        proposed_category: proposedCategory,
         data_widget: dataWidget,
         quick_replies: quickReplies,
       })
