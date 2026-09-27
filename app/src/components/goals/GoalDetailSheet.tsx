@@ -6,9 +6,9 @@ import { Eyebrow } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
-import { useBankProducts, useUpdateGoal, useMonth, useDebtFreeDate } from '@/hooks/use-finance-data'
+import { useBankProducts, useUpdateGoal, useMonth } from '@/hooks/use-finance-data'
 import { formatMoney, formatMoneyCompact, formatDate, formatPercent } from '@/lib/format'
-import { goalMath, monthLabel, goalMoneyPerMonth, forecastGoalFromBudget } from '@/lib/goal'
+import { goalMath, monthLabel, goalMoneyPerMonth, goalsWaitUntil, forecastGoalFromBudget } from '@/lib/goal'
 import { AddGoalDialog } from '@/components/goals/AddGoalDialog'
 import { ContributeDialog } from '@/components/goals/ContributeDialog'
 import type { Goal } from '@/types/domain'
@@ -23,18 +23,19 @@ export function GoalDetailSheet({ goal, open, onOpenChange }: { goal: Goal | nul
   const { data: bankProducts } = useBankProducts()
   const updateGoal = useUpdateGoal()
   const month = useMonth()
-  const debtFreeDate = useDebtFreeDate()
   const [editOpen, setEditOpen] = useState(false)
   const [contributeOpen, setContributeOpen] = useState(false)
   const [confirmPause, setConfirmPause] = useState(false)
 
   if (!goal) return null
   const math = goalMath(goal)
-  const debtsFirst = month?.planTarget === 'debts'
-  const perMonth = month ? goalMoneyPerMonth(month) : 0
-  const forecast = month ? forecastGoalFromBudget(goal, month, debtFreeDate) : null
+  // Цели ждут, пока план не дойдёт до них (долги / подушка впереди). Подушка ждать не может — это отдельная строка плана.
+  const waitUntil = month && !goal.is_cushion ? goalsWaitUntil(month) : null
+  const debtsFirst = Boolean(waitUntil)
+  const perMonth = month ? (goal.is_cushion ? month.plan.now.toCushion : goalMoneyPerMonth(month)) : 0
+  const forecast = month ? forecastGoalFromBudget(goal, month) : null
   // Сравниваем с деньгами, которые реально пойдут на цели (lib/budget.ts), а не с остатком месяца.
-  const shareOfFree = !debtsFirst && perMonth > 0 && math.monthlyNeeded ? math.monthlyNeeded / perMonth : null
+  const shareOfFree = !debtsFirst && !goal.is_cushion && perMonth > 0 && math.monthlyNeeded ? math.monthlyNeeded / perMonth : null
 
   async function pause() {
     if (!goal) return
@@ -105,7 +106,7 @@ export function GoalDetailSheet({ goal, open, onOpenChange }: { goal: Goal | nul
             <div className="space-y-1">
               <p className="text-[11px] text-hf-text-4">Закроется</p>
               <p className="text-[15px] font-medium text-hf-text">
-                {debtsFirst
+                {debtsFirst || goal.is_cushion
                   ? forecast
                     ? monthLabel(forecast)
                     : '—'
@@ -120,7 +121,7 @@ export function GoalDetailSheet({ goal, open, onOpenChange }: { goal: Goal | nul
 
           {debtsFirst && !math.done && (
             <p className="text-[11px] leading-snug text-hf-text-4">
-              {`Сейчас всё свободное идёт в долги${debtFreeDate ? `, последний закроется: ${monthLabel(debtFreeDate)}` : '.'} Потом на цели — ${formatMoneyCompact(perMonth, goal.currency)} в месяц${forecast ? `, эта цель соберётся: ${monthLabel(forecast)}` : '.'}`}
+              {`По плану деньги на цели пойдут с месяца: ${monthLabel(waitUntil!)}. Тогда — ${formatMoneyCompact(perMonth, goal.currency)} в месяц${forecast ? `, эта цель соберётся: ${monthLabel(forecast)}` : '.'}`}
             </p>
           )}
           {shareOfFree != null && (

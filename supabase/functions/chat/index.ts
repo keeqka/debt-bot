@@ -11,6 +11,11 @@
 //    confirm-before-save rule as receipts and the screenshot debt-assist.
 //  - propose_category — "добавь категорию Подписки" gets a one-tap confirm
 //    card (no form: unlike a debt there's nothing here worth reviewing).
+//  - propose_settings_change — money model, debt strategy, cushion, income,
+//    reminders; the card shows before/after computed by rerunning the budget,
+//    applied only on tap.
+//  - simulate_debt_scenarios — strategy comparisons and "what if" runs on the
+//    same planner the app uses; the model explains numbers, never invents them.
 // web_search is also available (server-side, no client handling needed) so
 // the advisor isn't limited to what's in the database for general questions.
 
@@ -18,8 +23,8 @@ import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
 import { callClaudeRaw, CLAUDE_MODEL_DEFAULT, WEB_SEARCH_TOOL, type ClaudeMessage } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
-import { avalancheOrder, buildFinancialSnapshot, snapshotToPrompt, type FinancialSnapshot } from '../_shared/finance-context.ts'
-import { simulateDebtPayoff } from '../_shared/debt-simulation.ts'
+import { buildFinancialSnapshot, snapshotToPrompt, type FinancialSnapshot } from '../_shared/finance-context.ts'
+import { computeBudget, orderDebts, simulatePlan, type DebtStrategy, type PlanDebt, type PlanSettings } from '../_shared/budget.ts'
 import { PERSONA } from '../_shared/persona.ts'
 
 const PURCHASE_IMPACT_TOOL = {
@@ -72,6 +77,55 @@ const PROPOSE_CATEGORY_TOOL = {
   },
 }
 
+const PROPOSE_SETTINGS_TOOL = {
+  name: 'propose_settings_change',
+  description:
+    'Propose changing the app settings the user asked about (money model, debt strategy, cushion size, split, income, payday, reminders). Nothing changes until the user taps «Применить»; the card shows the recomputed consequences.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      changes: {
+        type: 'object',
+        properties: {
+          priority_mode: { type: 'string', enum: ['debts_first', 'cushion_first', 'split', 'ladder'] },
+          debt_strategy: { type: 'string', enum: ['avalanche', 'snowball', 'cash_flow'] },
+          cushion_months: { type: 'number', description: '1-12' },
+          split_debt_pct: { type: 'number', description: '0-100, доля свободных денег в долги (режим split)' },
+          high_rate_threshold: { type: 'number', description: '% годовых, с которого долг считается дорогим (режим ladder)' },
+          monthly_income: { type: ['number', 'null'], description: 'доход в месяц автора сообщения' },
+          payday: { type: ['number', 'null'], description: '1-31' },
+          daily_reminder_enabled: { type: 'boolean' },
+          daily_reminder_time: { type: 'string', description: 'HH:MM' },
+        },
+      },
+      confirmation_text: { type: 'string', description: 'по-русски, голосом «Чека»: что меняется и главное последствие, одно-два предложения' },
+    },
+    required: ['changes', 'confirmation_text'],
+  },
+}
+
+const SIMULATE_SCENARIOS_TOOL = {
+  name: 'simulate_debt_scenarios',
+  description:
+    'Computes the debt payoff plan for all three strategies (avalanche, snowball, cash_flow) on current money and on a scenario: more/less per month, a one-off lump sum, refinancing a debt at a new rate, or a different money mode. Returns dates, total interest, closing order, and a minimums-only baseline. Use for any question about strategies, "what if", "how to close faster", refinancing.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      extra_per_month_delta: { type: 'number', description: 'на сколько больше (или меньше, отрицательное) вносить в месяц сверх текущего плана' },
+      lump_sum: { type: 'number', description: 'разовая сумма в долги прямо сейчас' },
+      refinance: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { debt_title: { type: 'string' }, new_rate: { type: 'number' }, new_min_payment: { type: 'number' } },
+          required: ['debt_title', 'new_rate'],
+        },
+      },
+      mode: { type: 'string', enum: ['debts_first', 'cushion_first', 'split', 'ladder'] },
+    },
+  },
+}
+
 const DATA_WIDGET_TOOL = {
   name: 'render_data_widget',
   description:
@@ -109,12 +163,176 @@ const SUGGEST_FOLLOWUPS_TOOL = {
   },
 }
 
-const ALL_TOOLS = [PURCHASE_IMPACT_TOOL, PROPOSE_DEBT_TOOL, PROPOSE_CATEGORY_TOOL, DATA_WIDGET_TOOL, SUGGEST_FOLLOWUPS_TOOL, WEB_SEARCH_TOOL]
+const ALL_TOOLS = [
+  PURCHASE_IMPACT_TOOL,
+  SIMULATE_SCENARIOS_TOOL,
+  PROPOSE_SETTINGS_TOOL,
+  PROPOSE_DEBT_TOOL,
+  PROPOSE_CATEGORY_TOOL,
+  DATA_WIDGET_TOOL,
+  SUGGEST_FOLLOWUPS_TOOL,
+  WEB_SEARCH_TOOL,
+]
 
 function monthsBetween(fromIso: string, toIso: string) {
   const a = new Date(fromIso)
   const b = new Date(toIso)
   return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth())
+}
+
+function planDebts(snapshot: FinancialSnapshot): PlanDebt[] {
+  return snapshot.debts.map((d) => ({ id: d.id, title: d.title, balance: d.balance, rate: d.rate, min: d.min_payment }))
+}
+
+/** The household plan with some inputs swapped — same simulation the app runs (_shared/budget.ts). */
+function planWith(
+  snapshot: FinancialSnapshot,
+  o: { monthlyExtra?: number; settings?: Partial<PlanSettings>; debts?: PlanDebt[]; rollover?: boolean } = {},
+) {
+  const b = snapshot.budget
+  return simulatePlan({
+    debts: o.debts ?? planDebts(snapshot),
+    monthlyExtra: o.monthlyExtra ?? b.planExtra,
+    settings: { ...b.settings, ...o.settings },
+    cushionBalance: b.cushionBalance,
+    monthlyNeed: b.monthlyNeed,
+    start: snapshot.budgetInput.today ?? new Date(),
+    rollover: o.rollover,
+  })
+}
+
+const STRATEGIES: DebtStrategy[] = ['avalanche', 'snowball', 'cash_flow']
+
+/**
+ * Debt strategy talk grounded in arithmetic: every number the model quotes
+ * about "what if" comes from here, never from its own head. Runs all three
+ * strategies on the current money and on the scenario (more/less per month,
+ * a one-off lump sum, a refinanced debt), plus a minimums-only baseline.
+ */
+function simulateScenarios(
+  input: {
+    extra_per_month_delta?: number
+    lump_sum?: number
+    refinance?: Array<{ debt_title: string; new_rate: number; new_min_payment?: number }>
+    mode?: PlanSettings['mode']
+  },
+  snapshot: FinancialSnapshot,
+) {
+  const b = snapshot.budget
+  const r = (n: number) => Math.round(n)
+  let debts = planDebts(snapshot)
+  const notes: string[] = []
+
+  for (const rf of input.refinance ?? []) {
+    const target = debts.find((d) => d.title.toLowerCase().includes(rf.debt_title.toLowerCase()))
+    if (!target) {
+      notes.push(`Долг «${rf.debt_title}» не найден — рефинансирование не учтено.`)
+      continue
+    }
+    debts = debts.map((d) => (d.id === target.id ? { ...d, rate: rf.new_rate, min: rf.new_min_payment ?? d.min } : d))
+  }
+
+  const describe = (strategy: DebtStrategy, extra: number, list: PlanDebt[]) => {
+    const p = planWith(snapshot, { monthlyExtra: extra, debts: list, settings: { strategy, ...(input.mode ? { mode: input.mode } : {}) } })
+    return {
+      debt_free_date: p.debtFreeDate,
+      months: p.debtFreeMonths,
+      total_interest: p.totalInterest,
+      closing_order: p.closures.map((c) => `${c.title} — ${c.date}`),
+      cushion_full_date: p.cushionFullDate,
+    }
+  }
+
+  const withLump = (strategy: DebtStrategy) => {
+    let left = Math.max(0, input.lump_sum ?? 0)
+    return orderDebts(debts, strategy).map((d) => {
+      const pay = Math.min(left, d.balance)
+      left -= pay
+      return { ...d, balance: d.balance - pay }
+    })
+  }
+
+  const scenarioExtra = Math.max(0, b.planExtra + (input.extra_per_month_delta ?? 0))
+  const current = Object.fromEntries(STRATEGIES.map((st) => [st, describe(st, b.planExtra, planDebts(snapshot))]))
+  const scenario = Object.fromEntries(STRATEGIES.map((st) => [st, describe(st, scenarioExtra, withLump(st))]))
+  const minimumsOnly = planWith(snapshot, { monthlyExtra: 0, rollover: false })
+
+  return {
+    selected_strategy: b.settings.strategy,
+    selected_mode: input.mode ?? b.settings.mode,
+    extra_per_month_now: r(b.planExtra),
+    extra_per_month_scenario: r(scenarioExtra),
+    lump_sum: r(input.lump_sum ?? 0),
+    current_by_strategy: current,
+    scenario_by_strategy: scenario,
+    minimums_only: { debt_free_date: minimumsOnly.debtFreeDate, total_interest: minimumsOnly.totalInterest },
+    notes,
+  }
+}
+
+type SettingsChange = {
+  priority_mode?: PlanSettings['mode']
+  debt_strategy?: DebtStrategy
+  cushion_months?: number
+  split_debt_pct?: number
+  high_rate_threshold?: number
+  monthly_income?: number | null
+  payday?: number | null
+  daily_reminder_enabled?: boolean
+  daily_reminder_time?: string
+}
+
+/**
+ * A settings change the model proposed, split into household vs the sender's
+ * own user fields, with its consequences computed by rerunning the whole
+ * budget on the changed inputs — so the card shows real before/after numbers.
+ */
+function buildSettingsProposal(changes: SettingsChange, snapshot: FinancialSnapshot, userId: string) {
+  const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
+  const household: Record<string, unknown> = {}
+  if (changes.priority_mode) household.priority_mode = changes.priority_mode
+  if (changes.debt_strategy) household.debt_strategy = changes.debt_strategy
+  if (changes.cushion_months != null) household.cushion_months = clamp(changes.cushion_months, 1, 12)
+  if (changes.split_debt_pct != null) household.split_debt_pct = Math.round(clamp(changes.split_debt_pct, 0, 100))
+  if (changes.high_rate_threshold != null) household.high_rate_threshold = clamp(changes.high_rate_threshold, 0, 100)
+
+  const user: Record<string, unknown> = {}
+  if (changes.monthly_income !== undefined) user.monthly_income = changes.monthly_income
+  if (changes.payday !== undefined) user.payday = changes.payday == null ? null : Math.round(clamp(changes.payday, 1, 31))
+  if (changes.daily_reminder_enabled !== undefined) user.daily_reminder_enabled = changes.daily_reminder_enabled
+  if (changes.daily_reminder_time) user.daily_reminder_time = changes.daily_reminder_time
+
+  const before = snapshot.budget
+  const after = computeBudget({
+    ...snapshot.budgetInput,
+    userIncomes:
+      user.monthly_income !== undefined
+        ? snapshot.users.map((u) => (u.id === userId ? (user.monthly_income as number | null) : u.monthly_income))
+        : snapshot.budgetInput.userIncomes,
+    settings: {
+      ...before.settings,
+      ...(household.priority_mode ? { mode: household.priority_mode as PlanSettings['mode'] } : {}),
+      ...(household.debt_strategy ? { strategy: household.debt_strategy as DebtStrategy } : {}),
+      ...(household.cushion_months != null ? { cushionMonths: household.cushion_months as number } : {}),
+      ...(household.split_debt_pct != null ? { splitDebtPct: household.split_debt_pct as number } : {}),
+      ...(household.high_rate_threshold != null ? { highRateThreshold: household.high_rate_threshold as number } : {}),
+    },
+  })
+
+  return {
+    ...(Object.keys(household).length ? { household } : {}),
+    ...(Object.keys(user).length ? { user, user_id: userId } : {}),
+    preview: {
+      debt_free_before: before.plan.debtFreeDate,
+      debt_free_after: after.plan.debtFreeDate,
+      interest_before: before.plan.totalInterest,
+      interest_after: after.plan.totalInterest,
+      cushion_full_before: before.plan.cushionFullDate,
+      cushion_full_after: after.plan.cushionFullDate,
+      per_day_before: before.perDay,
+      per_day_after: after.perDay,
+    },
+  }
 }
 
 /**
@@ -137,10 +355,8 @@ function computePurchaseImpact(
   if (input.payment_type === 'installments') {
     const months = Math.max(1, input.installment_months ?? 12)
     const monthly = input.amount / months
-    let newDebtFreeDate: string | null = snapshot.debtFreeDate
-    if (b.planTarget === 'debts' && snapshot.debts.length) {
-      newDebtFreeDate = simulateDebtPayoff(avalancheOrder(snapshot.debts), Math.max(0, b.planExtra - monthly)).estimatedPayoffDate
-    }
+    // Верхняя оценка: платёж вычитается из свободных денег на весь горизонт плана.
+    const newDebtFreeDate = snapshot.debts.length ? planWith(snapshot, { monthlyExtra: Math.max(0, b.planExtra - monthly) }).debtFreeDate : null
     const delay = snapshot.debtFreeDate && newDebtFreeDate ? monthsBetween(snapshot.debtFreeDate, newDebtFreeDate) : null
     return {
       ...base,
@@ -151,7 +367,7 @@ function computePurchaseImpact(
         monthly > b.planExtra
           ? `Платёж ${r(monthly)} ${cur} в месяц больше, чем остаётся сверх обычных трат и минимальных платежей (${r(b.planExtra)}) — рассрочка уйдёт в минус.`
           : b.planTarget === 'debts'
-            ? `Рассрочка заберёт ${r(monthly)} из ${r(b.planExtra)} ${cur} в месяц, которые сейчас идут в долги${delay ? ` — закрытие долгов сдвинется на ${delay} мес.` : '.'}`
+            ? `Рассрочка заберёт ${r(monthly)} из ${r(b.planExtra)} ${cur} в месяц, которые сейчас идут в долги${delay ? ` — закрытие долгов сдвинется до ${delay} мес.` : '.'}`
             : `Влезает: ${r(monthly)} из ${r(b.planExtra)} ${cur} свободных в месяц.`,
     }
   }
@@ -273,7 +489,7 @@ Deno.serve(async (req) => {
 
     const snapshot = await buildFinancialSnapshot(supabase)
     const categoryNames = snapshot.categoryNames.join(', ') || '—'
-    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз. Главное последствие — насколько сдвинется закрытие долгов.\n- Спрашивают, где перерасход, на что ушло больше обычного, нет ли странных трат — опирайся на блок «Перерасход и аномалии» и «обычно за месяц» по категориям; разбивку показывай через render_data_widget.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.\n\n${MOOD_AND_EXAMPLES}`
+    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию, поменять настройки и модель денег семьи), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз. Главное последствие — насколько сдвинется закрытие долгов.\n- Стратегии погашения, «что если», как закрыть быстрее, рефинансирование, сравнение режимов — сначала simulate_debt_scenarios, потом объясняй полученные цифры. Даты, переплату и порядок закрытия бери только из результата — никогда не считай в уме.\n- Про методы говори как есть: лавина экономит больше всего на процентах; снежный ком чаще закрывает долги (это мотивация, а не экономия); поток (Cash Flow Index) быстрее освобождает деньги в месяц; подушка защищает от новых долгов при потере дохода, но долги закрываются позже и переплата выше. Рефинансирование выгодно, только если новая ставка ниже с учётом комиссий — комиссии спроси, если их не назвали.\n- Просят поменять режим, стратегию, подушку, долю в долги, порог дорогого долга, доход, день зарплаты, напоминания — propose_settings_change. НИКОГДА не говори, что настройка уже изменена: она применится по кнопке «Применить». Спрашивают, какой режим выбрать, — посчитай варианты через simulate_debt_scenarios (параметр mode), назови плюсы и минусы и предложи одну смену карточкой.\n- Спрашивают, где перерасход, на что ушло больше обычного, нет ли странных трат — опирайся на блок «Перерасход и аномалии» и «обычно за месяц» по категориям; разбивку показывай через render_data_widget.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.\n\n${MOOD_AND_EXAMPLES}`
 
     const messages = buildHistory(history)
 
@@ -282,6 +498,7 @@ Deno.serve(async (req) => {
     let finalText = ''
     let proposedDebt: Record<string, unknown> | null = null
     let proposedCategory: Record<string, unknown> | null = null
+    let proposedSettings: Record<string, unknown> | null = null
     let dataWidget: unknown[] | null = null
     // Which response to scan for suggest_followups — the second (post-tool-result)
     // turn when one happened, otherwise the first. Claude can emit multiple
@@ -291,40 +508,68 @@ Deno.serve(async (req) => {
     let followupSource = first.content
     let purchaseImpact: Record<string, unknown> | null = null
 
-    const purchaseToolUse = findToolUse(first.content, 'model_purchase_impact')
-    const proposeDebtToolUse = findToolUse(first.content, 'propose_debt')
-    const proposeCategoryToolUse = findToolUse(first.content, 'propose_category')
-    const dataWidgetToolUse = findToolUse(first.content, 'render_data_widget')
-
-    if (purchaseToolUse && first.stop_reason === 'tool_use') {
-      const impact = computePurchaseImpact(purchaseToolUse.input as never, snapshot)
-      purchaseImpact = impact
-
+    // Compute tools (purchase check, strategy scenarios) need a second turn:
+    // the model gets the real numbers back and only then writes the answer.
+    // Every tool_use block of the first turn gets a tool_result — the API
+    // rejects a turn where any of them is left unanswered.
+    const computeNames = new Set(['model_purchase_impact', 'simulate_debt_scenarios'])
+    const toolUses = first.content.filter((b) => b.type === 'tool_use') as Array<{ id: string; name: string; input: Record<string, unknown> }>
+    const computed = first.stop_reason === 'tool_use' && toolUses.some((b) => computeNames.has(b.name))
+    let turn = first.content
+    if (computed) {
+      const results = toolUses.map((b) => {
+        let out: unknown = { ok: true }
+        if (b.name === 'model_purchase_impact') {
+          purchaseImpact = computePurchaseImpact(b.input as never, snapshot)
+          out = purchaseImpact
+        } else if (b.name === 'simulate_debt_scenarios') {
+          out = simulateScenarios(b.input as never, snapshot)
+        }
+        return { type: 'tool_result', tool_use_id: b.id, content: JSON.stringify(out) }
+      })
       const second = await callClaudeRaw({
         system,
         tools: ALL_TOOLS,
-        messages: [
-          ...messages,
-          { role: 'assistant', content: first.content as never },
-          { role: 'user', content: [{ type: 'tool_result', tool_use_id: purchaseToolUse.id, content: JSON.stringify(impact) } as never] },
-        ],
+        maxTokens: 1200,
+        messages: [...messages, { role: 'assistant', content: first.content as never }, { role: 'user', content: results as never }],
       })
-      finalText = (second.content.find((b) => b.type === 'text') as { text: string } | undefined)?.text ?? impact.verdict
+      turn = second.content
       followupSource = second.content
+    }
+
+    const turnText = turn
+      .filter((b) => b.type === 'text')
+      .map((b) => (b as { text: string }).text)
+      .join('\n')
+      .trim()
+    const proposeDebtToolUse = findToolUse(turn, 'propose_debt')
+    const proposeCategoryToolUse = findToolUse(turn, 'propose_category')
+    const proposeSettingsToolUse = findToolUse(turn, 'propose_settings_change')
+    const dataWidgetToolUse = findToolUse(turn, 'render_data_widget')
+
+    // After a computation the explanation is the answer; a proposal's own
+    // confirmation line is only the fallback. Without one, the tool's text is
+    // the whole reply.
+    const pick = (toolText: string | undefined) => (computed ? turnText || toolText || '' : toolText || turnText)
+
+    if (proposeSettingsToolUse) {
+      const { changes, confirmation_text } = proposeSettingsToolUse.input as { changes: SettingsChange; confirmation_text?: string }
+      proposedSettings = buildSettingsProposal(changes ?? {}, snapshot, session.sub)
+      finalText = pick(confirmation_text) || 'Поменять настройки? Посмотри, что изменится, и нажми «Применить».'
     } else if (proposeDebtToolUse) {
       const { confirmation_text, ...draft } = proposeDebtToolUse.input as Record<string, unknown> & { confirmation_text: string }
-      finalText = confirmation_text || 'Проверь цифры и подтверди в форме — сам ничего не сохраняю.'
+      finalText = pick(confirmation_text) || 'Проверь цифры и подтверди в форме — сам ничего не сохраняю.'
       proposedDebt = draft
     } else if (proposeCategoryToolUse) {
       const { confirmation_text, ...draft } = proposeCategoryToolUse.input as Record<string, unknown> & { confirmation_text: string }
-      finalText = confirmation_text || 'Добавить такую категорию?'
+      finalText = pick(confirmation_text) || 'Добавить такую категорию?'
       proposedCategory = draft
     } else if (dataWidgetToolUse) {
       const { caption, rows } = dataWidgetToolUse.input as { caption?: string; rows: unknown[] }
-      finalText = caption || (first.content.find((b) => b.type === 'text') as { text: string } | undefined)?.text || ''
+      finalText = pick(caption)
       dataWidget = rows
     } else {
-      finalText = (first.content.find((b) => b.type === 'text') as { text: string } | undefined)?.text ?? ''
+      finalText = turnText || ((purchaseImpact as { verdict?: string } | null)?.verdict ?? '')
     }
 
     // The mood marker can sit in any text block of either turn (a tool-only
@@ -336,7 +581,7 @@ Deno.serve(async (req) => {
       .join('\n')
     const expression =
       readMood(allText) ??
-      (proposedDebt || proposedCategory
+      (proposedDebt || proposedCategory || proposedSettings
         ? 'focused'
         : purchaseImpact && (purchaseImpact as { fits_this_month?: boolean }).fits_this_month === false
           ? 'alert'
@@ -356,6 +601,7 @@ Deno.serve(async (req) => {
         model: CLAUDE_MODEL_DEFAULT,
         proposed_debt: proposedDebt,
         proposed_category: proposedCategory,
+        proposed_settings: proposedSettings,
         data_widget: dataWidget,
         quick_replies: quickReplies,
         expression,

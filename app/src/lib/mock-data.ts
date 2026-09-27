@@ -6,6 +6,7 @@ import type {
   DebtPayment,
   Expense,
   Goal,
+  HouseholdSettings,
   Income,
   Subscription,
   StatusInsight,
@@ -275,9 +276,18 @@ export const mockExpenses: Expense[] = [
   ),
 ]
 
+export const mockHouseholdSettings: HouseholdSettings = {
+  priority_mode: 'debts_first',
+  debt_strategy: 'avalanche',
+  cushion_months: 3,
+  split_debt_pct: 50,
+  high_rate_threshold: 15,
+}
+
 export const mockGoals: Goal[] = [
   {
     id: 'g1',
+    is_cushion: false,
     title: 'Первый взнос на квартиру',
     target_amount: 8_000_000,
     current_amount: 1_450_000,
@@ -293,6 +303,7 @@ export const mockGoals: Goal[] = [
   },
   {
     id: 'g2',
+    is_cushion: true,
     title: 'Подушка безопасности (3 мес. расходов)',
     target_amount: 1_500_000,
     current_amount: 480_000,

@@ -1,15 +1,13 @@
 import { isBackendConfigured } from '@/lib/env'
 import { callFunction, supabase } from '@/lib/supabase'
 import * as mock from '@/lib/mock-data'
-import { simulateDebtStrategy } from '@/lib/debt-strategy'
 import type {
   BankProduct,
   ChatMessage,
   Debt,
   DebtDraft,
   DebtPayment,
-  DebtStrategyKind,
-  DebtStrategyPlan,
+  HouseholdSettings,
   Category,
   Expense,
   Goal,
@@ -154,14 +152,6 @@ export async function assistDebtDraft(input: { imageBase64?: string; mediaType?:
   return callFunction<DebtDraft>('debts-assist', { image_base64: input.imageBase64, media_type: input.mediaType, text_hint: input.textHint })
 }
 
-export async function getDebtStrategy(strategy: DebtStrategyKind, monthlySurplus: number): Promise<DebtStrategyPlan> {
-  const debts = await getDebts()
-  if (!isBackendConfigured) {
-    return simulateDebtStrategy({ debts, monthlySurplus, strategy })
-  }
-  return callFunction<DebtStrategyPlan>('debts-strategy', { strategy, monthly_surplus: monthlySurplus })
-}
-
 export async function getIncomes(): Promise<Income[]> {
   if (!isBackendConfigured || !supabase) return [...mock.mockIncomes]
   const { data, error } = await supabase.from('incomes').select('*').order('received_at', { ascending: false })
@@ -290,9 +280,9 @@ export async function getGoals(): Promise<Goal[]> {
   return data as Goal[]
 }
 
-export async function addGoal(goal: Omit<Goal, 'id' | 'ai_strategy'>): Promise<Goal> {
+export async function addGoal(goal: Omit<Goal, 'id' | 'ai_strategy' | 'is_cushion'> & { is_cushion?: boolean }): Promise<Goal> {
   if (!isBackendConfigured || !supabase) {
-    const created: Goal = { ...goal, id: crypto.randomUUID(), ai_strategy: null }
+    const created: Goal = { is_cushion: false, ...goal, id: crypto.randomUUID(), ai_strategy: null }
     mock.mockGoals.unshift(created)
     return created
   }
@@ -416,11 +406,35 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
     })
     await new Promise((r) => setTimeout(r, 700))
 
+    const wantsSettings = /режим|подушк|стратеги|снежн|лавин|настройк/i.test(content)
     const closedDebt = /закрыл|погасил/i.test(content)
     const wantsDebt = !closedDebt && /долг|кредит|рассрочк/i.test(content)
     const wantsCategory = /категори/i.test(content)
     const wantsBreakdown = /сколько.*(трачу|уходит)|на что.*деньги|разбивк/i.test(content)
-    const reply: ChatMessage = closedDebt
+    const reply: ChatMessage = wantsSettings
+      ? {
+          id: crypto.randomUUID(),
+          user_id: mock.currentMockUser.id,
+          role: 'assistant',
+          content: 'Сначала подушка на 3 месяца, потом долги. Долги закроются позже, зато будет резерв на случай потери дохода. Применить?',
+          model: 'claude-sonnet-5',
+          expression: 'focused',
+          proposed_settings: {
+            household: { priority_mode: 'cushion_first', cushion_months: 3 },
+            preview: {
+              debt_free_before: '2026-12-27',
+              debt_free_after: '2027-03-27',
+              interest_before: 118_000,
+              interest_after: 141_000,
+              cushion_full_before: '2027-01-27',
+              cushion_full_after: '2026-11-27',
+              per_day_before: 10_770,
+              per_day_after: 10_770,
+            },
+          },
+          created_at: new Date().toISOString(),
+        }
+      : closedDebt
       ? {
           id: crypto.randomUUID(),
           user_id: mock.currentMockUser.id,
@@ -505,6 +519,27 @@ export async function clearChatMessages(): Promise<void> {
 }
 
 /** One row for the whole household (0012_subscription_stub.sql) — always the single seeded row, never created from application code. */
+export async function getHouseholdSettings(): Promise<HouseholdSettings> {
+  if (!isBackendConfigured || !supabase) return { ...mock.mockHouseholdSettings }
+  const { data, error } = await supabase
+    .from('household_settings')
+    .select('priority_mode, debt_strategy, cushion_months, split_debt_pct, high_rate_threshold')
+    .eq('id', 1)
+    .single()
+  if (error) throw error
+  return { ...data, cushion_months: Number(data.cushion_months), high_rate_threshold: Number(data.high_rate_threshold) } as HouseholdSettings
+}
+
+export async function updateHouseholdSettings(patch: Partial<HouseholdSettings>): Promise<HouseholdSettings> {
+  if (!isBackendConfigured || !supabase) {
+    Object.assign(mock.mockHouseholdSettings, patch)
+    return { ...mock.mockHouseholdSettings }
+  }
+  const { error } = await supabase.from('household_settings').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', 1)
+  if (error) throw error
+  return getHouseholdSettings()
+}
+
 export async function getSubscription(): Promise<Subscription> {
   if (!isBackendConfigured || !supabase) return { ...mock.mockSubscription }
   const { data, error } = await supabase.from('subscriptions').select('*').limit(1).single()

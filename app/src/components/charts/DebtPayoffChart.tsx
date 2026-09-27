@@ -1,15 +1,14 @@
 import { useMemo } from 'react'
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
-import { simulateDebtTimeline } from '@/lib/debt-strategy'
 import { formatMoney } from '@/lib/format'
-import type { Debt } from '@/types/domain'
+import type { DebtStrategy, PlanResult } from '@/lib/budget'
+import { STRATEGY_META } from '@/lib/plan-text'
 
-/** Выбранная стратегия — акцентом, вторая — приглушённым тоном той же гаммы. */
-const CONFIG: ChartConfig = {
-  avalanche: { label: 'Лавина', color: '#3c82c8' },
-  snowball: { label: 'Снежный ком', color: '#8fafce' },
-}
+const STRATEGIES: DebtStrategy[] = ['avalanche', 'snowball', 'cash_flow']
+/** Выбранная стратегия — акцентом, остальные — приглушёнными тонами той же гаммы. */
+const ACCENT = '#3c82c8'
+const MUTED = ['#8fafce', '#5d7892']
 
 function compactMoney(value: number) {
   if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}М`
@@ -17,25 +16,28 @@ function compactMoney(value: number) {
   return String(value)
 }
 
-export function DebtPayoffChart({ debts, monthlySurplus }: { debts: Debt[]; monthlySurplus: number }) {
-  const data = useMemo(() => {
-    const avalanche = simulateDebtTimeline({ debts, monthlySurplus, strategy: 'avalanche' })
-    const snowball = simulateDebtTimeline({ debts, monthlySurplus, strategy: 'snowball' })
-    const length = Math.max(avalanche.length, snowball.length)
+export function DebtPayoffChart({ timelines, selected }: { timelines: Record<DebtStrategy, PlanResult>; selected: DebtStrategy }) {
+  const config: ChartConfig = useMemo(() => {
+    let muted = 0
+    return Object.fromEntries(
+      STRATEGIES.map((st) => [st, { label: STRATEGY_META[st].label, color: st === selected ? ACCENT : MUTED[muted++ % MUTED.length] }]),
+    )
+  }, [selected])
 
+  const data = useMemo(() => {
+    const length = Math.max(...STRATEGIES.map((st) => timelines[st].timeline.length))
     return Array.from({ length }, (_, i) => ({
       month: i,
-      avalanche: i < avalanche.length ? avalanche[i].balance : 0,
-      snowball: i < snowball.length ? snowball[i].balance : 0,
+      ...Object.fromEntries(STRATEGIES.map((st) => [st, timelines[st].timeline[i]?.debt ?? 0])),
     }))
-  }, [debts, monthlySurplus])
+  }, [timelines])
 
-  if (debts.length === 0 || data.length < 2) return null
+  if (!timelines[selected].hasDebts || data.length < 2) return null
 
   return (
     <div className="space-y-2.5">
       <p className="font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Погашение по месяцам</p>
-      <ChartContainer config={CONFIG} className="h-[180px] w-full">
+      <ChartContainer config={config} className="h-[180px] w-full">
         <AreaChart data={data} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
           <CartesianGrid vertical={false} stroke="#2e333b" />
           <XAxis
@@ -53,12 +55,22 @@ export function DebtPayoffChart({ debts, monthlySurplus }: { debts: Debt[]; mont
             content={
               <ChartTooltipContent
                 labelFormatter={(m) => `${m} мес`}
-                formatter={(value, name) => [` ${formatMoney(Number(value))}`, CONFIG[name as string]?.label ?? String(name)]}
+                formatter={(value, name) => [` ${formatMoney(Number(value))}`, config[name as string]?.label ?? String(name)]}
               />
             }
           />
-          <Area dataKey="avalanche" type="monotone" stroke="var(--color-avalanche)" fill="var(--color-avalanche)" fillOpacity={0.18} strokeWidth={2} />
-          <Area dataKey="snowball" type="monotone" stroke="var(--color-snowball)" fill="var(--color-snowball)" fillOpacity={0.1} strokeWidth={2} />
+          {/* Выбранная рисуется последней — поверх остальных. */}
+          {[...STRATEGIES.filter((st) => st !== selected), selected].map((st) => (
+            <Area
+              key={st}
+              dataKey={st}
+              type="monotone"
+              stroke={`var(--color-${st})`}
+              fill={`var(--color-${st})`}
+              fillOpacity={st === selected ? 0.18 : 0.06}
+              strokeWidth={st === selected ? 2 : 1.5}
+            />
+          ))}
         </AreaChart>
       </ChartContainer>
     </div>

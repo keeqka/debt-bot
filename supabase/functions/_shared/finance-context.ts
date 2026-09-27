@@ -4,8 +4,7 @@
 // ./budget.ts, a copy of app/src/lib/budget.ts, from the same rows.
 
 import { resolveBaseCurrency, currencyInstruction } from './currency.ts'
-import { computeBudget, type Budget } from './budget.ts'
-import { simulateDebtPayoff } from './debt-simulation.ts'
+import { computeBudget, DEFAULT_PLAN_SETTINGS, type Budget, type BudgetInput, type PlanSettings } from './budget.ts'
 
 // deno-lint-ignore no-explicit-any
 type SupabaseLike = any
@@ -21,6 +20,10 @@ export interface SnapshotDebt {
 export interface FinancialSnapshot {
   currency: string
   budget: Budget
+  /** Входы бюджета — чтобы чат пересчитал «что будет, если» той же моделью. */
+  budgetInput: BudgetInput
+  /** Члены семьи и их доход из настроек — доход меняется у конкретного человека. */
+  users: Array<{ id: string; monthly_income: number | null }>
   debts: SnapshotDebt[]
   totalDebt: number
   /** When the last debt closes if the budget's monthly extra keeps going to debts (avalanche); null — no debts or never. */
@@ -46,13 +49,6 @@ function monthStart(today: Date, monthsBack: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-/** Avalanche order — the plan's default, same as the app's Overview/Debts. */
-export function avalancheOrder(debts: SnapshotDebt[]) {
-  return [...debts]
-    .sort((a, b) => (b.rate ?? 0) - (a.rate ?? 0))
-    .map((d) => ({ id: d.id, current_balance: d.balance, interest_rate: d.rate, minimum_payment: d.min_payment }))
-}
-
 export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<FinancialSnapshot> {
   const [currency, { data: users }] = await Promise.all([
     resolveBaseCurrency(supabase),
@@ -60,7 +56,7 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<Fi
   ])
   const today = localToday(users?.[0]?.timezone ?? 'Asia/Almaty')
 
-  const [{ data: incomes }, { data: expenses }, { data: debts }, { data: debtPayments }, { data: goals }, { data: categories }] =
+  const [{ data: incomes }, { data: expenses }, { data: debts }, { data: debtPayments }, { data: goals }, { data: categories }, { data: settingsRow }] =
     await Promise.all([
       supabase.from('incomes').select('amount, received_at').gte('received_at', monthStart(today, 1)),
       supabase
@@ -69,9 +65,20 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<Fi
         .gte('spent_at', monthStart(today, 3)),
       supabase.from('debts').select('id, title, current_balance, interest_rate, minimum_payment, status').eq('status', 'active'),
       supabase.from('debt_payments').select('debt_id, amount, paid_at').gte('paid_at', monthStart(today, 0)),
-      supabase.from('goals').select('title, target_amount, current_amount, target_date').eq('status', 'active'),
+      supabase.from('goals').select('title, target_amount, current_amount, target_date, is_cushion').eq('status', 'active'),
       supabase.from('categories').select('id, name'),
+      supabase.from('household_settings').select('*').eq('id', 1).maybeSingle(),
     ])
+
+  const settings: PlanSettings = settingsRow
+    ? {
+        mode: settingsRow.priority_mode,
+        strategy: settingsRow.debt_strategy,
+        cushionMonths: Number(settingsRow.cushion_months),
+        splitDebtPct: Number(settingsRow.split_debt_pct),
+        highRateThreshold: Number(settingsRow.high_rate_threshold),
+      }
+    : DEFAULT_PLAN_SETTINGS
 
   const num = (v: unknown) => Number(v ?? 0)
   const activeDebts: Array<{ id: string; title: string; status: string; current_balance: number; interest_rate: number | null; minimum_payment: number }> = (debts ?? []).map((d: Record<string, unknown>) => ({
@@ -83,8 +90,13 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<Fi
     minimum_payment: num(d.minimum_payment),
   }))
 
-  const budget = computeBudget({
-    userIncomes: (users ?? []).map((u: { monthly_income: number | null }) => (u.monthly_income == null ? null : num(u.monthly_income))),
+  const householdUsers = (users ?? []).map((u: { id: string; monthly_income: number | null }) => ({
+    id: String(u.id),
+    monthly_income: u.monthly_income == null ? null : num(u.monthly_income),
+  }))
+  const goalRows = (goals ?? []) as Array<Record<string, unknown>>
+  const budgetInput: BudgetInput = {
+    userIncomes: householdUsers.map((u: { monthly_income: number | null }) => u.monthly_income),
     incomes: (incomes ?? []).map((i: Record<string, unknown>) => ({ amount: num(i.amount), received_at: String(i.received_at) })),
     expenses: (expenses ?? []).map((e: Record<string, unknown>) => ({
       id: String(e.id),
@@ -97,11 +109,14 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<Fi
     })),
     debts: activeDebts,
     debtPayments: (debtPayments ?? []).map((p: Record<string, unknown>) => ({ debt_id: String(p.debt_id), amount: num(p.amount), paid_at: String(p.paid_at) })),
-    hasActiveGoals: (goals ?? []).length > 0,
+    hasActiveGoals: goalRows.some((g) => !g.is_cushion),
+    cushionBalance: goalRows.filter((g) => g.is_cushion).reduce((s, g) => s + num(g.current_amount), 0),
+    settings,
     categoryNames: Object.fromEntries((categories ?? []).map((c: { id: string; name: string }) => [c.id, c.name])),
     currencySymbol: CURRENCY_SYMBOLS[currency] ?? currency,
     today,
-  })
+  }
+  const budget = computeBudget(budgetInput)
 
   const snapshotDebts: SnapshotDebt[] = activeDebts.map((d) => ({
     id: d.id,
@@ -114,10 +129,12 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<Fi
   return {
     currency,
     budget,
+    budgetInput,
+    users: householdUsers,
     debts: snapshotDebts,
     totalDebt: snapshotDebts.reduce((s, d) => s + d.balance, 0),
-    debtFreeDate: snapshotDebts.length ? simulateDebtPayoff(avalancheOrder(snapshotDebts), budget.planExtra).estimatedPayoffDate : null,
-    goals: (goals ?? []).map((g: Record<string, unknown>) => ({
+    debtFreeDate: budget.plan.debtFreeDate,
+    goals: goalRows.filter((g) => !g.is_cushion).map((g) => ({
       title: String(g.title),
       target: num(g.target_amount),
       current: num(g.current_amount),
@@ -134,22 +151,40 @@ const INCOME_SOURCE: Record<Budget['incomeSource'], string> = {
   none: 'не указан',
 }
 
+const MODE_TEXT: Record<PlanSettings['mode'], string> = {
+  debts_first: 'сначала долги: всё сверх обычных трат — в долги, после них подушка, потом цели',
+  cushion_first: 'сначала подушка: резерв на N месяцев расходов, потом долги (минимальные платежи идут всегда)',
+  split: 'пополам: доля свободных денег в долги, остальное в накопления (подушка, потом цели)',
+  ladder: 'по порядку: стартовая подушка на 1 месяц → долги со ставкой от порога → полная подушка → остальные долги → цели',
+}
+const STRATEGY_TEXT: Record<PlanSettings['strategy'], string> = {
+  avalanche: 'лавина — сначала самая высокая ставка (минимальная переплата)',
+  snowball: 'снежный ком — сначала самый маленький остаток (быстрые закрытия)',
+  cash_flow: 'поток (Cash Flow Index) — сначала наименьшее отношение остатка к минимальному платежу (быстрее освобождает деньги в месяц)',
+}
+
 export function snapshotToPrompt(s: FinancialSnapshot): string {
   const b = s.budget
+  const p = b.plan
+  const st = b.settings
   const r = (n: number) => Math.round(n)
-  const planTo = b.planTarget === 'debts' ? 'в долги' : b.planTarget === 'goals' ? 'в цели' : 'никуда — нет ни долгов, ни целей'
+  const modeDetails =
+    st.mode === 'split' ? ` (${st.splitDebtPct}% в долги)` : st.mode === 'ladder' ? ` (дорогие долги — от ${st.highRateThreshold}%)` : ''
   return [
     `Валюта всех сумм ниже: ${s.currency}. ${currencyInstruction(s.currency)}`,
-    'Правило денег семьи: сначала минимальные платежи по долгам, потом всё сверх обычных трат — досрочно в долги (самый дорогой по ставке первым). Цели копятся только после закрытия всех долгов. Советы давай в этой логике: главное — гасить долги и не выходить за обычные траты.',
+    `Настройки семьи. Режим: ${MODE_TEXT[st.mode]}${modeDetails}. Подушка: ${st.cushionMonths} мес. расходов = ${r(p.cushionTarget)}, накоплено ${r(b.cushionBalance)}. Порядок погашения: ${STRATEGY_TEXT[st.strategy]}. Минимальный платёж закрытого долга переходит в следующий.`,
     `Доход в месяц: ${r(b.income)} (${INCOME_SOURCE[b.incomeSource]}).`,
     `Обычные траты в месяц: ${r(b.typicalSpend)} (${b.historyMonths ? `среднее за ${b.historyMonths} мес.` : 'первый месяц — оценка по текущему темпу, истории ещё нет'}).`,
-    `Минимальные платежи по долгам: ${r(b.minPayments)} в месяц. Сверх минимумов по плану: ${r(b.planExtra)} в месяц → ${planTo}.`,
-    `Этот месяц (день ${b.dayOfMonth} из ${b.daysInMonth}, осталось ${b.daysLeft} дн.): потрачено ${r(b.spent)}; по долгам внесено ${r(b.debtPaid)}, ещё отложить ${r(b.reserved)}; бюджет на траты ${r(b.limit)}; свободно до конца месяца ${r(b.available)} (≈${r(b.perDay)} в день).`,
+    `Минимальные платежи по долгам: ${r(b.minPayments)} в месяц. Сверх обычных трат и минимумов: ${r(b.planExtra)} в месяц; в этом месяце по плану — в долги ${r(p.now.toDebts)}, в подушку ${r(p.now.toCushion)}, на цели ${r(p.now.toGoals)}.`,
+    `Этот месяц (день ${b.dayOfMonth} из ${b.daysInMonth}, осталось ${b.daysLeft} дн.): потрачено ${r(b.spent)}; по долгам внесено ${r(b.debtPaid)}; ещё отложить по плану ${r(b.reserved)}; бюджет на траты ${r(b.limit)}; свободно до конца месяца ${r(b.available)} (≈${r(b.perDay)} в день).`,
     b.expectedByNow != null ? `Обычно к этому дню месяца потрачено: ${r(b.expectedByNow)}.` : '',
     `Траты этого месяца по категориям: ${b.categories.map((c) => `${c.name}=${r(c.amount)}${c.typical != null ? ` (обычно за месяц ${r(c.typical)})` : ''}`).join(', ') || '—'}.`,
     `Перерасход и аномалии: ${b.signals.length ? b.signals.map((x) => x.text).join(' ') : 'не найдено'}`,
     `Долги: ${s.debts.map((d) => `${d.title} (остаток ${r(d.balance)}, ${d.rate ?? 0}%, мин. платёж ${r(d.min_payment)})`).join('; ') || 'нет'}. Общий долг: ${r(s.totalDebt)}.`,
-    s.debts.length ? `Все долги закроются: ${s.debtFreeDate ?? 'не закроются — сверх минимумов нечего вносить, а минимумы не покрывают проценты'}.` : '',
+    p.hasDebts
+      ? `План по текущим настройкам: ${p.closures.map((c) => `${c.title} закроется ${c.date}`).join(', ') || 'долги не закрываются'}; все долги — ${p.debtFreeDate ?? 'не закроются за 50 лет'}; переплата по процентам ${r(p.totalInterest)}.`
+      : '',
+    `Подушка наберётся: ${p.cushionFullDate ?? 'не наберётся при таких деньгах'}. Деньги на цели пойдут ${p.goalsStartDate ? `с ${p.goalsStartDate}, ${r(p.goalsMonthly)} в месяц` : 'нескоро — сейчас всё уходит в долги и подушку'}.`,
     `Цели: ${s.goals.map((g) => `${g.title} (${r(g.current)}/${r(g.target)}${g.target_date ? `, срок ${g.target_date}` : ''})`).join('; ') || 'нет'}.`,
   ]
     .filter(Boolean)

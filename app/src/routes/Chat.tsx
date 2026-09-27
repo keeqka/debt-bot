@@ -6,13 +6,15 @@ import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar } from '@/components/Mascot'
-import { useAddCategory, useChatMessages, useClearChat, useSendChatMessage } from '@/hooks/use-finance-data'
+import { useAddCategory, useChatMessages, useClearChat, useSendChatMessage, useUpdateHouseholdSettings, useUpdateUser } from '@/hooks/use-finance-data'
+import { useCurrentUser } from '@/lib/auth'
+import { ProposedSettingsCard } from '@/components/chat/ProposedSettingsCard'
 import { formatMoney } from '@/lib/format'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
 import { useHeaderAction } from '@/lib/header-action'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
-import type { ChatDataWidgetRow, ProposedCategory, ProposedDebt } from '@/types/domain'
+import type { ChatDataWidgetRow, ProposedCategory, ProposedDebt, ProposedSettings } from '@/types/domain'
 
 const SUGGESTIONS = ['Могу я купить MacBook за 750 000₸?', 'Как быстрее закрыть долги?', 'Сколько я трачу на еду в месяц?']
 
@@ -36,10 +38,14 @@ export function Chat() {
   const sendMessage = useSendChatMessage()
   const clearChat = useClearChat()
   const addCategory = useAddCategory()
+  const updateHousehold = useUpdateHouseholdSettings()
+  const updateUser = useUpdateUser()
+  const currentUser = useCurrentUser()
   const [draft, setDraft] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [debtPrefill, setDebtPrefill] = useState<ProposedDebt | null>(null)
   const [addedCategoryIds, setAddedCategoryIds] = useState<Set<string>>(new Set())
+  const [appliedSettingsIds, setAppliedSettingsIds] = useState<Set<string>>(new Set())
   const [confirmClear, setConfirmClear] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const reduced = useReducedMotion()
@@ -75,6 +81,15 @@ export function Chat() {
     await addCategory.mutateAsync({ name: category.name, icon: 'tag', type: category.type })
     setAddedCategoryIds((prev) => new Set(prev).add(messageId))
     toast.success('Категория добавлена')
+  }
+
+  async function handleApplySettings(messageId: string, proposal: ProposedSettings) {
+    if (proposal.household && Object.keys(proposal.household).length) await updateHousehold.mutateAsync(proposal.household)
+    if (proposal.user && Object.keys(proposal.user).length) {
+      await updateUser.mutateAsync({ id: proposal.user_id ?? currentUser.id, patch: proposal.user })
+    }
+    setAppliedSettingsIds((prev) => new Set(prev).add(messageId))
+    toast.success('Настройки изменены — план пересчитан')
   }
 
   async function confirmClearChat() {
@@ -142,6 +157,14 @@ export function Chat() {
                 </div>
 
                 {m.proposed_debt && <ProposedDebtCard debt={m.proposed_debt} onAdd={() => setDebtPrefill(m.proposed_debt!)} />}
+                {m.proposed_settings && (
+                  <ProposedSettingsCard
+                    proposal={m.proposed_settings}
+                    applied={appliedSettingsIds.has(m.id)}
+                    pending={updateHousehold.isPending || updateUser.isPending}
+                    onApply={() => handleApplySettings(m.id, m.proposed_settings!)}
+                  />
+                )}
                 {m.proposed_category && (
                   <ProposedCategoryCard
                     category={m.proposed_category}

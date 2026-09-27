@@ -6,6 +6,7 @@ import { useAddCategory, useCategories, useDeleteCategory, useUpdateUser } from 
 import { useCurrentUser } from '@/lib/auth'
 import { currencySymbol } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { PlanSettingsSection } from '@/components/overview/PlanSettingsSection'
 import type { CategoryType } from '@/types/domain'
 
 const inputClass =
@@ -66,7 +67,7 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="flex max-h-[85vh] flex-col rounded-t-[24px] border-hf-line bg-hf-bg">
         <SheetHeader className="px-4 pt-1 pb-0">
-          <SheetTitle className="text-[15px] font-medium text-hf-text">Бюджет и напоминания</SheetTitle>
+          <SheetTitle className="text-[15px] font-medium text-hf-text">Настройки</SheetTitle>
         </SheetHeader>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-8">
@@ -139,6 +140,8 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
               />
             </label>
           )}
+
+          <PlanSettingsSection />
 
           <div className="space-y-3 border-t border-hf-line pt-4">
             <p className="text-[13px] font-medium text-hf-text">Категории</p>

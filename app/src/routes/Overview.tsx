@@ -121,11 +121,9 @@ export function Overview() {
               <div className="h-full bg-hf-accent" style={{ width: Math.min(100, (month.spent / (month.income || 1)) * 100) + '%' }} />
               <div className="h-full bg-[#2A5A85]" style={{ width: Math.min(100, (month.obligations / (month.income || 1)) * 100) + '%' }} />
             </div>
-            {month.planTarget !== 'none' && month.obligations > 0 && (
+            {month.obligations > 0 && (
               <p className="text-[11px] leading-snug text-hf-text-4">
-                {month.planTarget === 'debts'
-                  ? `${formatMoney(month.obligations)} в этом месяце — в долги${month.reserved > 0 ? `, ещё не внесено ${formatMoney(month.reserved)}` : ''}.`
-                  : `${formatMoney(month.obligations)} в этом месяце — на цели.`}
+                {planLine(month)}
                 {month.historyMonths === 0 && ' Первый месяц: план по текущему темпу трат, уточнится после полного месяца.'}
               </p>
             )}
@@ -237,12 +235,24 @@ export function Overview() {
         onClick={() => setSetupOpen(true)}
         className="w-full pt-1 text-center text-[11px] text-hf-text-4"
       >
-        Доход, день зарплаты и напоминания
+        Настройки: доход, режим бота, стратегия, категории
       </button>
 
       <BudgetSetupSheet open={setupOpen} onOpenChange={setSetupOpen} />
     </div>
   )
+}
+
+/** «Куда в этом месяце уходит не-трата»: долги (с учётом внесённого), подушка, цели — по плану. */
+function planLine(month: NonNullable<ReturnType<typeof useMonth>>) {
+  const debtsTotal = month.debtPaid + Math.max(0, month.reserved - month.plan.now.toCushion - month.plan.now.toGoals)
+  const parts = [
+    debtsTotal > 0 ? `${formatMoney(debtsTotal)} — в долги` : null,
+    month.plan.now.toCushion > 0 ? `${formatMoney(month.plan.now.toCushion)} — в подушку` : null,
+    month.plan.now.toGoals > 0 ? `${formatMoney(month.plan.now.toGoals)} — на цели` : null,
+  ].filter(Boolean)
+  const unpaid = month.reserved > 0 ? `, ещё не внесено ${formatMoney(month.reserved)}` : ''
+  return `В этом месяце: ${parts.join(', ')}${unpaid}.`
 }
 
 function EmptyState({ onUpload }: { onUpload: () => void }) {

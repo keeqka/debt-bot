@@ -72,11 +72,10 @@ export function formatDateShort(iso: string) {
 }
 
 /**
- * "август 2026" for a payoff date — `estimated_payoff_date` comes from
- * Claude (debts-strategy edge function), not a deterministic computation,
- * so it isn't guaranteed to be a parseable date (e.g. a debt whose minimum
- * payment doesn't cover its own interest has no real payoff date at all).
- * Never feed an unchecked value straight into Intl.DateTimeFormat — an
+ * "август 2026" for a plan date. Plan dates can be null (a debt whose minimum
+ * payment doesn't cover its own interest has no real payoff date at all), and
+ * dates also arrive from AI-written payloads (goal strategies), so this never
+ * trusts its input. Never feed an unchecked value straight into Intl.DateTimeFormat — an
  * Invalid Date throws "date value is not finite", which crashes the whole
  * screen (this is a real production crash this guarded, not hypothetical).
  */

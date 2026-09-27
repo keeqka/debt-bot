@@ -50,18 +50,19 @@ Deno.serve(async (req) => {
     if (goalError) throw goalError
 
     const snapshot = await buildFinancialSnapshot(supabase)
-    // Debts come first (_shared/budget.ts): while any are open, nothing goes to
-    // goals; once they close, both the extra and the minimums free up.
-    const b = snapshot.budget
-    const afterDebts = Math.max(0, Math.floor((b.income - b.typicalSpend) / 1000) * 1000)
+    // Money reaches goals only when the household plan gets to them
+    // (_shared/budget.ts: mode decides whether debts or the cushion go first).
+    const plan = snapshot.budget.plan
     const moneyLine =
-      b.planTarget === 'debts'
-        ? `Сейчас все свободные деньги идут в долги — копить на цель начнём после их закрытия (${snapshot.debtFreeDate ?? 'дата пока не определена'}). После этого на цели будет свободно около ${afterDebts} в месяц. Считай срок цели от даты закрытия долгов.`
-        : `Свободно на цели в месяц: ${b.planExtra}.`
+      snapshot.budget.plan.now.toGoals > 0
+        ? `Свободно на цели в месяц по плану: ${plan.now.toGoals}.`
+        : plan.goalsStartDate
+          ? `Сейчас по плану семьи деньги идут в долги и подушку; на цели они пойдут с ${plan.goalsStartDate}, около ${plan.goalsMonthly} в месяц. Считай срок цели от этой даты.`
+          : 'Сейчас по плану семьи на цели денег не остаётся — скажи об этом честно и предложи реалистичный вариант.'
 
     const result = await callClaudeTool({
       system:
-        'Ты помогаешь спланировать накопление на цель. Правило семьи: сначала закрываются все долги, цели копятся только после. Предложи разумную ежемесячную сумму (не больше денег, свободных на цели), реалистичную дату достижения цели и 1-3 банковских продукта СТРОГО из предоставленного списка (используй их id как есть, не придумывай новые продукты или ставки).',
+        'Ты помогаешь спланировать накопление на цель. Порядок денег задан планом семьи (долги, подушка, цели) — ниже сказано, когда деньги дойдут до целей. Предложи разумную ежемесячную сумму (не больше денег, свободных на цели), реалистичную дату достижения цели и 1-3 банковских продукта СТРОГО из предоставленного списка (используй их id как есть, не придумывай новые продукты или ставки).',
       messages: [
         {
           role: 'user',

@@ -1,4 +1,15 @@
-import { computeBudget, type Budget, type BudgetInput } from '@/lib/budget'
+import { computeBudget, simulatePlan, type Budget, type BudgetInput, type PlanSettings } from '@/lib/budget'
+import type { Debt, HouseholdSettings } from '@/types/domain'
+
+export function toPlanSettings(s: HouseholdSettings): PlanSettings {
+  return {
+    mode: s.priority_mode,
+    strategy: s.debt_strategy,
+    cushionMonths: Number(s.cushion_months),
+    splitDebtPct: Number(s.split_debt_pct),
+    highRateThreshold: Number(s.high_rate_threshold),
+  }
+}
 
 export interface MonthCategory {
   id: string
@@ -50,4 +61,26 @@ export function computeMonth(input: BudgetInput): Month {
     .slice(0, 5)
 
   return { ...budget, label: MONTH_NAMES[today.getMonth()], categories }
+}
+
+/**
+ * Тот же план, но с другими вводными — «что если»: другая стратегия, другая
+ * сумма сверх минимумов, только минимумы (rollover: false, extra 0).
+ */
+export function replan(
+  month: Month,
+  debts: Debt[],
+  overrides: { monthlyExtra?: number; settings?: Partial<PlanSettings>; rollover?: boolean } = {},
+) {
+  return simulatePlan({
+    debts: debts
+      .filter((d) => d.status === 'active' && d.current_balance > 0)
+      .map((d) => ({ id: d.id, title: d.title, balance: d.current_balance, rate: d.interest_rate, min: d.minimum_payment })),
+    monthlyExtra: overrides.monthlyExtra ?? month.planExtra,
+    settings: { ...month.settings, ...overrides.settings },
+    cushionBalance: month.cushionBalance,
+    monthlyNeed: month.monthlyNeed,
+    start: new Date(),
+    rollover: overrides.rollover,
+  })
 }

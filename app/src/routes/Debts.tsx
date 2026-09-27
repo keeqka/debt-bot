@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, CircleDollarSign, Pencil, Trash2 } from 'lucide-react'
@@ -7,16 +7,20 @@ import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar } from '@/components/Mascot'
-import { useDebts, useDebtStrategy, useDeleteDebt, useMonth } from '@/hooks/use-finance-data'
-import { debtPayoffNote, simulateDebtStrategy } from '@/lib/debt-strategy'
-import { formatMoney, formatMonthYear } from '@/lib/format'
+import { useDebts, useDeleteDebt, useMonth, useUpdateHouseholdSettings } from '@/hooks/use-finance-data'
+import { orderDebts, type DebtStrategy } from '@/lib/budget'
+import { replan } from '@/lib/month'
+import { STRATEGY_META, modeSummary } from '@/lib/plan-text'
+import { formatMoney, formatMoneyCompact, formatMonthYear } from '@/lib/format'
 import { useAnimatedNumber } from '@/hooks/use-animated-number'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
-import type { Debt, DebtStrategyKind } from '@/types/domain'
+import type { Debt } from '@/types/domain'
 import { cn } from '@/lib/utils'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { RecordPaymentDialog } from '@/components/debts/RecordPaymentDialog'
 import { DebtPayoffChart } from '@/components/charts/DebtPayoffChart'
+
+const STRATEGIES: DebtStrategy[] = ['avalanche', 'snowball', 'cash_flow']
 
 /** Months between two ISO dates, whole months only (day-of-month ignored — good enough for an "ahead by" headline). */
 function monthsBetween(fromIso: string, toIso: string) {
@@ -35,51 +39,42 @@ export function Debts() {
   const { data: debts, isLoading } = useDebts()
   const month = useMonth()
   const deleteDebt = useDeleteDebt()
+  const updateSettings = useUpdateHouseholdSettings()
 
-  const activeDebts = useMemo(() => debts?.filter((d) => d.status === 'active') ?? [], [debts])
-  // The budget's monthly extra (income − minimums − usual spending, lib/budget.ts)
-  // — the same number Overview reserves for debts and uses for its payoff date.
-  const computedSurplus = month?.planExtra ?? 0
+  const activeDebts = useMemo(() => debts?.filter((d) => d.status === 'active' && d.current_balance > 0) ?? [], [debts])
 
-  // The surplus input feeds the AI query key (getDebtStrategy calls Claude),
-  // so committing every keystroke would fire a fresh AI call per character
-  // typed. surplusText is what the field shows live; surplus (the actual
-  // query input) only catches up 600ms after typing stops.
-  const [surplusText, setSurplusText] = useState<string | null>(null)
-  const [surplusOverride, setSurplusOverride] = useState<number | null>(null)
-  const surplus = surplusOverride ?? computedSurplus
+  // Сколько сверх минимумов — из бюджета (lib/budget.ts); поле можно поправить
+  // руками, чтобы посмотреть «что если». Всё считается локально той же
+  // симуляцией, что и «Обзор», поэтому мгновенно и без ИИ.
+  const [extraOverride, setExtraOverride] = useState<string | null>(null)
+  const extra = extraOverride != null && Number.isFinite(Number(extraOverride)) ? Number(extraOverride) : (month?.planExtra ?? 0)
+  const strategy = month?.settings.strategy ?? 'avalanche'
 
-  useEffect(() => {
-    if (surplusText === null) return
-    const id = setTimeout(() => {
-      const n = Number(surplusText)
-      if (Number.isFinite(n)) setSurplusOverride(n)
-    }, 600)
-    return () => clearTimeout(id)
-  }, [surplusText])
+  const plans = useMemo(() => {
+    if (!month || !debts) return null
+    const byStrategy = Object.fromEntries(
+      STRATEGIES.map((st) => [st, replan(month, debts, { monthlyExtra: extra, settings: { strategy: st } })]),
+    ) as Record<DebtStrategy, ReturnType<typeof replan>>
+    const minimumsOnly = replan(month, debts, { monthlyExtra: 0, rollover: false })
+    return { byStrategy, minimumsOnly }
+  }, [month, debts, extra])
+  const plan = plans?.byStrategy[strategy]
 
-  const [algorithm, setAlgorithm] = useState<DebtStrategyKind>('avalanche')
-  // Wait for the budget before asking the server — otherwise the first request
-  // goes out with a placeholder 0 extra and burns a Claude call for nothing.
-  const { data: plan, isLoading: planLoading } = useDebtStrategy(algorithm, surplus, Boolean(month))
-
-  // "На сколько раньше, чем при минимальных платежах" — same regardless of
-  // algorithm (with zero extra budget, order never matters), so one baseline.
-  const baselineDate = useMemo(
-    () => (activeDebts.length ? simulateDebtStrategy({ debts: activeDebts, monthlySurplus: 0, strategy: 'avalanche' }).estimated_payoff_date : null),
-    [activeDebts],
-  )
-  const aheadBy = plan?.estimated_payoff_date && baselineDate ? monthsBetween(baselineDate, plan.estimated_payoff_date) : 0
+  const aheadBy =
+    plan?.debtFreeDate && plans?.minimumsOnly.debtFreeDate ? monthsBetween(plans.minimumsOnly.debtFreeDate, plan.debtFreeDate) : 0
 
   // The payoff date animates the same way as Overview's main number (§2/§3):
   // count the month offset from today rather than jump straight to the new
-  // date, so dragging "Свободно в месяц" visibly pulls the date with it
-  // instead of it just flickering to a new string.
+  // date, so editing the monthly extra visibly pulls the date with it.
   const reduced = useReducedMotion()
   const today = useMemo(() => new Date(), [])
-  const monthsUntilPayoff = plan?.estimated_payoff_date ? monthsBetween(plan.estimated_payoff_date, today.toISOString().slice(0, 10)) : 0
+  const monthsUntilPayoff = plan?.debtFreeDate ? monthsBetween(plan.debtFreeDate, today.toISOString().slice(0, 10)) : 0
   const animatedMonthsUntilPayoff = useAnimatedNumber(monthsUntilPayoff, 600, 1)
-  const animatedPayoffDate = plan?.estimated_payoff_date ? addMonths(today, animatedMonthsUntilPayoff).toISOString() : null
+  const animatedPayoffDate = plan?.debtFreeDate ? addMonths(today, animatedMonthsUntilPayoff).toISOString() : null
+
+  const ordered = plan ? orderDebts(activeDebts.map((d) => ({ ...d, balance: d.current_balance, rate: d.interest_rate, min: d.minimum_payment })), strategy) : activeDebts
+  const closureOf = (id: string) => plan?.closures.find((c) => c.id === id)?.date ?? null
+  const isCheap = (d: Debt) => month?.settings.mode === 'ladder' && (d.interest_rate ?? 0) < month.settings.highRateThreshold
 
   const [addOpen, setAddOpen] = useState(false)
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
@@ -119,10 +114,12 @@ export function Debts() {
               <Eyebrow>Свобода от долгов</Eyebrow>
               {aheadBy > 0 && <span className="font-mono text-[11px] text-hf-accent-ink">{'−'}{aheadBy} мес</span>}
             </div>
-            {planLoading || !plan ? (
+            {!plan ? (
               <div className="h-9 w-40 animate-pulse rounded bg-hf-receipt-line" />
             ) : (
-              <div className="text-[30px] font-bold tracking-[-0.03em]">{formatMonthYear(animatedPayoffDate)}</div>
+              <div className="text-[30px] font-bold tracking-[-0.03em]">
+                {plan.debtFreeDate ? formatMonthYear(animatedPayoffDate) : 'не закроются'}
+              </div>
             )}
             <div className="h-px bg-hf-receipt-line" />
             <div className="flex justify-between gap-2.5 text-[13px]">
@@ -130,46 +127,69 @@ export function Debts() {
               <span className="font-mono">{formatMoney(activeDebts.reduce((s, d) => s + d.current_balance, 0))}</span>
             </div>
             <div className="flex justify-between gap-2.5 text-[13px]">
-              <span>Свободно в месяц</span>
+              <span>Сверх минимумов в месяц</span>
               <input
                 type="number"
-                value={surplusText ?? surplus}
-                onChange={(e) => setSurplusText(e.target.value)}
+                value={extraOverride ?? extra}
+                onChange={(e) => setExtraOverride(e.target.value)}
                 className="w-28 rounded-md border border-hf-receipt-line bg-hf-receipt px-2 py-0.5 text-right font-mono text-[13px] text-hf-accent-ink"
               />
             </div>
+            {plan && (
+              <div className="flex justify-between gap-2.5 text-[13px]">
+                <span>Переплата по процентам</span>
+                <span className="font-mono">{formatMoney(plan.totalInterest)}</span>
+              </div>
+            )}
             {month && (
               <p className="text-[11px] leading-snug text-hf-ink-soft">
                 {month.hasIncome
-                  ? `Доход ${formatMoney(month.income)} − минимальные платежи ${formatMoney(month.minPayments)} − обычные траты ${formatMoney(month.typicalSpend)}${month.historyMonths === 0 ? ' (оценка по первому месяцу)' : ''}. Всё это идёт в долги.`
-                  : 'Укажи доход на «Обзоре» — тогда посчитаю, сколько можно вносить сверх минимумов.'}
+                  ? `Доход ${formatMoney(month.income)} − минимальные платежи ${formatMoney(month.minPayments)} − обычные траты ${formatMoney(month.typicalSpend)}${month.historyMonths === 0 ? ' (оценка по первому месяцу)' : ''}. ${modeSummary(month.settings)}${plan ? `: в этом месяце ${formatMoney(plan.now.toDebts)} в долги` : ''}${plan && plan.now.toCushion > 0 ? `, ${formatMoney(plan.now.toCushion)} в подушку` : ''}.`
+                  : 'Укажи доход в настройках на «Обзоре» — тогда посчитаю, сколько можно вносить сверх минимумов.'}
               </p>
             )}
           </Paper>
 
-          <div className="flex rounded-[13px] bg-hf-card p-1">
-            {(['avalanche', 'snowball'] as const).map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => setAlgorithm(kind)}
-                className={cn(
-                  'flex-1 rounded-[10px] py-2 text-[13px] font-medium transition-colors',
-                  algorithm === kind ? 'bg-hf-accent text-white' : 'text-hf-text-4',
-                )}
-              >
-                {kind === 'avalanche' ? 'Лавина' : 'Снежный ком'}
-              </button>
-            ))}
+          <div className="space-y-2">
+            <div className="flex rounded-[13px] bg-hf-card p-1">
+              {STRATEGIES.map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => kind !== strategy && updateSettings.mutate({ debt_strategy: kind })}
+                  className={cn(
+                    'flex-1 rounded-[10px] py-2 text-[13px] font-medium transition-colors',
+                    strategy === kind ? 'bg-hf-accent text-white' : 'text-hf-text-4',
+                  )}
+                >
+                  {STRATEGY_META[kind].label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[12px] leading-relaxed text-hf-text-3">{STRATEGY_META[strategy].why}</p>
+            {plans && (
+              // Честное сравнение: те же деньги, тот же режим — меняется только порядок.
+              <div className="space-y-1 rounded-[14px] bg-hf-card px-3.5 py-2.5">
+                {STRATEGIES.map((kind) => {
+                  const p = plans.byStrategy[kind]
+                  return (
+                    <div key={kind} className={cn('flex justify-between gap-2 text-[12px]', kind === strategy ? 'text-hf-text' : 'text-hf-text-4')}>
+                      <span>{STRATEGY_META[kind].label}</span>
+                      <span className="font-mono">
+                        {p.debtFreeDate ? formatMonthYear(p.debtFreeDate) : '—'} · переплата {formatMoneyCompact(p.totalInterest)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-
-          {plan && !planLoading && <p className="text-[12px] leading-relaxed text-hf-text-3">{plan.explanation}</p>}
 
           <div className="flex flex-col gap-2.5">
             <Eyebrow>Порядок выплат</Eyebrow>
             <AnimatePresence initial={false}>
-            {(plan?.payoff_order ?? activeDebts.map((d) => d.id)).map((id, i) => {
-              const debt = activeDebts.find((d) => d.id === id)
+            {ordered.map((d, i) => {
+              const debt = activeDebts.find((x) => x.id === d.id)
               if (!debt) return null
               const progress = ((debt.principal_amount - debt.current_balance) / debt.principal_amount) * 100
               return (
@@ -188,7 +208,10 @@ export function Debts() {
                     <span className="font-mono text-xs text-hf-text-4">{formatMoney(debt.current_balance)}</span>
                   </div>
                   <ProgressBar pct={progress} tone={i === 0 ? 'accent' : i === 1 ? 'soft' : 'faint'} />
-                  <p className="text-xs text-hf-text-4">{debtPayoffNote(i, algorithm)}</p>
+                  <p className="text-xs text-hf-text-4">
+                    {isCheap(debt) ? 'Дешёвый долг — после полной подушки' : i === 0 ? STRATEGY_META[strategy].first : 'Минимальный платёж, пока не дойдёт очередь'}
+                    {closureOf(debt.id) ? ` · закроется: ${formatMonthYear(closureOf(debt.id))}` : ''}
+                  </p>
                   <div className="flex gap-2 pt-1">
                     <button
                       type="button"
@@ -220,7 +243,7 @@ export function Debts() {
             </AnimatePresence>
           </div>
 
-          <DebtPayoffChart debts={activeDebts} monthlySurplus={surplus} />
+          {plans && <DebtPayoffChart timelines={plans.byStrategy} selected={strategy} />}
 
           <ActionBar>
             <Action variant="muted" onClick={() => setAddOpen(true)}>

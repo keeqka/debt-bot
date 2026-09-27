@@ -4,16 +4,16 @@ import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { computeMonth } from '@/lib/month'
 import { currencySymbol } from '@/lib/format'
-import { simulateDebtStrategy } from '@/lib/debt-strategy'
+import { toPlanSettings } from '@/lib/month'
 import { useCurrentUser } from '@/lib/auth'
-import type { ChatMessage, DebtStrategyKind, User } from '@/types/domain'
+import type { ChatMessage, User } from '@/types/domain'
 
 export const queryKeys = {
   status: ['status'] as const,
   debts: ['debts'] as const,
   debtPayments: (debtId: string) => ['debt-payments', debtId] as const,
   allDebtPayments: ['debt-payments', 'all'] as const,
-  debtStrategy: (kind: DebtStrategyKind, surplus: number) => ['debt-strategy', kind, surplus] as const,
+  householdSettings: ['household-settings'] as const,
   incomes: ['incomes'] as const,
   expenses: ['expenses'] as const,
   categories: ['categories'] as const,
@@ -68,9 +68,10 @@ export function useMonth() {
   const { data: incomes } = useIncomes()
   const { data: categories } = useCategories()
   const { data: goals } = useGoals()
+  const { data: settings } = useHouseholdSettings()
 
   return useMemo(() => {
-    if (!users || !debts || !debtPayments || !expenses || !incomes || !categories || !goals) return undefined
+    if (!users || !debts || !debtPayments || !expenses || !incomes || !categories || !goals || !settings) return undefined
     // The current user's row comes from the auth cache, which is what
     // useUpdateUser writes to first — prefer it over the (possibly older) list.
     const household = users.map((u) => (u.id === currentUser.id ? currentUser : u))
@@ -81,23 +82,30 @@ export function useMonth() {
       expenses,
       debts,
       debtPayments,
-      hasActiveGoals: goals.some((g) => g.status === 'active'),
+      hasActiveGoals: goals.some((g) => g.status === 'active' && !g.is_cushion),
+      cushionBalance: goals.filter((g) => g.is_cushion && g.status === 'active').reduce((s, g) => s + g.current_amount, 0),
+      settings: toPlanSettings(settings),
       categoryNames: Object.fromEntries(categories.map((c) => [c.id, c.name])),
       currencySymbol: currencySymbol(),
     })
-  }, [currentUser, users, debts, debtPayments, expenses, incomes, categories, goals])
+  }, [currentUser, users, debts, debtPayments, expenses, incomes, categories, goals, settings])
 }
 
-/** When the last debt closes if the plan's monthly extra keeps going to debts — same math as the Debts screen. */
+/** When the last debt closes under the household's plan (lib/budget.ts simulatePlan) — undefined while loading. */
 export function useDebtFreeDate(): string | null | undefined {
   const month = useMonth()
-  const { data: debts } = useDebts()
-  return useMemo(() => {
-    if (!month || !debts) return undefined
-    const active = debts.filter((d) => d.status === 'active')
-    if (!active.length) return null
-    return simulateDebtStrategy({ debts: active, monthlySurplus: month.planExtra, strategy: 'avalanche' }).estimated_payoff_date
-  }, [month, debts])
+  return month ? month.plan.debtFreeDate : undefined
+}
+
+export const useHouseholdSettings = () => useQuery({ queryKey: queryKeys.householdSettings, queryFn: api.getHouseholdSettings })
+
+export function useUpdateHouseholdSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.updateHouseholdSettings,
+    onSuccess: (settings) => queryClient.setQueryData(queryKeys.householdSettings, settings),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Не удалось сохранить настройки'),
+  })
 }
 
 export function useUpdateUser() {
@@ -111,29 +119,17 @@ export function useUpdateUser() {
       patch: Partial<Pick<User, 'monthly_income' | 'payday' | 'daily_reminder_enabled' | 'daily_reminder_time' | 'vacation_paused' | 'onboarding_completed_at'>>
     }) => api.updateUser(id, patch),
     onSuccess: (user) => {
-      queryClient.setQueryData(['current-user'], user)
+      // A settings card from chat can change the partner's row (their income) —
+      // only overwrite the session's own user with its own row.
+      const current = queryClient.getQueryData<User>(['current-user'])
+      if (!current || current.id === user.id) queryClient.setQueryData(['current-user'], user)
       queryClient.invalidateQueries({ queryKey: queryKeys.users })
-      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },
   })
 }
 
 export const useDebtPayments = (debtId: string) =>
   useQuery({ queryKey: queryKeys.debtPayments(debtId), queryFn: () => api.getDebtPayments(debtId) })
-
-// Calls Claude, so this must only ever run when the user actually asks for
-// this exact (kind, surplus) combination — not on every remount or Telegram
-// window-refocus. staleTime: Infinity means the cached result for a given
-// key is reused forever; it's only invalidated below, when the underlying
-// debts actually change (add/edit/delete/payment).
-export const useDebtStrategy = (kind: DebtStrategyKind, monthlySurplus: number, enabled = true) =>
-  useQuery({
-    queryKey: queryKeys.debtStrategy(kind, monthlySurplus),
-    queryFn: () => api.getDebtStrategy(kind, monthlySurplus),
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    enabled,
-  })
 
 export function useAddDebtPayment() {
   const queryClient = useQueryClient()
@@ -144,7 +140,6 @@ export function useAddDebtPayment() {
       queryClient.invalidateQueries({ queryKey: queryKeys.debtPayments(variables.debt_id) })
       queryClient.invalidateQueries({ queryKey: queryKeys.allDebtPayments })
       queryClient.invalidateQueries({ queryKey: queryKeys.status })
-      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },
   })
 }
@@ -155,7 +150,6 @@ export function useAddDebt() {
     mutationFn: api.addDebt,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.debts })
-      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },
   })
 }
@@ -166,7 +160,6 @@ export function useUpdateDebt() {
     mutationFn: ({ id, patch }: { id: string; patch: Parameters<typeof api.updateDebt>[1] }) => api.updateDebt(id, patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.debts })
-      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },
   })
 }
@@ -179,7 +172,6 @@ export function useDeleteDebt() {
       queryClient.invalidateQueries({ queryKey: queryKeys.debts })
       queryClient.invalidateQueries({ queryKey: queryKeys.allDebtPayments })
       queryClient.invalidateQueries({ queryKey: queryKeys.status })
-      queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },
   })
 }

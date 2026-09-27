@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { FormSheet, FormField, SaveButton, formInputClass } from '@/components/chrome/FormSheet'
-import { useAddDebtPayment, useDebts, useGoals } from '@/hooks/use-finance-data'
-import { simulateDebtStrategy } from '@/lib/debt-strategy'
+import { useAddDebtPayment, useDebts, useGoals, useMonth } from '@/hooks/use-finance-data'
+import { orderDebts, simulatePlan, DEFAULT_PLAN_SETTINGS } from '@/lib/budget'
 import { DebtClosedSheet, type ClosedDebtInfo } from '@/components/debts/DebtClosedSheet'
 import { formatMoney } from '@/lib/format'
 import type { Debt } from '@/types/domain'
@@ -12,6 +12,7 @@ export function RecordPaymentDialog({ open, onOpenChange, debt }: { open: boolea
   const addPayment = useAddDebtPayment()
   const { data: debts } = useDebts()
   const { data: goals } = useGoals()
+  const month = useMonth()
   const [amount, setAmount] = useState('')
   const [isExtra, setIsExtra] = useState(false)
   // Survives this sheet closing (and `debt` going null) — the celebration opens right after.
@@ -49,14 +50,27 @@ export function RecordPaymentDialog({ open, onOpenChange, debt }: { open: boolea
   }
 
   function closedDebtInfo(closing: Debt): ClosedDebtInfo {
-    const onMinimums = simulateDebtStrategy({ debts: [closing], monthlySurplus: 0, strategy: 'avalanche' })
-    const nextDebt = (debts ?? [])
-      .filter((d) => d.id !== closing.id && d.status === 'active' && d.current_balance > 0)
-      .sort((a, b) => (b.interest_rate ?? 0) - (a.interest_rate ?? 0))[0]
+    // «Сколько процентов сэкономили»: этот долг на одних минимальных платежах, без досрочных.
+    const onMinimums = simulatePlan({
+      debts: [{ id: closing.id, title: closing.title, balance: closing.current_balance, rate: closing.interest_rate, min: closing.minimum_payment }],
+      monthlyExtra: 0,
+      settings: DEFAULT_PLAN_SETTINGS,
+      cushionBalance: 0,
+      monthlyNeed: 0,
+      start: new Date(),
+      rollover: false,
+    })
+    // Следующий — по выбранной стратегии семьи, как в плане на экране «Долги».
+    const nextDebt = orderDebts(
+      (debts ?? [])
+        .filter((d) => d.id !== closing.id && d.status === 'active' && d.current_balance > 0)
+        .map((d) => ({ ...d, balance: d.current_balance, rate: d.interest_rate, min: d.minimum_payment })),
+      month?.settings.strategy ?? 'avalanche',
+    )[0]
     return {
       title: closing.title,
       currency: closing.currency,
-      interestSaved: onMinimums.estimated_payoff_date ? onMinimums.total_interest_paid : null,
+      interestSaved: onMinimums.debtFreeDate ? onMinimums.totalInterest : null,
       freedMonthly: closing.minimum_payment,
       next: nextDebt
         ? { kind: 'debt', title: nextDebt.title }

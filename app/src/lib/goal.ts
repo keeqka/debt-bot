@@ -1,38 +1,32 @@
 import type { Goal } from '@/types/domain'
 import type { Month } from '@/lib/month'
 
-/**
- * Сколько в месяц пойдёт на цели. Сначала долги (lib/budget.ts): пока они
- * есть, на цели не идёт ничего, а после закрытия освобождаются и досрочные,
- * и минимальные платежи — доход минус обычные траты.
- */
+/** Сколько в месяц пойдёт на цели по плану (lib/budget.ts): сейчас или с того месяца, когда начнётся. */
 export function goalMoneyPerMonth(month: Month) {
-  return month.planTarget === 'debts'
-    ? Math.max(0, Math.floor((month.income - month.typicalSpend) / 1000) * 1000)
-    : Math.max(0, Math.floor(month.freeMonthly / 1000) * 1000)
+  return month.plan.now.toGoals > 0 ? month.plan.now.toGoals : month.plan.goalsMonthly
 }
 
-/** Когда цель соберётся, если всё, что идёт на цели, класть в неё — начиная с закрытия долгов. */
-export function forecastGoalFromBudget(goal: Goal, month: Month, debtFreeDate: string | null | undefined): Date | null {
+/** Цели пока ждут (долги/подушка по плану впереди) — и с какого месяца начнутся. */
+export function goalsWaitUntil(month: Month): string | null {
+  return month.plan.now.toGoals > 0 ? null : month.plan.goalsStartDate
+}
+
+/**
+ * Когда цель соберётся по плану. Подушка — отдельная строка плана, у неё своя
+ * дата. Обычная цель получает деньги целей с месяца, когда план до них доходит.
+ */
+export function forecastGoalFromBudget(goal: Goal, month: Month): Date | null {
+  if (goal.is_cushion) return month.plan.cushionFullDate ? new Date(month.plan.cushionFullDate) : null
   const left = Math.max(0, goal.target_amount - goal.current_amount)
   if (left === 0) return new Date()
   const perMonth = goalMoneyPerMonth(month)
-  if (perMonth <= 0) return null
-  const start = month.planTarget === 'debts' ? (debtFreeDate ? new Date(debtFreeDate) : null) : new Date()
-  if (!start) return null
+  const start = month.plan.now.toGoals > 0 ? new Date() : month.plan.goalsStartDate ? new Date(month.plan.goalsStartDate) : null
+  if (!start || perMonth <= 0) return null
   const date = new Date(start)
-  date.setMonth(date.getMonth() + Math.ceil(left / perMonth))
+  date.setMonth(date.getMonth() + Math.max(0, Math.ceil(left / perMonth) - 1))
   return date
 }
 
-/**
- * Арифметика цели на клиенте. Нужна потому, что `ai_strategy` считается кроном
- * и у только что созданной цели она null — а «сколько откладывать в месяц»
- * человек должен увидеть сразу, в момент создания, иначе форма просит цифры и
- * ничего не отвечает взамен.
- *
- * Если стратегия уже есть — она главнее: там учтены доходы, долги и ставки.
- */
 export interface GoalMath {
   /** 0–100, уже обрезано */
   pct: number

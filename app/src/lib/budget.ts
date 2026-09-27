@@ -4,9 +4,8 @@
 // копируй туда.
 //
 // Порядок денег за месяц:
-//   доход → минимальные платежи → досрочное погашение долгов (всё, что сверх
-//   обычных трат) → бюджет на траты.
-// Цели получают свободные деньги только когда долгов не осталось.
+//   доход → минимальные платежи → всё, что сверх обычных трат, по плану
+//   (долги / подушка / цели — как настроено, см. «План» ниже) → бюджет на траты.
 //
 // «Обычные траты» — среднее за до 3 прошлых полных месяцев. Пока истории нет
 // (первый месяц), это прогноз по текущему темпу — бюджет «плавает» вместе
@@ -27,9 +26,12 @@ export interface BudgetInput {
   userIncomes: Array<number | null | undefined>
   incomes: Array<{ amount: number; received_at: string }>
   expenses: BudgetExpense[]
-  debts: Array<{ id: string; status: string; minimum_payment: number; current_balance: number }>
+  debts: Array<{ id: string; title: string; status: string; minimum_payment: number; current_balance: number; interest_rate: number | null }>
   debtPayments: Array<{ debt_id: string; amount: number; paid_at: string }>
   hasActiveGoals: boolean
+  /** Накоплено в подушке (цели с пометкой is_cushion). */
+  cushionBalance: number
+  settings: PlanSettings
   categoryNames: Record<string, string>
   currencySymbol: string
   today?: Date
@@ -62,9 +64,15 @@ export interface Budget {
   minPayments: number
   /** Доход − минимальные платежи − обычные траты. Может быть < 0. */
   freeMonthly: number
-  /** Сколько каждый месяц уходит сверх минимумов: в долги, пока они есть, потом в цели. */
+  /** Сколько каждый месяц уходит сверх минимумов — раскладку по долгам, подушке и целям даёт plan. */
   planExtra: number
-  planTarget: 'debts' | 'goals' | 'none'
+  /** Куда уходит бо́льшая часть planExtra в этом месяце. */
+  planTarget: 'debts' | 'cushion' | 'goals' | 'none'
+  settings: PlanSettings
+  plan: PlanResult
+  /** Обычный месяц (обычные траты + минимумы) — в нём меряется подушка. */
+  monthlyNeed: number
+  cushionBalance: number
 
   dayOfMonth: number
   daysInMonth: number
@@ -72,7 +80,7 @@ export interface Budget {
   spent: number
   /** Внесено по долгам в этом месяце (минимумы и досрочно). */
   debtPaid: number
-  /** Ещё отложить в этом месяце: невнесённые минимумы + невнесённая часть planExtra. */
+  /** Ещё отложить в этом месяце: невнесённые минимумы + невнесённая часть досрочных + подушка и цели по плану. */
   reserved: number
   /** debtPaid + reserved — всё, что в этом месяце уходит не на траты. */
   obligations: number
@@ -85,6 +93,250 @@ export interface Budget {
   categories: BudgetCategory[]
   /** Перерасход и аномалии, самое важное первым. */
   signals: BudgetSignal[]
+}
+
+// ═══ План: куда идут деньги сверх обычных трат ═══════════════════════════
+//
+// Режимы — известные схемы личных финансов, не выдумка:
+//   debts_first   всё свободное в долги; после — подушка, потом цели.
+//   cushion_first сначала резерв на N месяцев обычных расходов, потом долги.
+//   split         доля в долги, остальное в накопления (подушка → цели).
+//   ladder        «порядок приоритетов»: стартовая подушка на 1 месяц →
+//                 дорогие долги (ставка ≥ порога) → полная подушка →
+//                 дешёвые долги → цели.
+// Стратегии — порядок, в котором гасятся долги сверх минимумов:
+//   avalanche  по ставке, самый дорогой первым — минимальная переплата;
+//   snowball   по остатку, самый маленький первым — быстрые закрытия;
+//   cash_flow  по «остаток / минимальный платёж» — быстрее всего
+//              освобождает ежемесячные деньги (Cash Flow Index).
+// Во всех стратегиях минимальный платёж закрытого долга не пропадает, а
+// переходит в следующий по очереди (roll-over) — так эти методы и работают.
+
+export type PriorityMode = 'debts_first' | 'cushion_first' | 'split' | 'ladder'
+export type DebtStrategy = 'avalanche' | 'snowball' | 'cash_flow'
+
+export interface PlanSettings {
+  mode: PriorityMode
+  strategy: DebtStrategy
+  /** Размер подушки в месяцах обычных расходов (обычные траты + минимальные платежи). */
+  cushionMonths: number
+  /** split: какой процент свободных денег идёт в долги. */
+  splitDebtPct: number
+  /** ladder: долг с этой ставкой (% годовых) и выше считается дорогим. */
+  highRateThreshold: number
+}
+
+export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
+  mode: 'debts_first',
+  strategy: 'avalanche',
+  cushionMonths: 3,
+  splitDebtPct: 50,
+  highRateThreshold: 15,
+}
+
+export interface PlanDebt {
+  id: string
+  title: string
+  balance: number
+  /** % годовых; null — без процентов. */
+  rate: number | null
+  min: number
+}
+
+export interface PlanInput {
+  debts: PlanDebt[]
+  /** Деньги сверх обычных трат и минимальных платежей, в месяц. */
+  monthlyExtra: number
+  settings: PlanSettings
+  cushionBalance: number
+  /** Обычный месяц: обычные траты + минимальные платежи. В нём меряется подушка. */
+  monthlyNeed: number
+  start: Date
+  /** false — минимальные платежи закрытых долгов пропадают (базовый сценарий «только минимумы»). */
+  rollover?: boolean
+}
+
+export interface PlanMonth {
+  month: number
+  date: string
+  debt: number
+  cushion: number
+}
+
+export interface PlanResult {
+  hasDebts: boolean
+  /** Когда закроется последний долг; null — долгов нет или за 50 лет не закроются. */
+  debtFreeDate: string | null
+  debtFreeMonths: number | null
+  totalInterest: number
+  closures: Array<{ id: string; title: string; date: string; months: number }>
+  cushionTarget: number
+  /** Когда подушка наберётся; сегодняшняя дата, если уже набрана; null — не наберётся. */
+  cushionFullDate: string | null
+  /** С какого месяца деньги начнут идти на цели и сколько в тот месяц. */
+  goalsStartDate: string | null
+  goalsMonthly: number
+  /** Раскладка этого месяца. */
+  now: { toDebts: number; toCushion: number; toGoals: number }
+  /** Помесячно, для графика (до 10 лет). */
+  timeline: PlanMonth[]
+}
+
+const PLAN_MAX_MONTHS = 600 // 50 лет: дальше план не считается реальным
+
+function isoDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function addMonthsTo(start: Date, months: number) {
+  const d = new Date(start.getFullYear(), start.getMonth() + months, 1)
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+  d.setDate(Math.min(start.getDate(), lastDay))
+  return d
+}
+
+/** Порядок погашения сверх минимумов для выбранной стратегии. */
+export function orderDebts<T extends PlanDebt>(debts: T[], strategy: DebtStrategy): T[] {
+  const rate = (d: T) => d.rate ?? 0
+  const cfi = (d: T) => (d.min > 0 ? d.balance / d.min : Number.POSITIVE_INFINITY)
+  return [...debts].sort((a, b) =>
+    strategy === 'avalanche'
+      ? rate(b) - rate(a) || a.balance - b.balance
+      : strategy === 'snowball'
+        ? a.balance - b.balance || rate(b) - rate(a)
+        : cfi(a) - cfi(b) || rate(b) - rate(a),
+  )
+}
+
+/** Помесячная симуляция плана. Детерминированная: одни и те же входы — одни и те же даты. */
+export function simulatePlan(input: PlanInput): PlanResult {
+  const { settings } = input
+  const rollover = input.rollover ?? true
+  const ordered = orderDebts(input.debts.filter((d) => d.balance > 0.5), settings.strategy)
+  const balances = new Map(ordered.map((d) => [d.id, d.balance]))
+  const closedAt = new Map<string, number>()
+  const cushionTarget = Math.max(0, Math.round(settings.cushionMonths * input.monthlyNeed))
+  const starterTarget = Math.min(cushionTarget, Math.max(0, Math.round(input.monthlyNeed)))
+  const isHigh = (d: PlanDebt) => (d.rate ?? 0) >= settings.highRateThreshold
+
+  let cushion = Math.max(0, input.cushionBalance)
+  let totalInterest = 0
+  let cushionFullMonth: number | null = cushion >= cushionTarget ? 0 : null
+  let goalsStartMonth: number | null = null
+  let goalsMonthly = 0
+  let now = { toDebts: 0, toCushion: 0, toGoals: 0 }
+  const timeline: PlanMonth[] = [
+    { month: 0, date: isoDate(input.start), debt: Math.round([...balances.values()].reduce((s, b) => s + b, 0)), cushion: Math.round(cushion) },
+  ]
+
+  const open = () => ordered.filter((d) => (balances.get(d.id) ?? 0) > 0.5)
+
+  let month = 0
+  while (month < PLAN_MAX_MONTHS) {
+    if (open().length === 0) {
+      // Долгов нет: дальше меняется только подушка/цели — считать, пока есть
+      // чем их пополнять и пока не ясно, когда начнутся цели.
+      const futurePool = input.monthlyExtra + (rollover ? ordered.reduce((s, d) => s + d.min, 0) : 0)
+      if (futurePool <= 0.5 || (cushionFullMonth != null && goalsStartMonth != null)) break
+    }
+    month += 1
+
+    // 1. Проценты и минимальные платежи.
+    let pool = input.monthlyExtra
+    for (const d of ordered) {
+      const bal = balances.get(d.id) ?? 0
+      if (bal <= 0.5) {
+        if (rollover && closedAt.has(d.id)) pool += d.min // платёж закрытого долга переходит дальше
+        continue
+      }
+      const interest = (bal * (d.rate ?? 0)) / 100 / 12
+      totalInterest += interest
+      const pay = Math.min(d.min, bal + interest)
+      balances.set(d.id, bal + interest - pay)
+      if (rollover) pool += d.min - pay // недоиспользованный минимум — тоже свободные деньги
+    }
+    for (const d of ordered) if ((balances.get(d.id) ?? 0) <= 0.5 && !closedAt.has(d.id)) closedAt.set(d.id, month)
+
+    // 2. Раскладка свободных денег по режиму.
+    const spent = { toDebts: 0, toCushion: 0, toGoals: 0 }
+    const payDebts = (amount: number, only?: (d: PlanDebt) => boolean) => {
+      let left = amount
+      for (const d of open()) {
+        if (left <= 0) break
+        if (only && !only(d)) continue
+        const bal = balances.get(d.id) ?? 0
+        const pay = Math.min(left, bal)
+        balances.set(d.id, bal - pay)
+        spent.toDebts += pay
+        left -= pay
+        if (bal - pay <= 0.5) closedAt.set(d.id, month)
+      }
+      return left
+    }
+    const fillCushion = (amount: number, cap: number) => {
+      const add = Math.min(amount, Math.max(0, cap - cushion))
+      cushion += add
+      spent.toCushion += add
+      return amount - add
+    }
+
+    let rest = Math.max(0, pool)
+    if (settings.mode === 'debts_first') {
+      rest = payDebts(rest)
+      rest = fillCushion(rest, cushionTarget)
+    } else if (settings.mode === 'cushion_first') {
+      rest = fillCushion(rest, cushionTarget)
+      rest = payDebts(rest)
+    } else if (settings.mode === 'split') {
+      const toDebt = (rest * settings.splitDebtPct) / 100
+      let toSave = rest - toDebt
+      toSave += payDebts(toDebt)
+      rest = fillCushion(toSave, cushionTarget)
+    } else {
+      rest = fillCushion(rest, starterTarget)
+      rest = payDebts(rest, isHigh)
+      rest = fillCushion(rest, cushionTarget)
+      rest = payDebts(rest)
+    }
+    spent.toGoals += rest
+
+    if (month === 1) now = spent
+    if (cushionFullMonth == null && cushion >= cushionTarget) cushionFullMonth = month
+    if (goalsStartMonth == null && spent.toGoals > 0.5) {
+      goalsStartMonth = month
+      goalsMonthly = spent.toGoals
+    }
+    if (month <= 120) {
+      timeline.push({
+        month,
+        date: isoDate(addMonthsTo(input.start, month)),
+        debt: Math.round([...balances.values()].reduce((s, b) => s + Math.max(0, b), 0)),
+        cushion: Math.round(cushion),
+      })
+    }
+  }
+
+  const hasDebts = ordered.length > 0
+  const allClosed = hasDebts && open().length === 0
+  const lastClose = allClosed ? Math.max(...[...closedAt.values()]) : null
+  const dateAt = (m: number | null) => (m == null ? null : isoDate(addMonthsTo(input.start, m)))
+
+  return {
+    hasDebts,
+    debtFreeDate: dateAt(lastClose),
+    debtFreeMonths: lastClose,
+    totalInterest: Math.round(totalInterest),
+    closures: ordered
+      .filter((d) => closedAt.has(d.id))
+      .map((d) => ({ id: d.id, title: d.title, months: closedAt.get(d.id)!, date: dateAt(closedAt.get(d.id)!)! }))
+      .sort((a, b) => a.months - b.months),
+    cushionTarget,
+    cushionFullDate: dateAt(cushionFullMonth),
+    goalsStartDate: dateAt(goalsStartMonth),
+    goalsMonthly: Math.round(goalsMonthly),
+    now: { toDebts: Math.round(now.toDebts), toCushion: Math.round(now.toCushion), toGoals: Math.round(now.toGoals) },
+    timeline,
+  }
 }
 
 const UNCATEGORIZED = 'uncategorized'
@@ -160,8 +412,24 @@ export function computeBudget(input: BudgetInput): Budget {
   const activeDebts = input.debts.filter((d) => d.status === 'active' && d.current_balance > 0)
   const minPayments = activeDebts.reduce((s, d) => s + d.minimum_payment, 0)
   const freeMonthly = income - minPayments - typicalSpend
-  const planTarget: Budget['planTarget'] = activeDebts.length ? 'debts' : input.hasActiveGoals ? 'goals' : 'none'
-  const planExtra = planTarget === 'none' ? 0 : Math.max(0, Math.floor(freeMonthly / 1000) * 1000)
+  const monthlyNeed = typicalSpend + minPayments
+  const cushionTarget = Math.round(input.settings.cushionMonths * monthlyNeed)
+  // Откладывать некуда — нет ни долгов, ни целей, подушка набрана: тогда
+  // свободное остаётся свободным и не резервируется.
+  const nothingToFund = !activeDebts.length && !input.hasActiveGoals && input.cushionBalance >= cushionTarget
+  const planExtra = nothingToFund ? 0 : Math.max(0, Math.floor(freeMonthly / 1000) * 1000)
+
+  const plan = simulatePlan({
+    debts: activeDebts.map((d) => ({ id: d.id, title: d.title, balance: d.current_balance, rate: d.interest_rate, min: d.minimum_payment })),
+    monthlyExtra: planExtra,
+    settings: input.settings,
+    cushionBalance: input.cushionBalance,
+    monthlyNeed,
+    start: today,
+  })
+  const { toDebts, toCushion, toGoals } = plan.now
+  const planTarget: Budget['planTarget'] =
+    toDebts + toCushion + toGoals <= 0 ? 'none' : toDebts >= toCushion && toDebts >= toGoals ? 'debts' : toCushion >= toGoals ? 'cushion' : 'goals'
 
   const paidThisMonth = new Map<string, number>()
   for (const p of input.debtPayments) {
@@ -172,10 +440,9 @@ export function computeBudget(input: BudgetInput): Budget {
   const unpaidMins = activeDebts.reduce((s, d) => s + Math.max(0, d.minimum_payment - (paidThisMonth.get(d.id) ?? 0)), 0)
   const extraPaid = activeDebts.reduce((s, d) => s + Math.max(0, (paidThisMonth.get(d.id) ?? 0) - d.minimum_payment), 0)
   const remainingDebt = activeDebts.reduce((s, d) => s + d.current_balance, 0)
-  const reserved =
-    planTarget === 'debts'
-      ? Math.min(remainingDebt, unpaidMins + Math.max(0, planExtra - extraPaid))
-      : unpaidMins + planExtra
+  // Досрочные уже внесённые засчитываются в план по долгам; взносы в подушку
+  // и цели не отслеживаются поштучно — их доля резервируется целиком.
+  const reserved = Math.min(remainingDebt, unpaidMins + Math.max(0, toDebts - extraPaid)) + toCushion + toGoals
 
   const obligations = debtPaid + reserved
   const limit = income - obligations
@@ -202,7 +469,14 @@ export function computeBudget(input: BudgetInput): Budget {
   const signals: BudgetSignal[] = []
   if (historyMonths) {
     const minAmount = Math.max(5000, Math.round(typicalSpend * 0.03))
-    const whereTo = planTarget === 'debts' ? ' — это деньги, которые ушли бы в долги' : ''
+    const whereTo =
+      planTarget === 'debts'
+        ? ' — это деньги, которые ушли бы в долги'
+        : planTarget === 'cushion'
+          ? ' — это деньги, которые ушли бы в подушку'
+          : planTarget === 'goals'
+            ? ' — это деньги, которые ушли бы на цели'
+            : ''
 
     for (const c of categories) {
       if (c.typical == null || c.expectedByNow == null || c.typical === 0) continue
@@ -268,6 +542,10 @@ export function computeBudget(input: BudgetInput): Budget {
     freeMonthly,
     planExtra,
     planTarget,
+    settings: input.settings,
+    plan,
+    monthlyNeed,
+    cushionBalance: input.cushionBalance,
     dayOfMonth,
     daysInMonth,
     daysLeft,

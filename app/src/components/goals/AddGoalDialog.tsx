@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { FormSheet, FormField, formInputClass, SaveButton } from '@/components/chrome/FormSheet'
-import { useAddGoal, useUpdateGoal, useMonth, useDebtFreeDate } from '@/hooks/use-finance-data'
+import { useAddGoal, useUpdateGoal, useMonth } from '@/hooks/use-finance-data'
 import { formatMoney, currencySymbol } from '@/lib/format'
-import { monthLabel, goalMoneyPerMonth } from '@/lib/goal'
+import { monthLabel, goalMoneyPerMonth, goalsWaitUntil } from '@/lib/goal'
 import type { Goal } from '@/types/domain'
 
 interface FormState {
@@ -30,7 +30,6 @@ export function AddGoalDialog({ open, onOpenChange, goal }: { open: boolean; onO
   const addGoal = useAddGoal()
   const updateGoal = useUpdateGoal()
   const month = useMonth()
-  const debtFreeDate = useDebtFreeDate()
   const isEdit = Boolean(goal)
   const isPending = addGoal.isPending || updateGoal.isPending
 
@@ -60,17 +59,16 @@ export function AddGoalDialog({ open, onOpenChange, goal }: { open: boolean; onO
     const left = Math.max(0, target - current)
     if (!left) return null
 
-    // Сначала долги: пока они есть, свободные деньги идут в них, а цель ждёт.
-    if (month?.planTarget === 'debts') {
+    // По плану цели могут ждать (долги / подушка впереди) — считаем от месяца, когда до них дойдёт.
+    const waitUntil = month ? goalsWaitUntil(month) : null
+    if (month && waitUntil) {
       const perMonth = goalMoneyPerMonth(month)
-      const start = debtFreeDate ? new Date(debtFreeDate) : null
-      const done = start && perMonth > 0 ? new Date(start.getFullYear(), start.getMonth() + Math.ceil(left / perMonth), 1) : null
+      const start = new Date(waitUntil)
+      const done = perMonth > 0 ? new Date(start.getFullYear(), start.getMonth() + Math.max(0, Math.ceil(left / perMonth) - 1), 1) : null
       const late = done && form.targetDate ? done > new Date(form.targetDate) : false
       return {
-        text: start ? `Пока есть долги, всё свободное идёт в них. Последний закроется: ${monthLabel(start)}` : 'Пока есть долги, всё свободное идёт в них',
-        hint: done
-          ? `Потом ${formatMoney(perMonth, CURRENCY)} в месяц на цели — соберётся: ${monthLabel(done)}${late ? ' (позже срока)' : ''}`
-          : undefined,
+        text: `По плану деньги на цели пойдут с месяца: ${monthLabel(start)}`,
+        hint: done ? `Тогда ${formatMoney(perMonth, CURRENCY)} в месяц — соберётся: ${monthLabel(done)}${late ? ' (позже срока)' : ''}` : undefined,
         tone: late ? ('warn' as const) : ('ok' as const),
       }
     }
@@ -105,7 +103,7 @@ export function AddGoalDialog({ open, onOpenChange, goal }: { open: boolean; onO
       return { text: `Если откладывать всё свободное — ${monthLabel(date)}`, tone: 'ok' as const }
     }
     return { text: 'Без срока цель просто копится — дату можно поставить позже', tone: 'ok' as const }
-  }, [form.targetAmount, form.currentAmount, form.targetDate, month, debtFreeDate])
+  }, [form.targetAmount, form.currentAmount, form.targetDate, month])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

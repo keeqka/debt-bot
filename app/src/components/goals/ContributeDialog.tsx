@@ -22,8 +22,12 @@ export function ContributeDialog({ open, onOpenChange, goal }: { open: boolean; 
   const quick = goal
     ? ([
         math?.monthlyNeeded ? { label: 'по плану', value: math.monthlyNeeded } : null,
-        // Сначала долги: пока они есть, «всё свободное» принадлежит им — не предлагаем.
-        month && month.planTarget !== 'debts' && month.planExtra > 0 ? { label: 'свободное за месяц', value: month.planExtra } : null,
+        // «Свободное» предлагаем ровно в том объёме, который план отдаёт этой цели в этом месяце.
+        month && goal?.is_cushion && month.plan.now.toCushion > 0
+          ? { label: 'свободное за месяц', value: month.plan.now.toCushion }
+          : month && !goal?.is_cushion && month.plan.now.toGoals > 0
+            ? { label: 'свободное за месяц', value: month.plan.now.toGoals }
+            : null,
         math && math.left > 0 ? { label: 'до цели', value: math.left } : null,
       ].filter(Boolean) as { label: string; value: number }[])
     : []

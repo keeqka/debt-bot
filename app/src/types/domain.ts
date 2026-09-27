@@ -102,6 +102,8 @@ export interface Goal {
   currency: string
   status: GoalStatus
   ai_strategy: GoalStrategy | null
+  /** Подушка безопасности — бюджет читает её накопленное как резерв. */
+  is_cushion: boolean
 }
 
 export interface BankProduct {
@@ -133,17 +135,19 @@ export interface Subscription {
   activated_at: string | null
 }
 
-export type DebtStrategyKind = 'avalanche' | 'snowball'
+export type DebtStrategyKind = 'avalanche' | 'snowball' | 'cash_flow'
 
-export interface DebtStrategyPlan {
-  strategy: DebtStrategyKind
-  payoff_order: Uuid[]
-  monthly_plan: { debt_id: Uuid; payment: number }[]
-  /** null when there's no real payoff date to give (e.g. a minimum payment that doesn't cover its own interest) — never an unparseable placeholder string. */
-  estimated_payoff_date: string | null
-  total_interest_paid: number
-  explanation: string
+export type PriorityMode = 'debts_first' | 'cushion_first' | 'split' | 'ladder'
+
+/** Модель денег семьи — одна строка на всех (0016_household_plan_settings.sql). */
+export interface HouseholdSettings {
+  priority_mode: PriorityMode
+  debt_strategy: DebtStrategyKind
+  cushion_months: number
+  split_debt_pct: number
+  high_rate_threshold: number
 }
+
 
 /** What the chat advisor proposed when the user asked it to add a debt — always reviewed in the "Новый долг" form, never auto-saved. */
 export interface ProposedDebt {
@@ -160,6 +164,24 @@ export interface ProposedDebt {
 export interface ProposedCategory {
   name: string
   type: CategoryType
+}
+
+/** Смена настроек, которую предложил «Чек», и во что она выльется (посчитано сервером той же моделью, что и приложение). */
+export interface ProposedSettings {
+  household?: Partial<HouseholdSettings>
+  user?: Partial<Pick<User, 'monthly_income' | 'payday' | 'daily_reminder_enabled' | 'daily_reminder_time'>>
+  /** Чей доход/напоминание меняется — автор сообщения. */
+  user_id?: string
+  preview?: {
+    debt_free_before: string | null
+    debt_free_after: string | null
+    interest_before: number
+    interest_after: number
+    cushion_full_before: string | null
+    cushion_full_after: string | null
+    per_day_before: number
+    per_day_after: number
+  }
 }
 
 export interface ChatDataWidgetRow {
@@ -180,6 +202,8 @@ export interface ChatMessage {
   model?: string | null
   proposed_debt?: ProposedDebt | null
   proposed_category?: ProposedCategory | null
+  /** Предложенная в чате смена настроек — применяется только по тапу. */
+  proposed_settings?: ProposedSettings | null
   /** A numeric breakdown rendered on paper inside the bubble instead of text with percentages (ТЗ FUNCTIONAL.md §6). */
   data_widget?: ChatDataWidgetRow[] | null
   /** 2-3 suggested follow-up questions shown under this message. */
