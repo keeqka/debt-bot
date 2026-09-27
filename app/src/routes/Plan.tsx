@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, CircleDollarSign, Pencil, Trash2 } from 'lucide-react'
+import { Plus, CircleDollarSign, Pencil, Trash2, SlidersHorizontal } from 'lucide-react'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
@@ -10,7 +11,7 @@ import { MascotAvatar } from '@/components/Mascot'
 import { useDebts, useDeleteDebt, useMonth, useUpdateHouseholdSettings } from '@/hooks/use-finance-data'
 import { orderDebts, type DebtStrategy } from '@/lib/budget'
 import { replan } from '@/lib/month'
-import { STRATEGY_META, modeSummary } from '@/lib/plan-text'
+import { MODE_META, STRATEGY_META, modeSummary } from '@/lib/plan-text'
 import { formatMoney, formatMoneyCompact, formatMonthYear } from '@/lib/format'
 import { useAnimatedNumber } from '@/hooks/use-animated-number'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
@@ -19,6 +20,8 @@ import { cn } from '@/lib/utils'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { RecordPaymentDialog } from '@/components/debts/RecordPaymentDialog'
 import { DebtPayoffChart } from '@/components/charts/DebtPayoffChart'
+import { GoalsSection } from '@/components/goals/GoalsSection'
+import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
 
 const STRATEGIES: DebtStrategy[] = ['avalanche', 'snowball', 'cash_flow']
 
@@ -35,7 +38,12 @@ function addMonths(date: Date, months: number) {
   return d
 }
 
-export function Debts() {
+/**
+ * «План»: всё, куда идут деньги сверх обычных трат, на одном экране — режим,
+ * долги с датой свободы и стратегией, подушка и цели. Раньше цели жили внизу
+ * «Обзора», а долги — отдельно, хотя это один план (lib/budget.ts).
+ */
+export function Plan() {
   const { data: debts, isLoading } = useDebts()
   const month = useMonth()
   const deleteDebt = useDeleteDebt()
@@ -77,6 +85,16 @@ export function Debts() {
   const isCheap = (d: Debt) => month?.settings.mode === 'ladder' && (d.interest_rate ?? 0) < month.settings.highRateThreshold
 
   const [addOpen, setAddOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // «Цели →» с «Обзора» ведёт сюда с ?to=goals — сразу прокручиваем к ним.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const goalsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (searchParams.get('to') !== 'goals' || isLoading) return
+    goalsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams, isLoading])
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
   const [payingDebt, setPayingDebt] = useState<Debt | null>(null)
   const [deletingDebt, setDeletingDebt] = useState<Debt | null>(null)
@@ -99,12 +117,28 @@ export function Debts() {
 
   return (
     <div className="space-y-3.5 pb-6">
+      {month && (
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          className="flex w-full items-center justify-between gap-3 rounded-[14px] bg-hf-card px-3.5 py-2.5 text-left"
+        >
+          <span className="min-w-0">
+            <span className="block text-[11px] text-hf-text-4">Режим плана</span>
+            <span className="block truncate text-[13px] text-hf-text">
+              {MODE_META[month.settings.mode].label} · {STRATEGY_META[month.settings.strategy].label}
+            </span>
+          </span>
+          <SlidersHorizontal className="h-4 w-4 shrink-0 text-hf-text-4" />
+        </button>
+      )}
+
       {activeDebts.length === 0 ? (
-        <div className="flex flex-col items-center gap-4 rounded-[20px] bg-hf-card px-5 py-8 text-center">
-          <MascotAvatar size={56} expression="calm" />
-          <p className="text-[13px] leading-relaxed text-hf-text-3">Долгов пока нет — если есть кредитка или рассрочка, добавь первую.</p>
-          <button type="button" onClick={() => setAddOpen(true)} className="rounded-[14px] bg-hf-accent px-6 py-3 text-sm font-medium text-white">
-            Новый долг
+        <div className="flex items-center gap-3 rounded-[16px] bg-hf-card px-3.5 py-3">
+          <MascotAvatar size={34} expression="calm" />
+          <p className="min-w-0 flex-1 text-[13px] leading-snug text-hf-text-3">Долгов нет — свободные деньги идут в подушку и цели.</p>
+          <button type="button" onClick={() => setAddOpen(true)} className="shrink-0 text-[13px] font-medium text-hf-accent-on-dark">
+            + долг
           </button>
         </div>
       ) : (
@@ -253,6 +287,12 @@ export function Debts() {
           </ActionBar>
         </>
       )}
+
+      <div ref={goalsRef} className="scroll-mt-4 pt-2">
+        <GoalsSection />
+      </div>
+
+      <BudgetSetupSheet open={settingsOpen} onOpenChange={setSettingsOpen} />
 
       <AddDebtDialog open={addOpen} onOpenChange={setAddOpen} />
       <AddDebtDialog open={Boolean(editingDebt)} onOpenChange={(open) => !open && setEditingDebt(null)} debt={editingDebt ?? undefined} />

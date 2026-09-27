@@ -18,7 +18,7 @@ import { sendChatMutationKey, useMonth } from '@/hooks/use-finance-data'
  */
 const SUBTITLES: Record<string, string> = {
   '/overview': 'мини-апп',
-  '/debts': 'план погашения',
+  '/plan': 'долги, подушка и цели',
   '/receipt': 'чеки и выписки',
   '/chat': 'читает твои цифры',
 }

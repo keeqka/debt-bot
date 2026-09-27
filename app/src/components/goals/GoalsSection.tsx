@@ -33,7 +33,7 @@ export function GoalsSection() {
   return (
     <section className="space-y-2.5">
       <div className="flex items-center justify-between gap-2.5">
-        <Eyebrow>Цели</Eyebrow>
+        <Eyebrow>Подушка и цели</Eyebrow>
         {active.length > 0 && (
           <button type="button" onClick={() => setAddOpen(true)} className="flex items-center gap-1 text-[11px] text-hf-accent-on-dark">
             <Plus className="h-3 w-3" />
@@ -49,8 +49,8 @@ export function GoalsSection() {
           className="flex w-full items-center justify-between gap-3 rounded-[16px] bg-hf-card px-3.5 py-3 text-left"
         >
           <span className="min-w-0">
-            <span className="block text-[13px] font-medium text-hf-text">Поставь цель — посчитаю, сколько откладывать</span>
-            <span className="block text-[11px] text-hf-text-4">Свободные деньги месяца пока никуда не идут</span>
+            <span className="block text-[13px] font-medium text-hf-text">Поставь цель — посчитаю, когда до неё дойдут деньги</span>
+            <span className="block text-[11px] text-hf-text-4">Деньги дойдут до неё по плану — после долгов или подушки, как настроено</span>
           </span>
           <Plus className="h-4 w-4 shrink-0 text-hf-text-4" />
         </button>

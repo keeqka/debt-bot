@@ -439,7 +439,7 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
           id: crypto.randomUUID(),
           user_id: mock.currentMockUser.id,
           role: 'assistant',
-          content: 'Долг закрыт. Его минимальный платёж освободился — теперь он идёт в следующий долг. Запиши последний платёж во вкладке «Долги», чтобы план пересчитался.',
+          content: 'Долг закрыт. Его минимальный платёж освободился — теперь он идёт в следующий долг. Запиши последний платёж во вкладке «План», чтобы план пересчитался.',
           model: 'claude-sonnet-5',
           expression: 'happy',
           created_at: new Date().toISOString(),

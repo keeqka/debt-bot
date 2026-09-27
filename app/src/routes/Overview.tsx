@@ -7,8 +7,8 @@ import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar, Mascot } from '@/components/Mascot'
 import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
-import { GoalsSection } from '@/components/goals/GoalsSection'
-import { useMonth, useExpenses, useDebts, useStatus, useDebtFreeDate } from '@/hooks/use-finance-data'
+import { useMonth, useExpenses, useDebts, useGoals, useStatus, useDebtFreeDate } from '@/hooks/use-finance-data'
+import { goalsWaitUntil } from '@/lib/goal'
 import { computeInsight } from '@/lib/insight'
 import { STATUS_META } from '@/lib/status'
 import { formatMoney, formatMoneyCompact, formatMonthYear, formatPercent } from '@/lib/format'
@@ -210,7 +210,7 @@ export function Overview() {
       {activeDebts.length > 0 && (
         <button
           type="button"
-          onClick={() => navigate('/debts')}
+          onClick={() => navigate('/plan')}
           className="flex w-full items-center justify-between gap-3 rounded-[16px] bg-hf-card px-3.5 py-3 text-left"
         >
           <span className="min-w-0">
@@ -228,7 +228,7 @@ export function Overview() {
         </button>
       )}
 
-      <GoalsSection />
+      <GoalsLinkRow onOpen={() => navigate('/plan?to=goals')} />
 
       <button
         type="button"
@@ -253,6 +253,34 @@ function planLine(month: NonNullable<ReturnType<typeof useMonth>>) {
   ].filter(Boolean)
   const unpaid = month.reserved > 0 ? `, ещё не внесено ${formatMoney(month.reserved)}` : ''
   return `В этом месяце: ${parts.join(', ')}${unpaid}.`
+}
+
+/** Подушка и цели живут на вкладке «План»; здесь — одна строка, чтобы было видно, где они и как идут. */
+function GoalsLinkRow({ onOpen }: { onOpen: () => void }) {
+  const { data: goals } = useGoals()
+  const month = useMonth()
+  const active = (goals ?? []).filter((g) => g.status === 'active')
+  const cushion = active.find((g) => g.is_cushion)
+  const others = active.filter((g) => !g.is_cushion)
+  const waitUntil = month ? goalsWaitUntil(month) : null
+
+  const parts = [
+    cushion && cushion.target_amount > 0 ? `подушка ${formatPercent(Math.min(1, cushion.current_amount / cushion.target_amount))}` : null,
+    others.length ? `${others.length} ${others.length === 1 ? 'цель' : others.length < 5 ? 'цели' : 'целей'}` : null,
+    others.length && waitUntil
+      ? `копить с ${new Intl.DateTimeFormat('ru-RU', { month: 'short', year: 'numeric' }).format(new Date(waitUntil)).replace(' г.', '')}`
+      : null,
+  ].filter(Boolean)
+
+  return (
+    <button type="button" onClick={onOpen} className="flex w-full items-center justify-between gap-3 rounded-[16px] bg-hf-card px-3.5 py-3 text-left">
+      <span className="min-w-0">
+        <span className="block font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Подушка и цели</span>
+        <span className="mt-1 block truncate text-[13px] text-hf-text">{parts.length ? parts.join(' · ') : 'Поставить первую цель'}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-hf-text-4" />
+    </button>
+  )
 }
 
 function EmptyState({ onUpload }: { onUpload: () => void }) {

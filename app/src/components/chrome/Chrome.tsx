@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 
 const TABS = [
   { to: '/overview', label: 'Обзор', end: true },
-  { to: '/debts', label: 'Долги', end: false },
+  { to: '/plan', label: 'План', end: false },
   { to: '/receipt', label: 'Чеки', end: false },
   { to: '/chat', label: 'Чат', end: false },
 ] as const

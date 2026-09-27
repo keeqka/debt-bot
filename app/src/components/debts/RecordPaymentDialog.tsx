@@ -60,7 +60,7 @@ export function RecordPaymentDialog({ open, onOpenChange, debt }: { open: boolea
       start: new Date(),
       rollover: false,
     })
-    // Следующий — по выбранной стратегии семьи, как в плане на экране «Долги».
+    // Следующий — по выбранной стратегии семьи, как в плане на экране «План».
     const nextDebt = orderDebts(
       (debts ?? [])
         .filter((d) => d.id !== closing.id && d.status === 'active' && d.current_balance > 0)

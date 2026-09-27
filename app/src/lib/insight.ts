@@ -40,7 +40,7 @@ export function computeInsight(month: Month, debts: Debt[], expenses: Expense[])
     const when = upcoming.daysUntil === 0 ? 'сегодня' : `через ${upcoming.daysUntil} дн`
     return {
       text: `Платёж по «${upcoming.debt.title}» — ${when}.`,
-      action: { label: 'К долгам', to: '/debts' },
+      action: { label: 'К плану', to: '/plan' },
     }
   }
 
