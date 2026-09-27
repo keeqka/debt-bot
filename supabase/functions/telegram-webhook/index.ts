@@ -9,7 +9,12 @@
 //  2. `/invite` (admins: a new family) and `/partner` (any member: their
 //     partner) — one-time invite links, same database rules as in the app
 //     (0017_households_and_invites.sql).
-//  3. Photo/PDF sent straight to the chat — parsed like the in-app receipt
+//  3. Stars payments: pre_checkout_query is confirmed (Telegram gives 10 s),
+//     successful_payment is recorded (payments, subscriptions.paid_until) —
+//     first charge and every monthly renewal alike. /paysupport forwards the
+//     question to the admins (Telegram requires it for payments); admins can
+//     refund with /refund <charge_id>.
+//  4. Photo/PDF sent straight to the chat — parsed like the in-app receipt
 //     flow, then offered back as an inline confirmation before anything is
 //     saved. The draft lives in pending_expense_drafts between the two
 //     messages because callback_data is capped at 64 bytes.
@@ -23,6 +28,7 @@ import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { findMember, inviteErrorCode, type AppUser } from '../_shared/get-or-create-user.ts'
 import { downloadTelegramFile } from '../_shared/telegram-file.ts'
 import { parseReceiptFile } from '../_shared/receipt-tool.ts'
+import { decodePayload } from '../_shared/stars.ts'
 
 // deno-lint-ignore no-explicit-any
 type AnyRecord = Record<string, any>
@@ -105,6 +111,116 @@ async function notifyAdminsAboutRequest(from: AnyRecord) {
       `${name}${handle} просит доступ к Hlow Flow. Чтобы пригласить — /invite, и перешли ссылку.`,
     )
   }
+}
+
+async function callTelegram(method: string, body: unknown) {
+  const res = await fetch(TG_API(method), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.json()
+}
+
+async function handlePreCheckout(query: AnyRecord) {
+  const payload = decodePayload(query.invoice_payload ?? '')
+  const admin = getAdminClient()
+  const { data: household } = payload
+    ? await admin.from('households').select('id').eq('id', payload.householdId).maybeSingle()
+    : { data: null }
+  await callTelegram(
+    'answerPreCheckoutQuery',
+    household
+      ? { pre_checkout_query_id: query.id, ok: true }
+      : { pre_checkout_query_id: query.id, ok: false, error_message: 'Не нашёл твою семью в Hlow Flow — открой приложение и попробуй снова.' },
+  )
+}
+
+function formatDay(d: Date) {
+  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(d)
+}
+
+async function handleSuccessfulPayment(message: AnyRecord) {
+  const pay = message.successful_payment
+  const payload = decodePayload(pay.invoice_payload ?? '')
+  if (!payload) {
+    console.error('successful_payment with unknown payload', pay.invoice_payload)
+    return
+  }
+  const admin = getAdminClient()
+  const expires = pay.subscription_expiration_date ? new Date(pay.subscription_expiration_date * 1000) : null
+  const { data: payer } = await admin.from('users').select('id').eq('telegram_id', message.from.id).maybeSingle()
+
+  const { error } = await admin.from('payments').insert({
+    household_id: payload.householdId,
+    user_id: payer?.id ?? payload.userId,
+    telegram_payment_charge_id: pay.telegram_payment_charge_id,
+    amount_stars: pay.total_amount,
+    is_recurring: Boolean(pay.is_recurring),
+    subscription_expires_at: expires?.toISOString() ?? null,
+  })
+  // Повторная доставка того же платежа — уже записан (unique charge id).
+  if (error && !String(error.message).includes('duplicate')) throw error
+
+  if (expires) {
+    await admin
+      .from('subscriptions')
+      .update({ status: 'active', paid_until: expires.toISOString(), activated_at: new Date().toISOString() })
+      .eq('household_id', payload.householdId)
+  }
+
+  await sendTelegramMessage(
+    message.chat.id,
+    pay.is_recurring && !pay.is_first_recurring
+      ? `Подписка продлена${expires ? ` до ${formatDay(expires)}` : ''}. Спасибо, что поддерживаешь Hlow Flow.`
+      : `Спасибо — поддержка оформлена${expires ? ` до ${formatDay(expires)}` : ''}. Продлевается сама раз в 30 дней, отменить можно в Telegram: Настройки → Мои звёзды.`,
+  )
+}
+
+async function handlePaySupport(message: AnyRecord) {
+  const admin = getAdminClient()
+  const { data: admins } = await admin.from('users').select('telegram_id').eq('is_admin', true)
+  const name = [message.from.first_name, message.from.last_name].filter(Boolean).join(' ') || 'Без имени'
+  const handle = message.from.username ? ` (@${message.from.username})` : ''
+  const question = (message.text ?? '').replace(/^\/paysupport\S*\s*/, '').trim()
+  for (const a of admins ?? []) {
+    await sendTelegramMessage(
+      a.telegram_id,
+      `Вопрос по оплате от ${name}${handle}: ${question || '(без текста)'}\nВернуть звёзды — /refund <charge_id> (id есть в таблице payments).`,
+    )
+  }
+  await sendTelegramMessage(
+    message.chat.id,
+    'Передал вопрос по оплате админу — ответ придёт сюда. Если нужен возврат, напиши, за какой платёж и почему.',
+  )
+}
+
+async function handleRefund(message: AnyRecord, member: AppUser) {
+  if (!member.is_admin) {
+    await sendTelegramMessage(message.chat.id, 'Возвраты делает только админ. Вопрос по оплате — /paysupport.')
+    return
+  }
+  const chargeId = (message.text ?? '').split(/\s+/)[1]
+  const admin = getAdminClient()
+  const { data: payment } = chargeId
+    ? await admin.from('payments').select('id, user_id, refunded_at').eq('telegram_payment_charge_id', chargeId).maybeSingle()
+    : { data: null }
+  if (!payment) {
+    await sendTelegramMessage(message.chat.id, 'Не нашёл такой платёж. Формат: /refund <telegram_payment_charge_id>')
+    return
+  }
+  if (payment.refunded_at) {
+    await sendTelegramMessage(message.chat.id, 'Этот платёж уже возвращён.')
+    return
+  }
+  const { data: payer } = await admin.from('users').select('telegram_id').eq('id', payment.user_id).maybeSingle()
+  const result = await callTelegram('refundStarPayment', { user_id: payer?.telegram_id, telegram_payment_charge_id: chargeId })
+  if (!result.ok) {
+    await sendTelegramMessage(message.chat.id, `Telegram не принял возврат: ${result.description ?? 'неизвестная ошибка'}`)
+    return
+  }
+  await admin.from('payments').update({ refunded_at: new Date().toISOString() }).eq('id', payment.id)
+  await sendTelegramMessage(message.chat.id, 'Звёзды возвращены.')
 }
 
 async function handleStart(message: AnyRecord, member: AppUser | null) {
@@ -308,12 +424,27 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: true })
     }
 
+    if (update.pre_checkout_query) {
+      await handlePreCheckout(update.pre_checkout_query)
+      return jsonResponse({ ok: true })
+    }
+
     const message = update.message
     if (!message?.from) return jsonResponse({ ok: true })
+
+    if (message.successful_payment) {
+      await handleSuccessfulPayment(message)
+      return jsonResponse({ ok: true })
+    }
 
     const member = await findMember(getAdminClient(), message.from)
     const text: string = message.text ?? ''
     const command = text.startsWith('/') ? text.split(/[\s@]/)[0] : ''
+
+    if (command === '/paysupport') {
+      await handlePaySupport(message)
+      return jsonResponse({ ok: true })
+    }
 
     if (command === '/start') {
       await handleStart(message, member)
@@ -335,6 +466,11 @@ Deno.serve(async (req) => {
 
     if (command === '/partner') {
       await sendInvite(message.chat.id, member, 'partner')
+      return jsonResponse({ ok: true })
+    }
+
+    if (command === '/refund') {
+      await handleRefund(message, member)
       return jsonResponse({ ok: true })
     }
 

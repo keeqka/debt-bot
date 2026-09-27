@@ -148,6 +148,8 @@ export interface Subscription {
   id: Uuid
   status: SubscriptionStatus
   activated_at: string | null
+  /** До какого числа семья поддерживает проект подпиской звёздами (0019). */
+  paid_until?: string | null
 }
 
 export type DebtStrategyKind = 'avalanche' | 'snowball' | 'cash_flow'

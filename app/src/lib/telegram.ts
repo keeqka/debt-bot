@@ -53,6 +53,7 @@ interface TelegramWebApp {
   BackButton?: TelegramBackButton
   MainButton?: TelegramMainButton
   openTelegramLink?: (url: string) => void
+  openInvoice?: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void
 }
 
 declare global {
@@ -102,6 +103,15 @@ export function openTelegramLink(url: string) {
   const app = getTelegramWebApp()
   if (app?.openTelegramLink) app.openTelegramLink(url)
   else window.open(url, '_blank', 'noopener')
+}
+
+export type InvoiceStatus = 'paid' | 'cancelled' | 'failed' | 'pending' | 'unavailable'
+
+/** Opens a Stars invoice in Telegram's own payment sheet; 'unavailable' outside Telegram. */
+export function openInvoice(url: string): Promise<InvoiceStatus> {
+  const app = getTelegramWebApp()
+  if (!app?.openInvoice) return Promise.resolve('unavailable')
+  return new Promise((resolve) => app.openInvoice!(url, resolve))
 }
 
 export function haptic(style: 'light' | 'medium' | 'heavy' = 'light') {

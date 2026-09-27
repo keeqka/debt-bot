@@ -543,6 +543,13 @@ export async function updateHouseholdSettings(patch: Partial<HouseholdSettings>)
   return getHouseholdSettings()
 }
 
+/** Stars subscription invoice link (stars-invoice) — opened with Telegram.WebApp.openInvoice. */
+export async function createStarsInvoice(): Promise<string> {
+  if (!isBackendConfigured) throw new Error('Оплата работает только в Telegram')
+  const { url } = await callFunction<{ url: string }>('stars-invoice', {})
+  return url
+}
+
 export async function getAccessInfo(): Promise<AccessInfo> {
   if (!isBackendConfigured || !supabase) {
     return { users: mock.mockUsers.length, max_users: 5, members: mock.mockUsers.length, max_members: 2, is_admin: true }
