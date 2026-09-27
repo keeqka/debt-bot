@@ -37,7 +37,13 @@ Deno.serve(async (req) => {
 
     let user: AppUser | null = await findMember(admin, tgUser)
     if (!user) {
-      const code = inviteCode(invite) ?? inviteCode(new URLSearchParams(initData).get('start_param'))
+      // Код из кнопки бота (?invite=), из прямой ссылки (start_param) или —
+      // если приложение открыли меню бота — тот, что бот запомнил на /start.
+      let code = inviteCode(invite) ?? inviteCode(new URLSearchParams(initData).get('start_param'))
+      if (!code) {
+        const { data: pending } = await admin.from('pending_invites').select('code').eq('telegram_id', tgUser.id).maybeSingle()
+        code = inviteCode(pending?.code)
+      }
       if (!code) return jsonResponse({ error: 'invite_required' }, 403)
 
       const { data, error } = await admin.rpc('redeem_invite', {
@@ -53,6 +59,7 @@ Deno.serve(async (req) => {
         throw error
       }
       user = data as AppUser
+      await admin.from('pending_invites').delete().eq('telegram_id', tgUser.id)
     }
 
     const token = await signSupabaseJwt(

@@ -121,7 +121,18 @@ async function handleStart(message: AnyRecord, member: AppUser | null) {
   }
 
   if (payload.startsWith('inv_')) {
-    await sendTelegramMessage(chatId, 'Тебя пригласили в Hlow Flow. Открой приложение — вход займёт секунду.', openAppButton(payload.slice(4)))
+    const code = payload.slice(4)
+    // Запоминаем код: приложение могут открыть не этой кнопкой, а меню бота —
+    // тогда auth-telegram возьмёт приглашение отсюда (0018_pending_invites.sql).
+    const { error } = await getAdminClient()
+      .from('pending_invites')
+      .upsert({ telegram_id: message.from.id, code, created_at: new Date().toISOString() })
+    if (error) {
+      // Код не существует (FK) — ссылка устарела или набрана с ошибкой.
+      await sendTelegramMessage(chatId, 'Ссылка-приглашение не работает — возможно, она устарела. Попроси новую.')
+      return
+    }
+    await sendTelegramMessage(chatId, 'Тебя пригласили в Hlow Flow. Открой приложение — вход займёт секунду.', openAppButton(code))
     return
   }
 

@@ -7,6 +7,7 @@ import { useCurrentUser } from '@/lib/auth'
 import { currencySymbol } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PlanSettingsSection } from '@/components/overview/PlanSettingsSection'
+import { Toggle } from '@/components/chrome/Toggle'
 import { FamilySection } from '@/components/overview/FamilySection'
 import type { CategoryType } from '@/types/domain'
 
@@ -110,24 +111,11 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
               <p className="text-[13px] font-medium text-hf-text">Напоминание о чеках</p>
               <p className="text-[11px] leading-snug text-hf-text-4">Бот напишет вечером, если за день не было ни одного чека.</p>
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={user.daily_reminder_enabled}
-              aria-label="Ежедневное напоминание загрузить чеки"
-              onClick={() => updateUser.mutate({ id: user.id, patch: { daily_reminder_enabled: !user.daily_reminder_enabled } })}
-              className={cn(
-                'relative h-6 w-11 shrink-0 rounded-full transition-colors',
-                user.daily_reminder_enabled ? 'bg-hf-accent' : 'bg-hf-track',
-              )}
-            >
-              <span
-                className={cn(
-                  'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
-                  user.daily_reminder_enabled ? 'translate-x-[22px]' : 'translate-x-0.5',
-                )}
-              />
-            </button>
+            <Toggle
+              checked={user.daily_reminder_enabled}
+              label="Ежедневное напоминание загрузить чеки"
+              onChange={(next) => updateUser.mutate({ id: user.id, patch: { daily_reminder_enabled: next } })}
+            />
           </div>
 
           {user.daily_reminder_enabled && (

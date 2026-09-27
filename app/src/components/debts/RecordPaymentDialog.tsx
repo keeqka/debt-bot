@@ -6,7 +6,7 @@ import { orderDebts, simulatePlan, DEFAULT_PLAN_SETTINGS } from '@/lib/budget'
 import { DebtClosedSheet, type ClosedDebtInfo } from '@/components/debts/DebtClosedSheet'
 import { formatMoney } from '@/lib/format'
 import type { Debt } from '@/types/domain'
-import { cn } from '@/lib/utils'
+import { ToggleVisual } from '@/components/chrome/Toggle'
 
 export function RecordPaymentDialog({ open, onOpenChange, debt }: { open: boolean; onOpenChange: (open: boolean) => void; debt: Debt | null }) {
   const addPayment = useAddDebtPayment()
@@ -107,11 +107,7 @@ export function RecordPaymentDialog({ open, onOpenChange, debt }: { open: boolea
         className="flex w-full items-center justify-between gap-3 rounded-[12px] bg-hf-card px-3.5 py-3 text-left"
       >
         <span className="text-[13px] text-hf-text-2">Сверх минимального платежа (досрочное)</span>
-        <span
-          className={cn('relative h-6 w-11 shrink-0 rounded-full transition-colors', isExtra ? 'bg-hf-accent' : 'bg-hf-track')}
-        >
-          <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform', isExtra ? 'translate-x-[22px]' : 'translate-x-0.5')} />
-        </span>
+        <ToggleVisual checked={isExtra} />
       </button>
     </FormSheet>
     <DebtClosedSheet info={closedInfo} onClose={() => setClosedInfo(null)} />

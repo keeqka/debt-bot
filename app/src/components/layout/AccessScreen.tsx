@@ -6,7 +6,7 @@ import type { AccessDenied } from '@/lib/auth'
 const TEXT: Record<AccessDenied, { title: string; body: string; canRequest: boolean }> = {
   invite_required: {
     title: 'Пока по приглашениям',
-    body: 'Hlow Flow открыт для небольшого круга. Попроси ссылку у того, кто уже пользуется, или оставь заявку — она придёт админу.',
+    body: 'Hlow Flow открыт для небольшого круга. Если тебе прислали ссылку — открой её и нажми «Старт» в боте. Если ссылки нет — оставь заявку, она придёт админу.',
     canRequest: true,
   },
   invite_invalid: {
