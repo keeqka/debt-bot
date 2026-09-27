@@ -65,6 +65,9 @@ export async function parseStatementFile(
     system: `Ты разбираешь банковскую выписку за период (PDF или скриншот) и извлекаешь КАЖДУЮ видимую операцию по счёту/карте. Для каждой операции определи дату, описание (магазин/контрагент как в выписке), сумму (всегда положительное число) и направление: "expense" для списаний/покупок/платежей, "income" для поступлений/зарплаты/переводов на счёт. Для расходов предложи категорию строго из списка: ${expenseCategoryNames.join(', ')} (иначе null). Пропускай служебные строки вроде "остаток на начало/конец периода" — это не операции. Если файл вообще не похож на банковскую выписку — верни is_valid_statement=false и пустой список транзакций. ${currencyInstruction(currency)} Не придумывай операции, которых нет в файле.`,
     messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: 'Разбери эту выписку и верни список всех операций.' }] }],
     tool: STATEMENT_TOOL,
-    maxTokens: 8192,
+    // A dense monthly card statement can list 150-200+ transactions; each
+    // needs ~100-150 output tokens as structured JSON, so 8192 truncated
+    // mid-response on real statements. claude-sonnet-5 allows up to 128K.
+    maxTokens: 24000,
   })
 }

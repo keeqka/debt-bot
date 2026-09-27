@@ -79,6 +79,7 @@ export async function callClaudeTool<T>({ model = CLAUDE_MODEL_DEFAULT, system, 
   }
 
   const data = await res.json()
+  if (data.stop_reason === 'max_tokens') throw new Error(`Claude response truncated at max_tokens=${maxTokens} — input too large for this limit`)
   const toolUse = (data.content as Array<Record<string, unknown>>)?.find((block) => block.type === 'tool_use')
   if (!toolUse) throw new Error('Claude did not return a tool_use block')
 
