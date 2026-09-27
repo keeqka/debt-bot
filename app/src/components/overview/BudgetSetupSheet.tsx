@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, X } from 'lucide-react'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { useAddCategory, useCategories, useDeleteCategory, useUpdateUser } from '@/hooks/use-finance-data'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { useAddCategory, useCategories, useDeleteAllExpenses, useDeleteCategory, useExpenses, useUpdateUser } from '@/hooks/use-finance-data'
 import { useCurrentUser } from '@/lib/auth'
 import { currencySymbol } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,8 @@ import type { CategoryType } from '@/types/domain'
 
 const inputClass =
   'h-10 w-full rounded-[10px] border border-hf-line bg-hf-bar px-3 text-[13px] text-hf-text placeholder:text-hf-text-4 focus:border-hf-accent focus:outline-none'
+
+const WIPE_CONFIRM_WORD = 'УДАЛИТЬ'
 
 /**
  * Замена «профилю пользователя»: настройки, от которых реально зависят
@@ -29,11 +31,15 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
   const { data: categories } = useCategories()
   const addCategory = useAddCategory()
   const deleteCategory = useDeleteCategory()
+  const { data: expenses } = useExpenses()
+  const deleteAllExpenses = useDeleteAllExpenses()
 
   const [income, setIncome] = useState(user.monthly_income?.toString() ?? '')
   const [payday, setPayday] = useState(user.payday?.toString() ?? '')
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryType, setNewCategoryType] = useState<CategoryType>('expense')
+  const [wipeOpen, setWipeOpen] = useState(false)
+  const [wipeConfirmText, setWipeConfirmText] = useState('')
 
   useEffect(() => {
     setIncome(user.monthly_income?.toString() ?? '')
@@ -64,6 +70,13 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
   async function handleDeleteCategory(id: string) {
     await deleteCategory.mutateAsync(id)
     toast.success('Категория удалена')
+  }
+
+  async function handleWipeExpenses() {
+    await deleteAllExpenses.mutateAsync()
+    toast.success('Все траты удалены')
+    setWipeOpen(false)
+    setWipeConfirmText('')
   }
 
   return (
@@ -196,8 +209,54 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
               </button>
             </div>
           </div>
+
+          <div className="space-y-2 border-t border-hf-line pt-4">
+            <p className="text-[13px] font-medium text-hf-text">Опасная зона</p>
+            <button
+              type="button"
+              onClick={() => setWipeOpen(true)}
+              disabled={!expenses?.length}
+              className="w-full rounded-[13px] border border-hf-warn/30 bg-hf-card py-3 text-[13px] font-medium text-hf-warn disabled:opacity-40"
+            >
+              Удалить все траты{expenses?.length ? ` (${expenses.length})` : ''}
+            </button>
+          </div>
         </div>
       </SheetContent>
+
+      <Sheet open={wipeOpen} onOpenChange={(o) => { setWipeOpen(o); if (!o) setWipeConfirmText('') }}>
+        <SheetContent side="bottom" className="rounded-t-[24px] border-hf-line bg-hf-bg" showCloseButton={false}>
+          <SheetHeader className="px-4 pt-1 pb-0">
+            <SheetTitle className="text-[15px] font-medium text-hf-text">Удалить все траты?</SheetTitle>
+            <SheetDescription className="text-[13px] leading-relaxed text-hf-text-3">
+              Это безвозвратно удалит {expenses?.length ?? 0} {expenses?.length === 1 ? 'трату' : 'трат'} — долги, доходы
+              и цели не затронет. Чтобы подтвердить, напиши «{WIPE_CONFIRM_WORD}»:
+            </SheetDescription>
+          </SheetHeader>
+          <div className="px-4 pb-4">
+            <input
+              value={wipeConfirmText}
+              onChange={(e) => setWipeConfirmText(e.target.value)}
+              placeholder={WIPE_CONFIRM_WORD}
+              autoCapitalize="characters"
+              className={inputClass}
+            />
+          </div>
+          <div className="flex gap-2.5 px-4 pb-8">
+            <button type="button" onClick={() => setWipeOpen(false)} className="flex-1 rounded-[13px] bg-hf-card py-3.5 text-[15px] text-hf-text-2">
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={handleWipeExpenses}
+              disabled={wipeConfirmText.trim().toUpperCase() !== WIPE_CONFIRM_WORD || deleteAllExpenses.isPending}
+              className="flex-1 rounded-[13px] bg-hf-warn py-3.5 text-[15px] font-medium text-white disabled:opacity-50"
+            >
+              {deleteAllExpenses.isPending ? 'Секунду…' : 'Удалить всё'}
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </Sheet>
   )
 }

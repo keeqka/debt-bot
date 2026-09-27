@@ -9,6 +9,7 @@ import { Paper } from '@/components/chrome/Paper'
 import { Mascot } from '@/components/Mascot'
 import { useReceiptDraft, type StatementDraftRow } from '@/hooks/use-receipt-draft'
 import {
+  useAddCategory,
   useAddExpense,
   useAddExpensesBulk,
   useAddIncomesBulk,
@@ -41,6 +42,34 @@ function validateFile(file: File): string | null {
 }
 
 /**
+ * receipt-tool/statement-tool can now suggest a category name that doesn't
+ * exist yet instead of forcing everything into "Прочее" — this creates each
+ * unique new name exactly once (case-insensitive) at the moment the user
+ * hits Save, same as the expense insert itself, never earlier.
+ */
+async function resolveCategoryIds(
+  names: string[],
+  existing: Category[],
+  addCategory: ReturnType<typeof useAddCategory>,
+): Promise<Map<string, string>> {
+  const byLower = new Map(existing.map((c) => [c.name.trim().toLowerCase(), c.id]))
+  const result = new Map<string, string>()
+  for (const raw of names) {
+    const key = raw.trim().toLowerCase()
+    if (!key || result.has(key)) continue
+    const existingId = byLower.get(key)
+    if (existingId) {
+      result.set(key, existingId)
+      continue
+    }
+    const created = await addCategory.mutateAsync({ name: raw.trim(), icon: 'tag', type: 'expense' })
+    byLower.set(key, created.id)
+    result.set(key, created.id)
+  }
+  return result
+}
+
+/**
  * Единый таб «Чеки»: фото/PDF чека, выписка, ручной ввод — раньше три
  * отдельные точки входа на разных экранах (Dashboard/Finances), теперь
  * один поток. Состояние — в useReceiptDraft (query cache), переживает
@@ -56,6 +85,7 @@ export function Receipt() {
   const addExpense = useAddExpense()
   const addExpensesBulk = useAddExpensesBulk()
   const addIncomesBulk = useAddIncomesBulk()
+  const addCategory = useAddCategory()
   const deleteIncome = useDeleteIncome()
   const { data: subscription } = useSubscription()
   const { data: scanCount = 0 } = useReceiptScanCount()
@@ -101,7 +131,7 @@ export function Receipt() {
         setDraft({ status: 'error', message: 'Не разобрал — переснять? Убедись, что чек целиком в кадре и хорошо освещён.' })
         return
       }
-      const matched = categories?.find((c) => c.name === result.suggested_category)
+      const matched = categories?.find((c) => c.name.trim().toLowerCase() === result.suggested_category?.trim().toLowerCase())
       setDraft({ status: 'parsed-receipt', result, categoryId: matched?.id ?? '' })
     } catch {
       setDraft({ status: 'error', message: 'Не удалось распознать чек, попробуй ещё раз.' })
@@ -132,7 +162,10 @@ export function Receipt() {
         ...t,
         key: crypto.randomUUID(),
         included: true,
-        categoryId: (t.direction === 'expense' && expenseCategories.find((c) => c.name === t.suggested_category)?.id) || '',
+        categoryId:
+          (t.direction === 'expense' &&
+            expenseCategories.find((c) => c.name.trim().toLowerCase() === t.suggested_category?.trim().toLowerCase())?.id) ||
+          '',
       }))
       setDraft({ status: 'parsed-statement', rows })
     } catch {
@@ -143,11 +176,16 @@ export function Receipt() {
   async function saveReceipt() {
     if (draft.status !== 'parsed-receipt') return
     const { result, categoryId } = draft
+    let finalCategoryId = categoryId
+    if (!finalCategoryId && result.suggested_category) {
+      const map = await resolveCategoryIds([result.suggested_category], categories ?? [], addCategory)
+      finalCategoryId = map.get(result.suggested_category.trim().toLowerCase()) ?? ''
+    }
     await addExpense.mutateAsync({
       user_id: userId,
       amount: result.total_amount ?? 0,
       currency: result.currency ?? 'KZT',
-      category_id: categoryId || null,
+      category_id: finalCategoryId || null,
       merchant: result.merchant,
       spent_at: result.date ?? new Date().toISOString().slice(0, 10),
       description: null,
@@ -169,13 +207,15 @@ export function Receipt() {
     }
     const expenseRows = included.filter((r) => r.direction === 'expense')
     const incomeRows = included.filter((r) => r.direction === 'income')
+    const newCategoryNames = expenseRows.filter((r) => !r.categoryId && r.suggested_category).map((r) => r.suggested_category!)
+    const categoryMap = newCategoryNames.length > 0 ? await resolveCategoryIds(newCategoryNames, categories ?? [], addCategory) : new Map<string, string>()
     if (expenseRows.length > 0) {
       await addExpensesBulk.mutateAsync(
         expenseRows.map((r) => ({
           user_id: userId,
           amount: r.amount,
           currency: 'KZT',
-          category_id: r.categoryId || null,
+          category_id: r.categoryId || (r.suggested_category ? (categoryMap.get(r.suggested_category.trim().toLowerCase()) ?? null) : null),
           merchant: r.description,
           spent_at: r.date,
           description: null,
@@ -481,7 +521,9 @@ function ParsedReceiptView({
     onChange({ result: { ...result, line_items: [...items, { name: '', amount: 0 }] } })
   }
 
-  const categoryName = categories.find((c) => c.id === categoryId)?.name ?? null
+  const matchedCategory = categories.find((c) => c.id === categoryId)?.name ?? null
+  const isNewCategory = !matchedCategory && !!result.suggested_category
+  const categoryName = matchedCategory ?? result.suggested_category ?? null
 
   return (
     <>
@@ -577,7 +619,7 @@ function ParsedReceiptView({
       <div className="flex items-start gap-2.5 rounded-[14px] bg-hf-bar p-3.5">
         <span className="mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full bg-hf-ok" />
         <p className="text-[13px] leading-snug text-hf-text-3">
-          Сохраню в «{categoryName ?? 'без категории'}» за {formatDateShort(result.date ?? new Date().toISOString())}.
+          Сохраню в «{categoryName ?? 'без категории'}»{isNewCategory ? ' (новая категория)' : ''} за {formatDateShort(result.date ?? new Date().toISOString())}.
         </p>
       </div>
 
@@ -673,7 +715,7 @@ function ParsedStatementView({
                   onChange={(e) => updateRow(row.key, { categoryId: e.target.value })}
                   className="h-7 min-w-0 flex-1 rounded-md bg-hf-bar px-1.5 text-[11px] text-hf-text-2"
                 >
-                  <option value="">Категория</option>
+                  <option value="">{row.categoryId ? 'Категория' : row.suggested_category ? `+ ${row.suggested_category} (новая)` : 'Категория'}</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}

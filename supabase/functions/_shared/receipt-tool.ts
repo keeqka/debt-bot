@@ -23,7 +23,10 @@ export const RECEIPT_TOOL = {
           required: ['name', 'amount'],
         },
       },
-      suggested_category: { type: ['string', 'null'], description: 'One of the provided category names, or null' },
+      suggested_category: {
+        type: ['string', 'null'],
+        description: 'Best matching name from the provided categories, or a short new category name (1-2 words) if none fit — never null just because nothing matches',
+      },
       confidence: { type: 'number', description: '0 to 1' },
     },
     required: ['is_valid_receipt', 'line_items', 'confidence'],
@@ -48,7 +51,7 @@ export async function parseReceiptFile(fileBase64: string, mimeType: string, cat
       : { type: 'image', source: { type: 'base64', media_type: mimeType, data: fileBase64 } }
 
   return callClaudeTool<ReceiptResult>({
-    system: `Ты помогаешь разобрать чек или скриншот банковского перевода/платежа. Извлеки магазина/получателя, дату, сумму, валюту и предложи категорию строго из списка: ${categoryNames.join(', ')}. Если это не финансовый документ — верни is_valid_receipt=false. Не придумывай данные, которых нет в файле.`,
+    system: `Ты помогаешь разобрать чек или скриншот банковского перевода/платежа. Извлеки магазина/получателя, дату, сумму, валюту. Для категории: если по смыслу подходит что-то из уже существующих — верни точное название из списка: ${categoryNames.join(', ')}; если НИ ОДНА не подходит — предложи своё короткое название на русском (1-2 слова, например "Питомцы", "Переводы", "Подписки") вместо того чтобы силой относить трату в чужую категорию. "Прочее" — только для по-настоящему разового и непонятного, не используй его просто потому что не нашлось лучшего варианта. Если это не финансовый документ — верни is_valid_receipt=false. Не придумывай данные, которых нет в файле.`,
     messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: 'Разбери этот чек.' }] }],
     tool: RECEIPT_TOOL,
   })

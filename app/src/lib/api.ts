@@ -225,6 +225,16 @@ export async function deleteExpense(id: string): Promise<void> {
   if (error) throw error
 }
 
+/** Bulk-wipe, gated behind a type-to-confirm dialog in ProfilePanel — RLS scopes this to the caller's own household. */
+export async function deleteAllExpenses(): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    mock.mockExpenses.length = 0
+    return
+  }
+  const { error } = await supabase.from('expenses').delete().not('id', 'is', null)
+  if (error) throw error
+}
+
 export async function updateExpense(id: string, patch: Partial<Omit<Expense, 'id' | 'user_id'>>): Promise<Expense> {
   if (!isBackendConfigured || !supabase) {
     const index = mock.mockExpenses.findIndex((e) => e.id === id)

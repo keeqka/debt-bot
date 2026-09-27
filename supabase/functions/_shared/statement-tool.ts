@@ -25,7 +25,11 @@ export const STATEMENT_TOOL = {
             description: { type: 'string', description: 'merchant or counterparty exactly as shown in the statement' },
             amount: { type: 'number', description: 'always positive' },
             direction: { type: 'string', enum: ['expense', 'income'], description: 'expense for outgoing/purchases, income for incoming/salary/transfers in' },
-            suggested_category: { type: ['string', 'null'], description: 'for direction=expense only: one of the provided category names, or null' },
+            suggested_category: {
+              type: ['string', 'null'],
+              description:
+                'for direction=expense only: best matching name from the provided categories, or a short new category name (1-2 words) if none fit — never null just because nothing matches',
+            },
             confidence: { type: 'number', description: '0 to 1' },
           },
           required: ['date', 'description', 'amount', 'direction', 'confidence'],
@@ -62,7 +66,7 @@ export async function parseStatementFile(
       : { type: 'image', source: { type: 'base64', media_type: mimeType, data: fileBase64 } }
 
   return callClaudeTool<StatementResult>({
-    system: `Ты разбираешь банковскую выписку за период (PDF или скриншот) и извлекаешь КАЖДУЮ видимую операцию по счёту/карте. Для каждой операции определи дату, описание (магазин/контрагент как в выписке), сумму (всегда положительное число) и направление: "expense" для списаний/покупок/платежей, "income" для поступлений/зарплаты/переводов на счёт. Для расходов предложи категорию строго из списка: ${expenseCategoryNames.join(', ')} (иначе null). Пропускай служебные строки вроде "остаток на начало/конец периода" — это не операции. Если файл вообще не похож на банковскую выписку — верни is_valid_statement=false и пустой список транзакций. ${currencyInstruction(currency)} Не придумывай операции, которых нет в файле.`,
+    system: `Ты разбираешь банковскую выписку за период (PDF или скриншот) и извлекаешь КАЖДУЮ видимую операцию по счёту/карте. Для каждой операции определи дату, описание (магазин/контрагент как в выписке), сумму (всегда положительное число) и направление: "expense" для списаний/покупок/платежей, "income" для поступлений/зарплаты/переводов на счёт. Для расходов подбери категорию: если по смыслу подходит что-то из уже существующих — верни точное название из списка: ${expenseCategoryNames.join(', ')}; если НИ ОДНА не подходит — предложи своё короткое название на русском (1-2 слова, например "Питомцы", "Переводы", "Подписки") вместо того чтобы силой относить операцию в чужую категорию. "Прочее" — только для по-настоящему разового и непонятного, не используй его просто потому что не нашлось лучшего варианта; похожие операции (все переводы, все покупки в одном типе магазинов) группируй под одним и тем же новым названием, не изобретай новое на каждую строку. Пропускай служебные строки вроде "остаток на начало/конец периода" — это не операции. Если файл вообще не похож на банковскую выписку — верни is_valid_statement=false и пустой список транзакций. ${currencyInstruction(currency)} Не придумывай операции, которых нет в файле.`,
     messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: 'Разбери эту выписку и верни список всех операций.' }] }],
     tool: STATEMENT_TOOL,
     // A dense monthly card statement can list 150-200+ transactions; each

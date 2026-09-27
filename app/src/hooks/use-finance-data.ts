@@ -273,6 +273,20 @@ export function useDeleteExpense() {
   })
 }
 
+export function useDeleteAllExpenses() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.deleteAllExpenses,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses })
+      queryClient.invalidateQueries({ queryKey: queryKeys.status })
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Не удалось удалить траты')
+    },
+  })
+}
+
 export function useUpdateExpense() {
   const queryClient = useQueryClient()
   return useMutation({

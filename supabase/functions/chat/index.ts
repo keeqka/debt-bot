@@ -126,6 +126,19 @@ const SIMULATE_SCENARIOS_TOOL = {
   },
 }
 
+const LIST_CATEGORY_EXPENSES_TOOL = {
+  name: 'list_category_expenses',
+  description:
+    'Returns the actual transactions (merchant, amount, date) behind a category\'s total for this month. The snapshot only has category totals, not what makes them up — use this whenever asked WHY a category is big/small or WHAT is in it, instead of guessing from the number.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      category: { type: 'string', description: 'Category name exactly as it appears in "Траты этого месяца по категориям", e.g. "Прочее"' },
+    },
+    required: ['category'],
+  },
+}
+
 const DATA_WIDGET_TOOL = {
   name: 'render_data_widget',
   description:
@@ -169,6 +182,7 @@ const ALL_TOOLS = [
   PROPOSE_SETTINGS_TOOL,
   PROPOSE_DEBT_TOOL,
   PROPOSE_CATEGORY_TOOL,
+  LIST_CATEGORY_EXPENSES_TOOL,
   DATA_WIDGET_TOOL,
   SUGGEST_FOLLOWUPS_TOOL,
   WEB_SEARCH_TOOL,
@@ -399,6 +413,39 @@ function computePurchaseImpact(
   }
 }
 
+/**
+ * The transactions behind a category total — the snapshot text only ever has
+ * the sum (finance-context.ts), so "why is X so high" needs the underlying
+ * rows, already fetched into budgetInput.expenses for the budget calc.
+ */
+function listCategoryExpenses(input: { category: string }, snapshot: FinancialSnapshot) {
+  const today = snapshot.budgetInput.today ?? new Date()
+  const y = today.getFullYear()
+  const m = today.getMonth()
+  const idOf = Object.entries(snapshot.budgetInput.categoryNames).find(
+    ([, name]) => name.toLowerCase() === (input.category ?? '').trim().toLowerCase(),
+  )?.[0]
+  const rows = snapshot.budgetInput.expenses.filter((e) => {
+    if (!e.is_confirmed) return false
+    const y2 = Number(e.spent_at.slice(0, 4))
+    const m2 = Number(e.spent_at.slice(5, 7)) - 1
+    if (y2 !== y || m2 !== m) return false
+    return idOf ? e.category_id === idOf : e.category_id == null
+  })
+  const sorted = [...rows].sort((a, b) => b.amount - a.amount)
+  return {
+    category: input.category,
+    count: rows.length,
+    total: Math.round(rows.reduce((s, r) => s + r.amount, 0)),
+    transactions: sorted.slice(0, 30).map((r) => ({
+      merchant: r.merchant || r.description || '—',
+      amount: Math.round(r.amount),
+      date: r.spent_at,
+    })),
+    truncated: rows.length > 30,
+  }
+}
+
 type Mood = 'calm' | 'focused' | 'happy' | 'alert'
 const MOOD_RE = /\[(calm|focused|happy|alert)\]/
 
@@ -489,7 +536,7 @@ Deno.serve(async (req) => {
 
     const snapshot = await buildFinancialSnapshot(supabase)
     const categoryNames = snapshot.categoryNames.join(', ') || '—'
-    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию, поменять настройки и модель денег семьи), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз. Главное последствие — насколько сдвинется закрытие долгов.\n- Стратегии погашения, «что если», как закрыть быстрее, рефинансирование, сравнение режимов — сначала simulate_debt_scenarios, потом объясняй полученные цифры. Даты, переплату и порядок закрытия бери только из результата — никогда не считай в уме.\n- Про методы говори как есть: лавина экономит больше всего на процентах; снежный ком чаще закрывает долги (это мотивация, а не экономия); поток (Cash Flow Index) быстрее освобождает деньги в месяц; подушка защищает от новых долгов при потере дохода, но долги закрываются позже и переплата выше. Рефинансирование выгодно, только если новая ставка ниже с учётом комиссий — комиссии спроси, если их не назвали.\n- Просят поменять режим, стратегию, подушку, долю в долги, порог дорогого долга, доход, день зарплаты, напоминания — propose_settings_change. НИКОГДА не говори, что настройка уже изменена: она применится по кнопке «Применить». Спрашивают, какой режим выбрать, — посчитай варианты через simulate_debt_scenarios (параметр mode), назови плюсы и минусы и предложи одну смену карточкой.\n- Спрашивают, где перерасход, на что ушло больше обычного, нет ли странных трат — опирайся на блок «Перерасход и аномалии» и «обычно за месяц» по категориям; разбивку показывай через render_data_widget.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.\n\n${MOOD_AND_EXAMPLES}`
+    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию, поменять настройки и модель денег семьи), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз. Главное последствие — насколько сдвинется закрытие долгов.\n- Стратегии погашения, «что если», как закрыть быстрее, рефинансирование, сравнение режимов — сначала simulate_debt_scenarios, потом объясняй полученные цифры. Даты, переплату и порядок закрытия бери только из результата — никогда не считай в уме.\n- Про методы говори как есть: лавина экономит больше всего на процентах; снежный ком чаще закрывает долги (это мотивация, а не экономия); поток (Cash Flow Index) быстрее освобождает деньги в месяц; подушка защищает от новых долгов при потере дохода, но долги закрываются позже и переплата выше. Рефинансирование выгодно, только если новая ставка ниже с учётом комиссий — комиссии спроси, если их не назвали.\n- Просят поменять режим, стратегию, подушку, долю в долги, порог дорогого долга, доход, день зарплаты, напоминания — propose_settings_change. НИКОГДА не говори, что настройка уже изменена: она применится по кнопке «Применить». Спрашивают, какой режим выбрать, — посчитай варианты через simulate_debt_scenarios (параметр mode), назови плюсы и минусы и предложи одну смену карточкой.\n- Спрашивают, где перерасход, на что ушло больше обычного, нет ли странных трат — опирайся на блок «Перерасход и аномалии» и «обычно за месяц» по категориям; разбивку показывай через render_data_widget.\n- Спрашивают, ПОЧЕМУ конкретная категория такая большая/маленькая или что туда попало ("почему в Прочее так много", "что за траты в Транспорте") — список сумм в снапшоте не объясняет состав, сначала вызови list_category_expenses с этим названием категории и отвечай по реальным операциям (магазин, сумма, дата), а не догадками.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.\n\n${MOOD_AND_EXAMPLES}`
 
     const messages = buildHistory(history)
 
@@ -512,7 +559,7 @@ Deno.serve(async (req) => {
     // the model gets the real numbers back and only then writes the answer.
     // Every tool_use block of the first turn gets a tool_result — the API
     // rejects a turn where any of them is left unanswered.
-    const computeNames = new Set(['model_purchase_impact', 'simulate_debt_scenarios'])
+    const computeNames = new Set(['model_purchase_impact', 'simulate_debt_scenarios', 'list_category_expenses'])
     const toolUses = first.content.filter((b) => b.type === 'tool_use') as Array<{ id: string; name: string; input: Record<string, unknown> }>
     const computed = first.stop_reason === 'tool_use' && toolUses.some((b) => computeNames.has(b.name))
     let turn = first.content
@@ -524,6 +571,8 @@ Deno.serve(async (req) => {
           out = purchaseImpact
         } else if (b.name === 'simulate_debt_scenarios') {
           out = simulateScenarios(b.input as never, snapshot)
+        } else if (b.name === 'list_category_expenses') {
+          out = listCategoryExpenses(b.input as never, snapshot)
         }
         return { type: 'tool_result', tool_use_id: b.id, content: JSON.stringify(out) }
       })
