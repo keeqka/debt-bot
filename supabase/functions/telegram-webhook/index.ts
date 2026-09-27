@@ -35,11 +35,21 @@ type AnyRecord = Record<string, any>
 
 const TG_API = (method: string) => `https://api.telegram.org/bot${env.telegramBotToken}/${method}`
 
-async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: unknown) {
+// parse_mode 'Markdown' is Telegram's legacy mode: a single "_" or "*"
+// toggles emphasis, so any text carrying unescaped user/generated content —
+// a raw URL (our invite links are t.me/<username>_bot?start=inv_<code>, two
+// underscores), a Telegram display name, an OCR'd receipt line — can come
+// out corrupted (paired underscores are silently swallowed as italics: an
+// invite link once rendered as t.me/…botbot?start=inv<code>, the codes
+// missing, "Sorry, this user doesn't seem to exist") or refused outright
+// (an odd count of "*"/"_" is invalid Markdown and Telegram 400s the whole
+// send). Pass `plain: true` for any text built from such content — plain
+// messages still auto-link bare URLs, so nothing is lost.
+async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: unknown, opts?: { plain?: boolean }) {
   await fetch(TG_API('sendMessage'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown', reply_markup: replyMarkup }),
+    body: JSON.stringify({ chat_id: chatId, text, ...(opts?.plain ? {} : { parse_mode: 'Markdown' }), reply_markup: replyMarkup }),
   })
 }
 
@@ -95,6 +105,8 @@ async function sendInvite(chatId: number, user: AppUser, kind: 'household' | 'pa
   await sendTelegramMessage(
     chatId,
     `Ссылка-приглашение в ${who}. Одноразовая, действует 7 дней — перешли её человеку:\n\n${inviteLink(code as string)}`,
+    undefined,
+    { plain: true },
   )
 }
 
@@ -107,6 +119,8 @@ async function notifyAdminsAboutRequest(from: AnyRecord) {
     await sendTelegramMessage(
       a.telegram_id,
       `${name}${handle} просит доступ к Hlow Flow. Чтобы пригласить — /invite, и перешли ссылку.`,
+      undefined,
+      { plain: true },
     )
   }
 }
