@@ -161,10 +161,12 @@ export function MascotAvatar({
   expression = 'calm',
   size = 40,
   className,
+  bounce = false,
 }: {
   expression?: Expression
   size?: number
   className?: string
+  bounce?: boolean
 }) {
   return (
     <span
@@ -172,7 +174,7 @@ export function MascotAvatar({
       style={{ width: size, height: size }}
     >
       <span className="absolute" style={{ left: '-57%', top: 0, width: '214%', height: '214%' }}>
-        <Mascot expression={expression} />
+        <Mascot expression={expression} bounce={bounce} />
       </span>
     </span>
   )

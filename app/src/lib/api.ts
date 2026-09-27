@@ -81,7 +81,11 @@ export async function addDebtPayment(payment: Omit<DebtPayment, 'id'>): Promise<
   if (!isBackendConfigured || !supabase) {
     mock.mockDebtPayments.unshift({ ...payment, id: crypto.randomUUID() })
     const debt = mock.mockDebts.find((d) => d.id === payment.debt_id)
-    if (debt) debt.current_balance = Math.max(0, debt.current_balance - payment.amount)
+    if (debt) {
+      debt.current_balance = Math.max(0, debt.current_balance - payment.amount)
+      // Same as the DB trigger (0015): paying off the balance closes the debt.
+      if (debt.current_balance === 0) debt.status = 'closed'
+    }
     return
   }
   const { error } = await supabase.from('debt_payments').insert(payment)
@@ -412,16 +416,28 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
     })
     await new Promise((r) => setTimeout(r, 700))
 
-    const wantsDebt = /долг|кредит|рассрочк/i.test(content)
+    const closedDebt = /закрыл|погасил/i.test(content)
+    const wantsDebt = !closedDebt && /долг|кредит|рассрочк/i.test(content)
     const wantsCategory = /категори/i.test(content)
     const wantsBreakdown = /сколько.*(трачу|уходит)|на что.*деньги|разбивк/i.test(content)
-    const reply: ChatMessage = wantsDebt
+    const reply: ChatMessage = closedDebt
       ? {
           id: crypto.randomUUID(),
           user_id: mock.currentMockUser.id,
           role: 'assistant',
-          content: 'Демо-режим: нашёл в сообщении похоже на долг — проверьте и подтвердите данные в форме.',
+          content: 'Долг закрыт. Его минимальный платёж освободился — теперь он идёт в следующий долг. Запиши последний платёж во вкладке «Долги», чтобы план пересчитался.',
           model: 'claude-sonnet-5',
+          expression: 'happy',
+          created_at: new Date().toISOString(),
+        }
+      : wantsDebt
+      ? {
+          id: crypto.randomUUID(),
+          user_id: mock.currentMockUser.id,
+          role: 'assistant',
+          content: 'Демо-режим: похоже на долг — проверь цифры и подтверди в форме.',
+          model: 'claude-sonnet-5',
+          expression: 'focused',
           proposed_debt: {
             title: 'Новый долг (демо)',
             creditor: 'Из чата',
@@ -441,6 +457,7 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
             role: 'assistant',
             content: 'Добавить такую категорию?',
             model: 'claude-sonnet-5',
+            expression: 'focused',
             proposed_category: { name: 'Подписки (демо)', type: 'expense' },
             created_at: new Date().toISOString(),
           }
@@ -451,6 +468,7 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
             role: 'assistant',
             content: 'Вот на что ушли деньги за сентябрь:',
             model: 'claude-sonnet-5',
+            expression: 'calm',
             data_widget: [
               { name: 'Жильё', amount: 210_000, pct: 76 },
               { name: 'Здоровье', amount: 32_000, pct: 12 },
@@ -464,8 +482,9 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
             user_id: mock.currentMockUser.id,
             role: 'assistant',
             content:
-              'Пока это демо-режим без ключей Claude API — как только подключим бэкенд, здесь будет настоящий ответ на основе ваших реальных доходов, расходов и долгов.',
+              'Это демо без Claude API. С бэкендом здесь будет настоящий ответ по твоим доходам, тратам и долгам.',
             model: 'claude-sonnet-5',
+            expression: 'calm',
             quick_replies: ['Сколько я трачу на еду?', 'Как быстрее закрыть долги?'],
             created_at: new Date().toISOString(),
           }

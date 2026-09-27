@@ -183,6 +183,67 @@ function computePurchaseImpact(
   }
 }
 
+type Mood = 'calm' | 'focused' | 'happy' | 'alert'
+const MOOD_RE = /\[(calm|focused|happy|alert)\]/
+
+function readMood(text: string): Mood | null {
+  return (text.match(MOOD_RE)?.[1] as Mood | undefined) ?? null
+}
+
+function stripMood(text: string) {
+  return text.replace(new RegExp(MOOD_RE.source, 'g'), '').trim()
+}
+
+/**
+ * Chat history for the model. Assistant turns from before «Чек» had a voice
+ * (no stored expression) are dropped — fed back as examples, the old neutral
+ * replies pulled every new answer toward the same tone. Kept turns get their
+ * mood marker back so the model keeps seeing the format it must follow.
+ * Dropping turns can leave two user messages in a row, so same-role runs are
+ * merged, and the thread must open with a user turn.
+ */
+function buildHistory(rows: Array<{ role: string; content: string; expression: string | null }>): ClaudeMessage[] {
+  const kept = rows
+    .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.expression))
+    .map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.role === 'assistant' ? `[${m.expression}]\n${m.content}` : m.content,
+    }))
+  const merged: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  for (const m of kept) {
+    const last = merged[merged.length - 1]
+    if (last && last.role === m.role) last.content += `\n\n${m.content}`
+    else merged.push({ ...m })
+  }
+  while (merged.length && merged[0].role !== 'user') merged.shift()
+  return merged
+}
+
+const MOOD_AND_EXAMPLES = `Лицо «Чека». Каждый ответ начинай с метки настроения на отдельной строке — пользователь её не видит, по ней меняется лицо маскота рядом с ответом:
+[calm] — всё по плану, обычный ответ;
+[alert] — перерасход, аномалия, риск, покупка не влезает, долг не закрывается;
+[happy] — настоящая хорошая новость: долг закрыт, дата закрытия приблизилась, месяц в плане с запасом;
+[focused] — разбираешь данные или предлагаешь действие (долг, категория).
+Метка одна и только в начале. Хорошие новости не выдумывай ради [happy].
+
+Как звучит «Чек» в чате. Цифры в примерах условные — бери только из данных выше.
+
+Вопрос: «Привет»
+[calm]
+Привет. До конца месяца свободно 43 100 ₸ — это 10 770 в день. Показать, где тратится больше обычного?
+
+Вопрос: «Где у меня перерасход?»
+[alert]
+«Здоровье»: 32 000 ₸, обычно к этому числу 13 500. Почти всё — одна трата в аптеке, раньше там было до 5 000. Если это ошибка распознавания — поправь в «Чеках», и 18 500 вернутся в план по долгам.
+
+Вопрос: «Как быстрее закрыть долги?»
+[calm]
+Сейчас сверх минимумов в долги уходит 745 000 ₸ в месяц, всё закроется в декабре. Быстрее — только тратить меньше обычного: каждые 50 000 сверху приближают дату примерно на неделю. Первой гасится карта под 25% — она дороже всех.
+
+Вопрос: «Я закрыл кредитку»
+[happy]
+Кредитка закрыта. 15 000 ₸ минимального платежа в месяц освободились — теперь они идут в кредит на авто. Запиши последний платёж во вкладке «Долги», чтобы план пересчитался.`
+
 function findToolUse(blocks: Array<Record<string, unknown>>, name: string) {
   return blocks.find((b) => b.type === 'tool_use' && b.name === name) as { id: string; input: Record<string, unknown> } | undefined
 }
@@ -205,18 +266,16 @@ Deno.serve(async (req) => {
     // order afterward since that's what the Messages API expects.
     const { data: historyDesc } = await supabase
       .from('chat_messages')
-      .select('role, content')
+      .select('role, content, expression')
       .order('created_at', { ascending: false })
       .limit(20)
     const history = (historyDesc ?? []).slice().reverse()
 
     const snapshot = await buildFinancialSnapshot(supabase)
     const categoryNames = snapshot.categoryNames.join(', ') || '—'
-    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз. Главное последствие — насколько сдвинется закрытие долгов.\n- Спрашивают, где перерасход, на что ушло больше обычного, нет ли странных трат — опирайся на блок «Перерасход и аномалии» и «обычно за месяц» по категориям; разбивку показывай через render_data_widget.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.`
+    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз. Главное последствие — насколько сдвинется закрытие долгов.\n- Спрашивают, где перерасход, на что ушло больше обычного, нет ли странных трат — опирайся на блок «Перерасход и аномалии» и «обычно за месяц» по категориям; разбивку показывай через render_data_widget.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.\n\n${MOOD_AND_EXAMPLES}`
 
-    const messages: ClaudeMessage[] = history
-      .filter((m: { role: string }) => m.role === 'user' || m.role === 'assistant')
-      .map((m: { role: 'user' | 'assistant'; content: string }) => ({ role: m.role, content: m.content }))
+    const messages = buildHistory(history)
 
     const first = await callClaudeRaw({ system, messages, tools: ALL_TOOLS })
 
@@ -230,6 +289,7 @@ Deno.serve(async (req) => {
     // suggest_followups can ride along with propose_debt/render_data_widget
     // directly, but model_purchase_impact needs its own round trip first.
     let followupSource = first.content
+    let purchaseImpact: Record<string, unknown> | null = null
 
     const purchaseToolUse = findToolUse(first.content, 'model_purchase_impact')
     const proposeDebtToolUse = findToolUse(first.content, 'propose_debt')
@@ -238,6 +298,7 @@ Deno.serve(async (req) => {
 
     if (purchaseToolUse && first.stop_reason === 'tool_use') {
       const impact = computePurchaseImpact(purchaseToolUse.input as never, snapshot)
+      purchaseImpact = impact
 
       const second = await callClaudeRaw({
         system,
@@ -252,7 +313,7 @@ Deno.serve(async (req) => {
       followupSource = second.content
     } else if (proposeDebtToolUse) {
       const { confirmation_text, ...draft } = proposeDebtToolUse.input as Record<string, unknown> & { confirmation_text: string }
-      finalText = confirmation_text || 'Проверьте предложенные данные и подтвердите добавление долга в форме.'
+      finalText = confirmation_text || 'Проверь цифры и подтверди в форме — сам ничего не сохраняю.'
       proposedDebt = draft
     } else if (proposeCategoryToolUse) {
       const { confirmation_text, ...draft } = proposeCategoryToolUse.input as Record<string, unknown> & { confirmation_text: string }
@@ -265,6 +326,22 @@ Deno.serve(async (req) => {
     } else {
       finalText = (first.content.find((b) => b.type === 'text') as { text: string } | undefined)?.text ?? ''
     }
+
+    // The mood marker can sit in any text block of either turn (a tool-only
+    // reply still usually opens with a one-line text block carrying it). After
+    // a purchase check the second turn — written with the numbers — wins.
+    const allText = [...(followupSource === first.content ? [] : followupSource), ...first.content]
+      .filter((b) => b.type === 'text')
+      .map((b) => (b as { text: string }).text)
+      .join('\n')
+    const expression =
+      readMood(allText) ??
+      (proposedDebt || proposedCategory
+        ? 'focused'
+        : purchaseImpact && (purchaseImpact as { fits_this_month?: boolean }).fits_this_month === false
+          ? 'alert'
+          : 'calm')
+    finalText = stripMood(finalText)
 
     const followupsToolUse = findToolUse(followupSource, 'suggest_followups')
     const quickReplies = (followupsToolUse?.input as { replies?: string[] } | undefined)?.replies ?? null
@@ -281,6 +358,7 @@ Deno.serve(async (req) => {
         proposed_category: proposedCategory,
         data_widget: dataWidget,
         quick_replies: quickReplies,
+        expression,
       })
       .select()
       .single()

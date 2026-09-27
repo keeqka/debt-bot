@@ -296,9 +296,12 @@ export function useDeleteIncome() {
   })
 }
 
+export const sendChatMutationKey = ['send-chat'] as const
+
 export function useSendChatMessage() {
   const queryClient = useQueryClient()
   return useMutation({
+    mutationKey: sendChatMutationKey,
     mutationFn: api.sendChatMessage,
     // Optimistically show the user's own bubble immediately instead of waiting
     // for the AI reply to round-trip before anything appears.

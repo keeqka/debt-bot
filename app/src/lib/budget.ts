@@ -156,7 +156,8 @@ export function computeBudget(input: BudgetInput): Budget {
   const expectedByNow = historyMonths ? avgOver(history, dayOfMonth) : null
 
   // ── Долги и план ───────────────────────────────────────────────────────
-  const activeDebts = input.debts.filter((d) => d.status === 'active')
+  // Нулевой остаток — долг закрыт, даже если статус ещё не успел смениться.
+  const activeDebts = input.debts.filter((d) => d.status === 'active' && d.current_balance > 0)
   const minPayments = activeDebts.reduce((s, d) => s + d.minimum_payment, 0)
   const freeMonthly = income - minPayments - typicalSpend
   const planTarget: Budget['planTarget'] = activeDebts.length ? 'debts' : input.hasActiveGoals ? 'goals' : 'none'

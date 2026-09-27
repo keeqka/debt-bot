@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import { useIsMutating } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TopBar } from '@/components/layout/TopBar'
 import { BottomTabBar } from '@/components/layout/BottomTabBar'
@@ -8,6 +9,7 @@ import { HeaderActionSetterContext } from '@/lib/header-action'
 import { Onboarding } from '@/routes/Onboarding'
 import { useCurrentUser } from '@/lib/auth'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
+import { sendChatMutationKey, useMonth } from '@/hooks/use-finance-data'
 
 /**
  * Подзаголовок шапки вместо заголовка-названия экрана: какой экран открыт,
@@ -31,6 +33,16 @@ export function AppShell() {
   const [headerAction, setHeaderAction] = useState<ReactNode>(null)
   const user = useCurrentUser()
   const reduced = useReducedMotion()
+  const month = useMonth()
+  const chatThinking = useIsMutating({ mutationKey: sendChatMutationKey }) > 0
+  // Лицо в шапке живое: думает, пока ИИ отвечает; тревожится, когда месяц
+  // ушёл в минус или траты идут сверх обычного; иначе спокоен.
+  const face =
+    chatThinking
+      ? 'thinking'
+      : month && ((month.hasIncome && month.available < 0) || month.signals.some((s) => s.kind === 'pace' || s.kind === 'category'))
+        ? 'alert'
+        : 'calm'
 
   // Fixed to the real Telegram viewport height (--tg-height, lib/telegram.ts)
   // rather than min-h-dvh: TopBar/BottomTabBar need to be actual non-scrolling
@@ -45,12 +57,11 @@ export function AppShell() {
     )
   }
 
-  const isChat = location.pathname.startsWith('/chat')
 
   return (
     <HeaderActionSetterContext.Provider value={setHeaderAction}>
       <div className="mx-auto flex max-w-md flex-col bg-hf-bg" style={{ height: 'var(--tg-height, 100dvh)' }}>
-        <TopBar subtitle={subtitleFor(location.pathname)} action={headerAction} face={isChat ? 'focused' : 'calm'} />
+        <TopBar subtitle={subtitleFor(location.pathname)} action={headerAction} face={face} />
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4.5">
           <AnimatePresence mode="wait">
             <motion.div

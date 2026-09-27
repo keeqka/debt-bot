@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { MascotAvatar } from '@/components/Mascot'
+import { MascotAvatar, type Expression } from '@/components/Mascot'
 import { closeApp } from '@/lib/telegram'
 
 /**
@@ -21,7 +21,7 @@ export function TopBar({
 }: {
   subtitle?: string
   action?: ReactNode
-  face?: 'calm' | 'focused' | 'thinking'
+  face?: Expression
 }) {
   return (
     <header className="pt-safe shrink-0 flex items-center justify-between gap-2.5 border-b border-hf-line bg-hf-bar px-4 pb-3">

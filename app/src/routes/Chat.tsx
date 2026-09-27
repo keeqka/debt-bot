@@ -122,7 +122,13 @@ export function Chat() {
             ) : (
               <motion.div key={m.id} initial={entrance} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex flex-col gap-1 pb-2">
                 <div className="flex items-end gap-2">
-                  <MascotAvatar size={26} expression="focused" className="shrink-0" />
+                  <MascotAvatar
+                    size={26}
+                    expression={m.expression ?? 'calm'}
+                    // Хорошая новость, пришедшая только что, — один подпрыг (ANIMATIONS.md §1).
+                    bounce={isNew && m.expression === 'happy'}
+                    className="shrink-0"
+                  />
                   {m.data_widget && m.data_widget.length > 0 ? (
                     <div className="min-w-0 max-w-[82%] space-y-2">
                       {m.content && <p className="text-sm leading-snug text-hf-text-2">{m.content}</p>}
@@ -219,7 +225,7 @@ export function Chat() {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Спросите про свои финансы..."
+          placeholder="Спроси «Чека» про деньги…"
           className="h-11 flex-1 rounded-[13px] border border-hf-line bg-hf-card px-4 text-sm text-hf-text outline-none placeholder:text-hf-text-4"
         />
         <button
@@ -237,7 +243,7 @@ export function Chat() {
         open={confirmClear}
         onOpenChange={setConfirmClear}
         title="Очистить историю чата?"
-        description="Вся переписка с AI-советником удалится безвозвратно — для обоих участников, чат общий."
+        description="Вся переписка с «Чеком» удалится безвозвратно — у обоих, чат общий."
         confirmLabel="Очистить"
         pending={clearChat.isPending}
         onConfirm={confirmClearChat}

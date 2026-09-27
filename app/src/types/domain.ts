@@ -168,6 +168,9 @@ export interface ChatDataWidgetRow {
   pct: number
 }
 
+/** Лицо маскота «Чек» — те же варианты, что умеет components/Mascot.tsx. */
+export type MascotExpression = 'calm' | 'focused' | 'happy' | 'alert' | 'thinking'
+
 export interface ChatMessage {
   id: Uuid
   user_id: Uuid
@@ -181,6 +184,8 @@ export interface ChatMessage {
   data_widget?: ChatDataWidgetRow[] | null
   /** 2-3 suggested follow-up questions shown under this message. */
   quick_replies?: string[] | null
+  /** С каким лицом «Чек» сказал этот ответ (выбирает сам ИИ); null — ответ из времени до характера. */
+  expression?: MascotExpression | null
   created_at: string
 }
 
