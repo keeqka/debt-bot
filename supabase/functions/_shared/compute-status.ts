@@ -38,15 +38,19 @@ export interface StatusResult {
   recommendations: string[]
 }
 
-/** Calls Claude for a fresh status assessment and appends it to ai_insights (the frontend always reads the latest row). */
-export async function computeAndStoreStatus(supabase: SupabaseLike): Promise<StatusResult> {
-  const snapshot = await buildFinancialSnapshot(supabase)
+/**
+ * Calls Claude for a fresh status assessment and appends it to ai_insights
+ * (the frontend always reads the latest row). householdId is required for
+ * service-role callers (the weekly cron); omit it with a user-scoped client.
+ */
+export async function computeAndStoreStatus(supabase: SupabaseLike, householdId?: string): Promise<StatusResult> {
+  const snapshot = await buildFinancialSnapshot(supabase, householdId)
   const result = await callClaudeTool<StatusResult>({
     system: `${PERSONA}\n\nОцени текущее финансовое положение семьи по шкале от зелёного (отлично) до красного (тревога). Главное: идут ли досрочные платежи в долги по плану и укладывается ли месяц в обычные траты. Опирайся только на цифры ниже — в них уже посчитаны бюджет месяца, перерасход и аномалии; не пересчитывай их сам. Headline — про самое важное из этого.`,
     messages: [{ role: 'user', content: snapshotToPrompt(snapshot) }],
     tool: STATUS_TOOL,
   })
 
-  await supabase.from('ai_insights').insert({ type: 'status', payload: result })
+  await supabase.from('ai_insights').insert({ type: 'status', payload: result, ...(householdId ? { household_id: householdId } : {}) })
   return result
 }

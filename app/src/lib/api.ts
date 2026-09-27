@@ -8,6 +8,8 @@ import type {
   DebtDraft,
   DebtPayment,
   HouseholdSettings,
+  AccessInfo,
+  InviteKind,
   Category,
   Expense,
   Goal,
@@ -524,9 +526,9 @@ export async function getHouseholdSettings(): Promise<HouseholdSettings> {
   const { data, error } = await supabase
     .from('household_settings')
     .select('priority_mode, debt_strategy, cushion_months, split_debt_pct, high_rate_threshold')
-    .eq('id', 1)
-    .single()
+    .maybeSingle() // RLS: only this family's row
   if (error) throw error
+  if (!data) return { ...mock.mockHouseholdSettings } // same values as the table defaults
   return { ...data, cushion_months: Number(data.cushion_months), high_rate_threshold: Number(data.high_rate_threshold) } as HouseholdSettings
 }
 
@@ -535,9 +537,38 @@ export async function updateHouseholdSettings(patch: Partial<HouseholdSettings>)
     Object.assign(mock.mockHouseholdSettings, patch)
     return { ...mock.mockHouseholdSettings }
   }
-  const { error } = await supabase.from('household_settings').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', 1)
+  // Upsert: one row per family, keyed by household_id (filled from the session by default).
+  const { error } = await supabase.from('household_settings').upsert({ ...patch, updated_at: new Date().toISOString() }, { onConflict: 'household_id' })
   if (error) throw error
   return getHouseholdSettings()
+}
+
+export async function getAccessInfo(): Promise<AccessInfo> {
+  if (!isBackendConfigured || !supabase) {
+    return { users: mock.mockUsers.length, max_users: 5, members: mock.mockUsers.length, max_members: 2, is_admin: true }
+  }
+  const { data, error } = await supabase.rpc('access_info')
+  if (error) throw error
+  return data as AccessInfo
+}
+
+/** One-time invite code (0017): 'partner' — into your family, 'household' — a new family (admins only). */
+export async function createInvite(kind: InviteKind): Promise<string> {
+  if (!isBackendConfigured || !supabase) return 'demo0000invite00'
+  const { data, error } = await supabase.rpc('create_invite', { p_kind: kind })
+  if (error) throw new Error(inviteErrorText(error.message))
+  return data as string
+}
+
+const INVITE_ERRORS: Record<string, string> = {
+  limit_reached: 'Мест нет — лимит людей в приложении исчерпан',
+  family_full: 'В семье уже двое',
+  forbidden: 'Новые семьи приглашает только админ',
+}
+
+function inviteErrorText(message: string) {
+  const code = Object.keys(INVITE_ERRORS).find((c) => message.includes(c))
+  return code ? INVITE_ERRORS[code] : 'Не получилось создать приглашение'
 }
 
 export async function getSubscription(): Promise<Subscription> {

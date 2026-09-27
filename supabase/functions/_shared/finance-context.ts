@@ -49,25 +49,33 @@ function monthStart(today: Date, monthsBack: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-export async function buildFinancialSnapshot(supabase: SupabaseLike): Promise<FinancialSnapshot> {
+/**
+ * householdId — only for service-role callers (crons), whose client sees
+ * every family; a user-scoped client is limited to its family by RLS already.
+ */
+export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId?: string): Promise<FinancialSnapshot> {
+  // deno-lint-ignore no-explicit-any
+  const scope = (q: any) => (householdId ? q.eq('household_id', householdId) : q)
   const [currency, { data: users }] = await Promise.all([
-    resolveBaseCurrency(supabase),
-    supabase.from('users').select('id, monthly_income, timezone'),
+    resolveBaseCurrency(supabase, householdId),
+    scope(supabase.from('users').select('id, monthly_income, timezone')),
   ])
   const today = localToday(users?.[0]?.timezone ?? 'Asia/Almaty')
 
   const [{ data: incomes }, { data: expenses }, { data: debts }, { data: debtPayments }, { data: goals }, { data: categories }, { data: settingsRow }] =
     await Promise.all([
-      supabase.from('incomes').select('amount, received_at').gte('received_at', monthStart(today, 1)),
-      supabase
-        .from('expenses')
-        .select('id, amount, category_id, spent_at, is_confirmed, merchant, description')
-        .gte('spent_at', monthStart(today, 3)),
-      supabase.from('debts').select('id, title, current_balance, interest_rate, minimum_payment, status').eq('status', 'active'),
-      supabase.from('debt_payments').select('debt_id, amount, paid_at').gte('paid_at', monthStart(today, 0)),
-      supabase.from('goals').select('title, target_amount, current_amount, target_date, is_cushion').eq('status', 'active'),
-      supabase.from('categories').select('id, name'),
-      supabase.from('household_settings').select('*').eq('id', 1).maybeSingle(),
+      scope(supabase.from('incomes').select('amount, received_at')).gte('received_at', monthStart(today, 1)),
+      scope(supabase.from('expenses').select('id, amount, category_id, spent_at, is_confirmed, merchant, description')).gte(
+        'spent_at',
+        monthStart(today, 3),
+      ),
+      scope(supabase.from('debts').select('id, title, current_balance, interest_rate, minimum_payment, status')).eq('status', 'active'),
+      scope(supabase.from('debt_payments').select('debt_id, amount, paid_at')).gte('paid_at', monthStart(today, 0)),
+      scope(supabase.from('goals').select('title, target_amount, current_amount, target_date, is_cushion')).eq('status', 'active'),
+      householdId
+        ? supabase.from('categories').select('id, name').or(`household_id.is.null,household_id.eq.${householdId}`)
+        : supabase.from('categories').select('id, name'),
+      scope(supabase.from('household_settings').select('*')).maybeSingle(),
     ])
 
   const settings: PlanSettings = settingsRow

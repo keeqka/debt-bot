@@ -7,6 +7,7 @@ import { useCurrentUser } from '@/lib/auth'
 import { currencySymbol } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PlanSettingsSection } from '@/components/overview/PlanSettingsSection'
+import { FamilySection } from '@/components/overview/FamilySection'
 import type { CategoryType } from '@/types/domain'
 
 const inputClass =
@@ -142,6 +143,8 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
           )}
 
           <PlanSettingsSection />
+
+          <FamilySection />
 
           <div className="space-y-3 border-t border-hf-line pt-4">
             <p className="text-[13px] font-medium text-hf-text">Категории</p>

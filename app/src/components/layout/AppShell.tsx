@@ -7,7 +7,8 @@ import { BottomTabBar } from '@/components/layout/BottomTabBar'
 import { Toaster } from '@/components/ui/sonner'
 import { HeaderActionSetterContext } from '@/lib/header-action'
 import { Onboarding } from '@/routes/Onboarding'
-import { useCurrentUser } from '@/lib/auth'
+import { useAccessDenied, useCurrentUser } from '@/lib/auth'
+import { AccessScreen } from '@/components/layout/AccessScreen'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { sendChatMutationKey, useMonth } from '@/hooks/use-finance-data'
 
@@ -32,6 +33,7 @@ export function AppShell() {
   const location = useLocation()
   const [headerAction, setHeaderAction] = useState<ReactNode>(null)
   const user = useCurrentUser()
+  const denied = useAccessDenied()
   const reduced = useReducedMotion()
   const month = useMonth()
   const chatThinking = useIsMutating({ mutationKey: sendChatMutationKey }) > 0
@@ -49,6 +51,9 @@ export function AppShell() {
   // flex siblings pinned top and bottom, with only the middle region
   // scrolling — a min-h-dvh shell just grows with content instead, so both
   // bars scroll away with everything else on any screen taller than one page.
+  // Нет доступа (нет приглашения, мест нет…) — вместо приложения экран с заявкой.
+  if (denied) return <AccessScreen code={denied} />
+
   if (!user.onboarding_completed_at) {
     return (
       <div className="mx-auto flex max-w-md flex-col bg-hf-bg" style={{ height: 'var(--tg-height, 100dvh)' }}>

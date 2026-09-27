@@ -3,6 +3,7 @@ import { env } from './env.ts'
 interface SessionClaims {
   sub: string
   telegram_id: number
+  household_id: string
   exp: number
 }
 
@@ -30,7 +31,9 @@ export async function requireSession(req: Request): Promise<SessionClaims> {
 
   const claims = JSON.parse(new TextDecoder().decode(base64UrlDecode(encodedPayload))) as SessionClaims
   if (!claims.exp || claims.exp < Date.now() / 1000) throw new Error('Session expired')
-  if (!env.allowedTelegramIds.includes(claims.telegram_id)) throw new Error('Telegram id no longer whitelisted')
+  // Tokens minted before households existed carry no household — every RLS
+  // policy would silently return nothing for them. Reopening the app mints a new one.
+  if (!claims.household_id) throw new Error('Session has no household — reopen the app')
 
   return claims
 }

@@ -33,19 +33,21 @@ Deno.serve(async (req) => {
 
     const supabase = getAdminClient()
 
-    const { data: subscription } = await supabase.from('subscriptions').select('status').limit(1).maybeSingle()
-    if (subscription?.status !== 'active') {
-      return jsonResponse({ ok: true, skipped: 'subscription not active' })
-    }
+    // A paid-tier feature — only families whose subscription is active.
+    const { data: subscriptions } = await supabase.from('subscriptions').select('household_id').eq('status', 'active')
+    const activeHouseholds = new Set((subscriptions ?? []).map((s: { household_id: string }) => s.household_id))
 
     const { data: users } = await supabase
       .from('users')
-      .select('id, telegram_id, timezone, daily_reminder_time')
+      .select('id, household_id, telegram_id, timezone, daily_reminder_time')
       .eq('daily_reminder_enabled', true)
       .eq('vacation_paused', false)
 
     const now = new Date()
-    const due = (users ?? []).filter((u: ReminderUser) => localHour(now, u.timezone) === Number(u.daily_reminder_time.slice(0, 2)))
+    const due = (users ?? []).filter(
+      (u: ReminderUser & { household_id: string }) =>
+        activeHouseholds.has(u.household_id) && localHour(now, u.timezone) === Number(u.daily_reminder_time.slice(0, 2)),
+    )
 
     let sent = 0
     let silent = 0

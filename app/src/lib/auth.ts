@@ -13,6 +13,12 @@ interface AuthTelegramResponse {
 
 export const CURRENT_USER_KEY = ['current-user'] as const
 
+/** Why the app can't be opened: no invite, used/expired invite, no seats, family full. Null — all good. */
+export type AccessDenied = 'invite_required' | 'invite_invalid' | 'limit_reached' | 'family_full'
+export const ACCESS_DENIED_KEY = ['access-denied'] as const
+
+const ACCESS_CODES: AccessDenied[] = ['invite_required', 'invite_invalid', 'limit_reached', 'family_full']
+
 // Only read before the query cache is seeded — initSession runs (and is
 // awaited) before the first render, so by the time any component calls
 // useCurrentUser() below, the cache already has the real value.
@@ -41,11 +47,19 @@ export async function initSession(queryClient: QueryClient): Promise<void> {
   }
 
   try {
-    const { token, user } = await callFunction<AuthTelegramResponse>('auth-telegram', { initData })
+    // Invite code from the bot's "Открыть" button (?invite=…); a direct Mini
+    // App link carries it inside initData as start_param instead — the server reads both.
+    const invite = new URLSearchParams(window.location.search).get('invite')
+    const { token, user } = await callFunction<AuthTelegramResponse>('auth-telegram', { initData, invite })
     setSessionJwt(token)
     fallbackUser = user
     queryClient.setQueryData(CURRENT_USER_KEY, user)
   } catch (error) {
+    const denied = ACCESS_CODES.find((code) => error instanceof Error && error.message.includes(code))
+    if (denied) {
+      queryClient.setQueryData(ACCESS_DENIED_KEY, denied)
+      return
+    }
     console.error('initSession failed — falling back to mock user', error)
     queryClient.setQueryData(CURRENT_USER_KEY, currentMockUser)
   } finally {
@@ -66,6 +80,17 @@ export function useCurrentUser(): User {
     queryKey: CURRENT_USER_KEY,
     queryFn: () => fallbackUser,
     initialData: fallbackUser,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  })
+  return data
+}
+
+export function useAccessDenied(): AccessDenied | null {
+  const { data } = useQuery<AccessDenied | null>({
+    queryKey: ACCESS_DENIED_KEY,
+    queryFn: () => null,
+    initialData: null,
     staleTime: Infinity,
     gcTime: Infinity,
   })

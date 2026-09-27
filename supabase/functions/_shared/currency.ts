@@ -10,11 +10,14 @@
 // deno-lint-ignore no-explicit-any
 type SupabaseLike = any
 
-export async function resolveBaseCurrency(supabase: SupabaseLike): Promise<string> {
-  const { data: debt } = await supabase.from('debts').select('currency').limit(1).maybeSingle()
+/** householdId — only for service-role callers (crons); a user-scoped client is already limited to its family by RLS. */
+export async function resolveBaseCurrency(supabase: SupabaseLike, householdId?: string): Promise<string> {
+  // deno-lint-ignore no-explicit-any
+  const scope = (q: any) => (householdId ? q.eq('household_id', householdId) : q)
+  const { data: debt } = await scope(supabase.from('debts').select('currency')).limit(1).maybeSingle()
   if (debt?.currency) return debt.currency
 
-  const { data: expense } = await supabase.from('expenses').select('currency').limit(1).maybeSingle()
+  const { data: expense } = await scope(supabase.from('expenses').select('currency')).limit(1).maybeSingle()
   if (expense?.currency) return expense.currency
 
   return 'KZT'

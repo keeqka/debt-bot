@@ -19,6 +19,8 @@ export interface SupabaseJwtClaims {
   /** users.id (uuid) — becomes auth.uid() in RLS policies */
   sub: string
   telegram_id: number
+  /** households.id — every RLS policy scopes rows by this claim (current_household() in 0017). */
+  household_id: string
   /** seconds from now until expiry */
   expiresInSeconds: number
 }
@@ -31,6 +33,7 @@ export async function signSupabaseJwt(claims: SupabaseJwtClaims, secret: string)
     role: 'authenticated',
     sub: claims.sub,
     telegram_id: claims.telegram_id,
+    household_id: claims.household_id,
     iat: now,
     exp: now + claims.expiresInSeconds,
   }

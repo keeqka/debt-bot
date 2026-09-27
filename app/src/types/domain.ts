@@ -16,8 +16,23 @@ export interface User {
   daily_reminder_time: string
   vacation_paused: boolean
   onboarding_completed_at: string | null
+  /** Семья — все данные делятся внутри неё (0017_households_and_invites.sql). */
+  household_id: Uuid
+  /** Может приглашать новые семьи. */
+  is_admin: boolean
   created_at: string
 }
+
+/** Сколько мест в приложении и в семье (RPC access_info). */
+export interface AccessInfo {
+  users: number
+  max_users: number
+  members: number
+  max_members: number
+  is_admin: boolean
+}
+
+export type InviteKind = 'household' | 'partner'
 
 export type DebtStatus = 'active' | 'closed'
 

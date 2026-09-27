@@ -34,12 +34,13 @@ export interface PeriodMetrics {
   debtPaymentsTotal: number
 }
 
-export async function getPeriodMetrics(supabase: SupabaseLike, fromISO: string, toISO: string): Promise<PeriodMetrics> {
+/** Service-role callers (crons) must pass householdId — their client sees every family. */
+export async function getPeriodMetrics(supabase: SupabaseLike, fromISO: string, toISO: string, householdId: string): Promise<PeriodMetrics> {
   const [{ data: expenses }, { data: incomes }, { data: debtPayments }, { data: categories }] = await Promise.all([
-    supabase.from('expenses').select('amount, category_id').gte('spent_at', fromISO).lt('spent_at', toISO),
-    supabase.from('incomes').select('amount').gte('received_at', fromISO).lt('received_at', toISO),
-    supabase.from('debt_payments').select('amount').gte('paid_at', fromISO).lt('paid_at', toISO),
-    supabase.from('categories').select('id, name'),
+    supabase.from('expenses').select('amount, category_id').eq('household_id', householdId).gte('spent_at', fromISO).lt('spent_at', toISO),
+    supabase.from('incomes').select('amount').eq('household_id', householdId).gte('received_at', fromISO).lt('received_at', toISO),
+    supabase.from('debt_payments').select('amount').eq('household_id', householdId).gte('paid_at', fromISO).lt('paid_at', toISO),
+    supabase.from('categories').select('id, name').or(`household_id.is.null,household_id.eq.${householdId}`),
   ])
 
   const categoryName = new Map((categories ?? []).map((c: { id: string; name: string }) => [c.id, c.name]))

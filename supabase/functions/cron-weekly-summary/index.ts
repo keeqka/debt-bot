@@ -13,6 +13,7 @@ import { getPeriodMetrics, metricsToPrompt, SUMMARY_TOOL } from '../_shared/summ
 import { computeAndStoreStatus } from '../_shared/compute-status.ts'
 import { resolveBaseCurrency } from '../_shared/currency.ts'
 import { PERSONA } from '../_shared/persona.ts'
+import { listHouseholds } from '../_shared/households.ts'
 
 Deno.serve(async (req) => {
   try {
@@ -23,39 +24,49 @@ Deno.serve(async (req) => {
     const prevWeekStart = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
 
     const supabase = getAdminClient()
+    let sentAll = true
 
-    // Independent of the weekly digest below — refreshes the dashboard status card.
-    try {
-      await computeAndStoreStatus(supabase)
-    } catch (error) {
-      console.error('cron-weekly-summary: status refresh failed (continuing with the digest)', error)
+    // Family by family — each gets its own numbers, only its members get the message.
+    for (const household of await listHouseholds(supabase)) {
+      // Independent of the weekly digest below — refreshes the dashboard status card.
+      try {
+        await computeAndStoreStatus(supabase, household.id)
+      } catch (error) {
+        console.error('cron-weekly-summary: status refresh failed (continuing with the digest)', household.id, error)
+      }
+
+      try {
+        const [current, previous, currency] = await Promise.all([
+          getPeriodMetrics(supabase, weekStart.toISOString().slice(0, 10), now.toISOString().slice(0, 10), household.id),
+          getPeriodMetrics(supabase, prevWeekStart.toISOString().slice(0, 10), weekStart.toISOString().slice(0, 10), household.id),
+          resolveBaseCurrency(supabase, household.id),
+        ])
+
+        const summary = await callClaudeTool<{ telegram_text: string }>({
+          system: `${PERSONA}\n\nСоставь еженедельный итог для семьи: как прошла неделя по расходам/доходам/долгам, один конкретный следующий шаг. period=week. telegram_text должен быть готов к прямой отправке в Telegram.`,
+          messages: [{ role: 'user', content: `period=week\n${metricsToPrompt(current, previous, currency)}` }],
+          tool: SUMMARY_TOOL,
+        })
+
+        const { data: insight } = await supabase
+          .from('ai_insights')
+          .insert({ type: 'weekly_summary', payload: summary, household_id: household.id })
+          .select()
+          .single()
+
+        const results = await Promise.all(
+          household.telegramIds.map((id) => sendTelegramMessageWithRetry(id, `*Итоги недели*\n\n${summary.telegram_text}`)),
+        )
+        const allSent = results.every(Boolean)
+        sentAll &&= allSent
+        if (insight) await supabase.from('ai_insights').update({ sent_to_telegram: allSent }).eq('id', insight.id)
+      } catch (error) {
+        sentAll = false
+        console.error('cron-weekly-summary: household failed', household.id, error)
+      }
     }
 
-    const [current, previous, currency] = await Promise.all([
-      getPeriodMetrics(supabase, weekStart.toISOString().slice(0, 10), now.toISOString().slice(0, 10)),
-      getPeriodMetrics(supabase, prevWeekStart.toISOString().slice(0, 10), weekStart.toISOString().slice(0, 10)),
-      resolveBaseCurrency(supabase),
-    ])
-
-    const summary = await callClaudeTool({
-      system: `${PERSONA}\n\nСоставь еженедельный итог для семьи из двух человек: как прошла неделя по расходам/доходам/долгам, один конкретный следующий шаг. period=week. telegram_text должен быть готов к прямой отправке в Telegram.`,
-      messages: [{ role: 'user', content: `period=week\n${metricsToPrompt(current, previous, currency)}` }],
-      tool: SUMMARY_TOOL,
-    })
-
-    const { data: insight } = await supabase.from('ai_insights').insert({ type: 'weekly_summary', payload: summary }).select().single()
-
-    const { data: users } = await supabase.from('users').select('telegram_id')
-    const results = await Promise.all(
-      (users ?? []).map((u: { telegram_id: number }) =>
-        sendTelegramMessageWithRetry(u.telegram_id, `*Итоги недели*\n\n${summary.telegram_text}`),
-      ),
-    )
-
-    const allSent = results.every(Boolean)
-    if (insight) await supabase.from('ai_insights').update({ sent_to_telegram: allSent }).eq('id', insight.id)
-
-    return jsonResponse({ ok: true, sent: allSent })
+    return jsonResponse({ ok: true, sent: sentAll })
   } catch (error) {
     console.error('cron-weekly-summary failed', error)
     return jsonResponse({ ok: false, error: String(error) }, 500)

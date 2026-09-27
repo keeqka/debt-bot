@@ -52,6 +52,7 @@ interface TelegramWebApp {
   }
   BackButton?: TelegramBackButton
   MainButton?: TelegramMainButton
+  openTelegramLink?: (url: string) => void
 }
 
 declare global {
@@ -94,6 +95,13 @@ export function initTelegram() {
   }
   setHeight()
   app.onEvent('viewportChanged', setHeight)
+}
+
+/** Opens a t.me link natively inside Telegram (share sheet, bot chat); a new tab outside it. */
+export function openTelegramLink(url: string) {
+  const app = getTelegramWebApp()
+  if (app?.openTelegramLink) app.openTelegramLink(url)
+  else window.open(url, '_blank', 'noopener')
 }
 
 export function haptic(style: 'light' | 'medium' | 'heavy' = 'light') {

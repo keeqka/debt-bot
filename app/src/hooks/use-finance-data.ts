@@ -14,6 +14,7 @@ export const queryKeys = {
   debtPayments: (debtId: string) => ['debt-payments', debtId] as const,
   allDebtPayments: ['debt-payments', 'all'] as const,
   householdSettings: ['household-settings'] as const,
+  accessInfo: ['access-info'] as const,
   incomes: ['incomes'] as const,
   expenses: ['expenses'] as const,
   categories: ['categories'] as const,
@@ -95,6 +96,15 @@ export function useMonth() {
 export function useDebtFreeDate(): string | null | undefined {
   const month = useMonth()
   return month ? month.plan.debtFreeDate : undefined
+}
+
+export const useAccessInfo = () => useQuery({ queryKey: queryKeys.accessInfo, queryFn: api.getAccessInfo })
+
+export function useCreateInvite() {
+  return useMutation({
+    mutationFn: api.createInvite,
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Не получилось создать приглашение'),
+  })
 }
 
 export const useHouseholdSettings = () => useQuery({ queryKey: queryKeys.householdSettings, queryFn: api.getHouseholdSettings })
