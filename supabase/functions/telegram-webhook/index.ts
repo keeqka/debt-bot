@@ -59,17 +59,15 @@ async function answerCallbackQuery(callbackQueryId: string, text?: string) {
   })
 }
 
-let botUsername: string | null = null
-async function getBotUsername() {
-  if (!botUsername) {
-    const res = await fetch(TG_API('getMe'))
-    botUsername = (await res.json()).result?.username ?? null
-  }
-  return botUsername
-}
+// Same username as the app's lib/bot.ts and the landing page — hardcoded
+// rather than looked up via getMe() at request time: a live lookup is one
+// more thing that can silently fail and produce a broken t.me/<empty>
+// link (Telegram then shows "Sorry, this user doesn't seem to exist",
+// with no error on our side to notice it by).
+const BOT_USERNAME = 'aibasedfinancecontrolbot_bot'
 
-async function inviteLink(code: string) {
-  return `https://t.me/${await getBotUsername()}?start=inv_${code}`
+function inviteLink(code: string) {
+  return `https://t.me/${BOT_USERNAME}?start=inv_${code}`
 }
 
 function openAppButton(invite?: string) {
@@ -96,7 +94,7 @@ async function sendInvite(chatId: number, user: AppUser, kind: 'household' | 'pa
   const who = kind === 'partner' ? 'партнёра в твою семью' : 'новую семью'
   await sendTelegramMessage(
     chatId,
-    `Ссылка-приглашение в ${who}. Одноразовая, действует 7 дней — перешли её человеку:\n\n${await inviteLink(code as string)}`,
+    `Ссылка-приглашение в ${who}. Одноразовая, действует 7 дней — перешли её человеку:\n\n${inviteLink(code as string)}`,
   )
 }
 
