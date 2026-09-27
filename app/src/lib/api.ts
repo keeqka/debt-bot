@@ -70,6 +70,13 @@ export async function getDebtPayments(debtId: string): Promise<DebtPayment[]> {
   return data as DebtPayment[]
 }
 
+export async function getAllDebtPayments(): Promise<DebtPayment[]> {
+  if (!isBackendConfigured || !supabase) return [...mock.mockDebtPayments]
+  const { data, error } = await supabase.from('debt_payments').select('*')
+  if (error) throw error
+  return data as DebtPayment[]
+}
+
 export async function addDebtPayment(payment: Omit<DebtPayment, 'id'>): Promise<void> {
   if (!isBackendConfigured || !supabase) {
     mock.mockDebtPayments.unshift({ ...payment, id: crypto.randomUUID() })

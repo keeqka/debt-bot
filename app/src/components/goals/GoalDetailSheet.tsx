@@ -6,9 +6,9 @@ import { Eyebrow } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
-import { useBankProducts, useUpdateGoal, useMonth } from '@/hooks/use-finance-data'
+import { useBankProducts, useUpdateGoal, useMonth, useDebtFreeDate } from '@/hooks/use-finance-data'
 import { formatMoney, formatMoneyCompact, formatDate, formatPercent } from '@/lib/format'
-import { goalMath, monthLabel } from '@/lib/goal'
+import { goalMath, monthLabel, goalMoneyPerMonth, forecastGoalFromBudget } from '@/lib/goal'
 import { AddGoalDialog } from '@/components/goals/AddGoalDialog'
 import { ContributeDialog } from '@/components/goals/ContributeDialog'
 import type { Goal } from '@/types/domain'
@@ -23,13 +23,18 @@ export function GoalDetailSheet({ goal, open, onOpenChange }: { goal: Goal | nul
   const { data: bankProducts } = useBankProducts()
   const updateGoal = useUpdateGoal()
   const month = useMonth()
+  const debtFreeDate = useDebtFreeDate()
   const [editOpen, setEditOpen] = useState(false)
   const [contributeOpen, setContributeOpen] = useState(false)
   const [confirmPause, setConfirmPause] = useState(false)
 
   if (!goal) return null
   const math = goalMath(goal)
-  const shareOfFree = month?.hasIncome && month.available > 0 && math.monthlyNeeded ? math.monthlyNeeded / month.available : null
+  const debtsFirst = month?.planTarget === 'debts'
+  const perMonth = month ? goalMoneyPerMonth(month) : 0
+  const forecast = month ? forecastGoalFromBudget(goal, month, debtFreeDate) : null
+  // Сравниваем с деньгами, которые реально пойдут на цели (lib/budget.ts), а не с остатком месяца.
+  const shareOfFree = !debtsFirst && perMonth > 0 && math.monthlyNeeded ? math.monthlyNeeded / perMonth : null
 
   async function pause() {
     if (!goal) return
@@ -70,7 +75,7 @@ export function GoalDetailSheet({ goal, open, onOpenChange }: { goal: Goal | nul
           <div className="flex items-baseline justify-between gap-2.5">
             <Eyebrow>{math.done ? 'Собрано' : 'Накоплено'}</Eyebrow>
             <span className="font-mono text-[11px] text-hf-ink-soft">
-              {goal.target_date ? `до ${monthLabel(goal.target_date)}` : 'без срока'}
+              {goal.target_date ? `срок: ${monthLabel(goal.target_date)}` : 'без срока'}
             </span>
           </div>
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
@@ -100,7 +105,11 @@ export function GoalDetailSheet({ goal, open, onOpenChange }: { goal: Goal | nul
             <div className="space-y-1">
               <p className="text-[11px] text-hf-text-4">Закроется</p>
               <p className="text-[15px] font-medium text-hf-text">
-                {goal.ai_strategy?.estimated_completion_date
+                {debtsFirst
+                  ? forecast
+                    ? monthLabel(forecast)
+                    : '—'
+                  : goal.ai_strategy?.estimated_completion_date
                   ? monthLabel(goal.ai_strategy.estimated_completion_date)
                   : goal.target_date
                     ? monthLabel(goal.target_date)
@@ -109,10 +118,15 @@ export function GoalDetailSheet({ goal, open, onOpenChange }: { goal: Goal | nul
             </div>
           </div>
 
+          {debtsFirst && !math.done && (
+            <p className="text-[11px] leading-snug text-hf-text-4">
+              {`Сейчас всё свободное идёт в долги${debtFreeDate ? `, последний закроется: ${monthLabel(debtFreeDate)}` : '.'} Потом на цели — ${formatMoneyCompact(perMonth, goal.currency)} в месяц${forecast ? `, эта цель соберётся: ${monthLabel(forecast)}` : '.'}`}
+            </p>
+          )}
           {shareOfFree != null && (
             <p className="text-[11px] leading-snug text-hf-text-4">
-              Это {formatPercent(Math.min(1, shareOfFree))} свободных денег месяца — {formatMoneyCompact(month!.available, goal.currency)}.
-              {shareOfFree > 1 && ' Сейчас столько не выходит: сдвинь срок или уменьши сумму.'}
+              Это {formatPercent(Math.min(1, shareOfFree))} денег, которые идут на цели, — {formatMoneyCompact(perMonth, goal.currency)} в месяц.
+              {shareOfFree > 1 && ' Столько не выходит: сдвинь срок или уменьши сумму.'}
             </p>
           )}
           {!math.fromStrategy && (

@@ -1,5 +1,5 @@
 import type { Debt, Expense } from '@/types/domain'
-import type { MonthCategory } from '@/lib/month'
+import type { Month } from '@/lib/month'
 
 export interface Insight {
   text: string
@@ -13,47 +13,49 @@ function daysUntilDueDay(dueDay: number, today: Date): number {
   return Math.round((target.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86_400_000)
 }
 
-/**
- * One insight, highest priority first (ТЗ FUNCTIONAL.md §3): overspend
- * category > unused subscriptions > payment due within 3 days > duplicate
- * expense > nothing. Deterministic — no AI call, this runs on every render.
- *
- * "Unused subscriptions" isn't implemented yet: detecting a subscription at
- * all needs the recurring-merchant grouping Receipt's statement import adds
- * in a later phase — nothing here can tell a subscription apart from any
- * other recurring expense yet. Falls through to the next priority instead
- * of guessing.
- */
-export function computeInsight(categories: MonthCategory[], debts: Debt[], monthExpenses: Expense[]): Insight | null {
-  const overCategory = categories.find((c) => c.tone === 'warn')
-  if (overCategory) {
-    return {
-      text: `«${overCategory.name}» почти выбрал лимит — ${Math.round(overCategory.pctOfLimit)}% от бюджета месяца.`,
-      action: { label: 'Разобрать', to: '/receipt' },
-    }
-  }
+function isThisMonth(iso: string, today: Date) {
+  return iso.slice(0, 7) === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+}
 
+/**
+ * One insight, most important first: overspend against the household's usual
+ * month (a category, then the month as a whole) → payment due within 3 days →
+ * an unusually large single expense → a new spending line → a duplicate.
+ * Overspend leads because every tenge over the usual comes straight out of
+ * the debt payoff plan (lib/budget.ts). Deterministic, no AI.
+ */
+export function computeInsight(month: Month, debts: Debt[], expenses: Expense[]): Insight | null {
   const today = new Date()
+  const toReceipts = { label: 'Разобрать', to: '/receipt' }
+
+  const overspend = month.signals.find((s) => s.kind === 'category' || s.kind === 'pace')
+  if (overspend) return { text: overspend.text, action: toReceipts }
+
   const upcoming = debts
     .filter((d): d is Debt & { due_day: number } => d.status === 'active' && d.due_day != null)
     .map((d) => ({ debt: d, daysUntil: daysUntilDueDay(d.due_day, today) }))
     .filter((d) => d.daysUntil <= 3)
     .sort((a, b) => a.daysUntil - b.daysUntil)[0]
   if (upcoming) {
-    const when = upcoming.daysUntil === 0 ? 'сегодня' : `через ${upcoming.daysUntil} дн.`
+    const when = upcoming.daysUntil === 0 ? 'сегодня' : `через ${upcoming.daysUntil} дн`
     return {
       text: `Платёж по «${upcoming.debt.title}» — ${when}.`,
       action: { label: 'К долгам', to: '/debts' },
     }
   }
 
+  const unusual = month.signals.find((s) => s.kind === 'anomaly' || s.kind === 'new_category')
+  if (unusual) return { text: unusual.text, action: { label: 'Проверить', to: '/receipt' } }
+
   const seen = new Set<string>()
-  const duplicate = monthExpenses.find((e) => {
-    const key = `${e.amount}|${e.merchant ?? ''}|${e.spent_at.slice(0, 10)}`
-    if (seen.has(key)) return true
-    seen.add(key)
-    return false
-  })
+  const duplicate = expenses
+    .filter((e) => e.is_confirmed && isThisMonth(e.spent_at, today))
+    .find((e) => {
+      const key = `${e.amount}|${e.merchant ?? ''}|${e.spent_at.slice(0, 10)}`
+      if (seen.has(key)) return true
+      seen.add(key)
+      return false
+    })
   if (duplicate) {
     return {
       text: `Похоже, трата «${duplicate.merchant ?? duplicate.description ?? 'без названия'}» записана дважды.`,

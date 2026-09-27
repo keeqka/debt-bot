@@ -3,7 +3,7 @@ import { Plus, ChevronRight } from 'lucide-react'
 import { Eyebrow } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
-import { useGoals } from '@/hooks/use-finance-data'
+import { useDebtFreeDate, useGoals, useMonth } from '@/hooks/use-finance-data'
 import { formatMoney, formatMoneyCompact, formatMoneyShort, formatPercent } from '@/lib/format'
 import { goalMath, monthLabel } from '@/lib/goal'
 import { AddGoalDialog } from '@/components/goals/AddGoalDialog'
@@ -22,6 +22,8 @@ import type { Goal } from '@/types/domain'
  */
 export function GoalsSection() {
   const { data: goals } = useGoals()
+  const debtFreeDate = useDebtFreeDate()
+  const debtsFirst = useMonth()?.planTarget === 'debts'
   const [addOpen, setAddOpen] = useState(false)
   const [detail, setDetail] = useState<Goal | null>(null)
 
@@ -53,7 +55,7 @@ export function GoalsSection() {
           <Plus className="h-4 w-4 shrink-0 text-hf-text-4" />
         </button>
       ) : (
-        <GoalPaperCard goal={first} onOpen={() => setDetail(first)} />
+        <GoalPaperCard goal={first} debtsFirst={debtsFirst} debtFreeDate={debtFreeDate} onOpen={() => setDetail(first)} />
       )}
 
       {rest.map((goal) => (
@@ -66,15 +68,27 @@ export function GoalsSection() {
   )
 }
 
-function GoalPaperCard({ goal, onOpen }: { goal: Goal; onOpen: () => void }) {
+function GoalPaperCard({
+  goal,
+  debtsFirst,
+  debtFreeDate,
+  onOpen,
+}: {
+  goal: Goal
+  debtsFirst: boolean
+  debtFreeDate: string | null | undefined
+  onOpen: () => void
+}) {
   const math = goalMath(goal)
+  // Сначала долги: пока они есть, в цель ничего не идёт — показываем, когда начнём.
+  const waitsForDebts = debtsFirst && !math.done
   return (
     <button type="button" onClick={onOpen} className="block w-full text-left">
       <Paper className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between gap-2.5">
           <span className="min-w-0 truncate text-sm font-medium">{goal.title}</span>
           <span className="shrink-0 font-mono text-[11px] text-hf-ink-soft">
-            {goal.target_date ? `до ${monthLabel(goal.target_date)}` : 'без срока'}
+            {goal.target_date ? `срок: ${monthLabel(goal.target_date)}` : 'без срока'}
           </span>
         </div>
 
@@ -86,9 +100,17 @@ function GoalPaperCard({ goal, onOpen }: { goal: Goal; onOpen: () => void }) {
         <ProgressBar pct={math.pct} onPaper />
 
         <div className="flex justify-between gap-2.5 text-[13px]">
-          <span>{math.done ? 'Цель собрана' : 'Откладывать в месяц'}</span>
+          <span>{math.done ? 'Цель собрана' : waitsForDebts ? 'Копить начнём после долгов' : 'Откладывать в месяц'}</span>
           <span className="font-mono text-hf-accent-ink">
-            {math.done ? formatMoney(goal.target_amount, goal.currency) : math.monthlyNeeded ? formatMoney(math.monthlyNeeded, goal.currency) : '—'}
+            {math.done
+              ? formatMoney(goal.target_amount, goal.currency)
+              : waitsForDebts
+                ? debtFreeDate
+                  ? monthLabel(debtFreeDate)
+                  : '—'
+                : math.monthlyNeeded
+                  ? formatMoney(math.monthlyNeeded, goal.currency)
+                  : '—'}
           </span>
         </div>
       </Paper>

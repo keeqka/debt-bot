@@ -7,7 +7,7 @@ import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar } from '@/components/Mascot'
-import { useDebts, useDebtStrategy, useDeleteDebt, useExpenses, useIncomes } from '@/hooks/use-finance-data'
+import { useDebts, useDebtStrategy, useDeleteDebt, useMonth } from '@/hooks/use-finance-data'
 import { debtPayoffNote, simulateDebtStrategy } from '@/lib/debt-strategy'
 import { formatMoney, formatMonthYear } from '@/lib/format'
 import { useAnimatedNumber } from '@/hooks/use-animated-number'
@@ -17,12 +17,6 @@ import { cn } from '@/lib/utils'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { RecordPaymentDialog } from '@/components/debts/RecordPaymentDialog'
 import { DebtPayoffChart } from '@/components/charts/DebtPayoffChart'
-
-function isThisMonth(iso: string) {
-  const d = new Date(iso)
-  const now = new Date()
-  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-}
 
 /** Months between two ISO dates, whole months only (day-of-month ignored — good enough for an "ahead by" headline). */
 function monthsBetween(fromIso: string, toIso: string) {
@@ -39,15 +33,13 @@ function addMonths(date: Date, months: number) {
 
 export function Debts() {
   const { data: debts, isLoading } = useDebts()
-  const { data: incomes } = useIncomes()
-  const { data: expenses } = useExpenses()
+  const month = useMonth()
   const deleteDebt = useDeleteDebt()
 
   const activeDebts = useMemo(() => debts?.filter((d) => d.status === 'active') ?? [], [debts])
-  const totalMinPayments = activeDebts.reduce((sum, d) => sum + d.minimum_payment, 0)
-  const monthIncome = (incomes ?? []).filter((i) => isThisMonth(i.received_at)).reduce((s, i) => s + i.amount, 0)
-  const monthExpense = (expenses ?? []).filter((e) => isThisMonth(e.spent_at)).reduce((s, e) => s + e.amount, 0)
-  const computedSurplus = Math.max(0, monthIncome - monthExpense - totalMinPayments)
+  // The budget's monthly extra (income − minimums − usual spending, lib/budget.ts)
+  // — the same number Overview reserves for debts and uses for its payoff date.
+  const computedSurplus = month?.planExtra ?? 0
 
   // The surplus input feeds the AI query key (getDebtStrategy calls Claude),
   // so committing every keystroke would fire a fresh AI call per character
@@ -67,7 +59,9 @@ export function Debts() {
   }, [surplusText])
 
   const [algorithm, setAlgorithm] = useState<DebtStrategyKind>('avalanche')
-  const { data: plan, isLoading: planLoading } = useDebtStrategy(algorithm, surplus)
+  // Wait for the budget before asking the server — otherwise the first request
+  // goes out with a placeholder 0 extra and burns a Claude call for nothing.
+  const { data: plan, isLoading: planLoading } = useDebtStrategy(algorithm, surplus, Boolean(month))
 
   // "На сколько раньше, чем при минимальных платежах" — same regardless of
   // algorithm (with zero extra budget, order never matters), so one baseline.
@@ -144,6 +138,13 @@ export function Debts() {
                 className="w-28 rounded-md border border-hf-receipt-line bg-hf-receipt px-2 py-0.5 text-right font-mono text-[13px] text-hf-accent-ink"
               />
             </div>
+            {month && (
+              <p className="text-[11px] leading-snug text-hf-ink-soft">
+                {month.hasIncome
+                  ? `Доход ${formatMoney(month.income)} − минимальные платежи ${formatMoney(month.minPayments)} − обычные траты ${formatMoney(month.typicalSpend)}${month.historyMonths === 0 ? ' (оценка по первому месяцу)' : ''}. Всё это идёт в долги.`
+                  : 'Укажи доход на «Обзоре» — тогда посчитаю, сколько можно вносить сверх минимумов.'}
+              </p>
+            )}
           </Paper>
 
           <div className="flex rounded-[13px] bg-hf-card p-1">

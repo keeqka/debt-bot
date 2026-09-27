@@ -117,7 +117,8 @@ export function simulateDebtStrategy(input: SimulationInput): DebtStrategyPlan {
       debt_id: d.id,
       payment: d.minimum_payment + (i === 0 ? Math.max(0, monthlySurplus) : 0),
     })),
-    estimated_payoff_date: payoffDate.toISOString().slice(0, 10),
+    // Same rule as the server copy (_shared/debt-simulation.ts): no payoff within 50 years → no date, not a fake one.
+    estimated_payoff_date: months < MAX_MONTHS ? payoffDate.toISOString().slice(0, 10) : null,
     total_interest_paid: Math.round(totalInterest),
     explanation:
       strategy === 'avalanche'

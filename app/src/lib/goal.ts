@@ -1,4 +1,29 @@
 import type { Goal } from '@/types/domain'
+import type { Month } from '@/lib/month'
+
+/**
+ * Сколько в месяц пойдёт на цели. Сначала долги (lib/budget.ts): пока они
+ * есть, на цели не идёт ничего, а после закрытия освобождаются и досрочные,
+ * и минимальные платежи — доход минус обычные траты.
+ */
+export function goalMoneyPerMonth(month: Month) {
+  return month.planTarget === 'debts'
+    ? Math.max(0, Math.floor((month.income - month.typicalSpend) / 1000) * 1000)
+    : Math.max(0, Math.floor(month.freeMonthly / 1000) * 1000)
+}
+
+/** Когда цель соберётся, если всё, что идёт на цели, класть в неё — начиная с закрытия долгов. */
+export function forecastGoalFromBudget(goal: Goal, month: Month, debtFreeDate: string | null | undefined): Date | null {
+  const left = Math.max(0, goal.target_amount - goal.current_amount)
+  if (left === 0) return new Date()
+  const perMonth = goalMoneyPerMonth(month)
+  if (perMonth <= 0) return null
+  const start = month.planTarget === 'debts' ? (debtFreeDate ? new Date(debtFreeDate) : null) : new Date()
+  if (!start) return null
+  const date = new Date(start)
+  date.setMonth(date.getMonth() + Math.ceil(left / perMonth))
+  return date
+}
 
 /**
  * Арифметика цели на клиенте. Нужна потому, что `ai_strategy` считается кроном

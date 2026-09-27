@@ -50,15 +50,22 @@ Deno.serve(async (req) => {
     if (goalError) throw goalError
 
     const snapshot = await buildFinancialSnapshot(supabase)
-    const surplus = Math.max(0, snapshot.totalIncomeLast30d - snapshot.totalExpenseLast30d - snapshot.totalMinPayments)
+    // Debts come first (_shared/budget.ts): while any are open, nothing goes to
+    // goals; once they close, both the extra and the minimums free up.
+    const b = snapshot.budget
+    const afterDebts = Math.max(0, Math.floor((b.income - b.typicalSpend) / 1000) * 1000)
+    const moneyLine =
+      b.planTarget === 'debts'
+        ? `Сейчас все свободные деньги идут в долги — копить на цель начнём после их закрытия (${snapshot.debtFreeDate ?? 'дата пока не определена'}). После этого на цели будет свободно около ${afterDebts} в месяц. Считай срок цели от даты закрытия долгов.`
+        : `Свободно на цели в месяц: ${b.planExtra}.`
 
     const result = await callClaudeTool({
       system:
-        'Ты помогаешь спланировать накопление на цель. Предложи разумную ежемесячную сумму (не больше свободного остатка), реалистичную дату достижения цели и 1-3 банковских продукта СТРОГО из предоставленного списка (используй их id как есть, не придумывай новые продукты или ставки).',
+        'Ты помогаешь спланировать накопление на цель. Правило семьи: сначала закрываются все долги, цели копятся только после. Предложи разумную ежемесячную сумму (не больше денег, свободных на цели), реалистичную дату достижения цели и 1-3 банковских продукта СТРОГО из предоставленного списка (используй их id как есть, не придумывай новые продукты или ставки).',
       messages: [
         {
           role: 'user',
-          content: `Цель: ${goal.title}, нужно накопить ${goal.target_amount - goal.current_amount} (уже есть ${goal.current_amount} из ${goal.target_amount})${goal.target_date ? `, желаемый срок: ${goal.target_date}` : ''}.\nСвободный остаток в месяц (после долгов): ${surplus}.\n${snapshotToPrompt(snapshot)}\n\nДоступные банковские продукты (id | банк | продукт | ставка | тип):\n${(bankProducts ?? [])
+          content: `Цель: ${goal.title}, нужно накопить ${goal.target_amount - goal.current_amount} (уже есть ${goal.current_amount} из ${goal.target_amount})${goal.target_date ? `, желаемый срок: ${goal.target_date}` : ''}.\n${moneyLine}\n${snapshotToPrompt(snapshot)}\n\nДоступные банковские продукты (id | банк | продукт | ставка | тип):\n${(bankProducts ?? [])
             .map((p) => `${p.id} | ${p.bank_name} | ${p.product_name} | ${p.rate_percent}% | ${p.type}`)
             .join('\n')}`,
         },

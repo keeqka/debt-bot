@@ -42,7 +42,7 @@ export interface StatusResult {
 export async function computeAndStoreStatus(supabase: SupabaseLike): Promise<StatusResult> {
   const snapshot = await buildFinancialSnapshot(supabase)
   const result = await callClaudeTool<StatusResult>({
-    system: `${PERSONA}\n\nОцени текущее финансовое положение семьи по шкале от зелёного (отлично) до красного (тревога), опираясь на доходы, расходы, долги и цели за последние 30 дней. Учитывай долю обязательных платежей по долгам в доходе и скорость роста/снижения расходов.`,
+    system: `${PERSONA}\n\nОцени текущее финансовое положение семьи по шкале от зелёного (отлично) до красного (тревога). Главное: идут ли досрочные платежи в долги по плану и укладывается ли месяц в обычные траты. Опирайся только на цифры ниже — в них уже посчитаны бюджет месяца, перерасход и аномалии; не пересчитывай их сам. Headline — про самое важное из этого.`,
     messages: [{ role: 'user', content: snapshotToPrompt(snapshot) }],
     tool: STATUS_TOOL,
   })

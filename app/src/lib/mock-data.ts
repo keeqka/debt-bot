@@ -130,6 +130,7 @@ export const mockDebtPayments: DebtPayment[] = [
   { id: 'dp1', debt_id: 'd1', amount: 145_000, paid_at: '2026-08-05', is_extra: false, note: null },
   { id: 'dp2', debt_id: 'd1', amount: 60_000, paid_at: '2026-08-20', is_extra: true, note: 'премия' },
   { id: 'dp3', debt_id: 'd2', amount: 40_000, paid_at: '2026-08-12', is_extra: false, note: null },
+  { id: 'dp4', debt_id: 'd1', amount: 145_000, paid_at: '2026-09-05', is_extra: false, note: null },
 ]
 
 export const mockIncomes: Income[] = [
@@ -236,6 +237,42 @@ export const mockExpenses: Expense[] = [
     ai_confidence: 0.88,
     is_confirmed: true,
   },
+  // Полный август — «обычный месяц» для lib/budget.ts: с ним видно сравнение
+  // с обычными тратами, перерасход по «Здоровью» и аномально крупную трату
+  // в аптеке (обычно там 4-5 тыс).
+  ...(
+    [
+      ['c3', 210_000, '2026-08-05', null, 'Аренда квартиры'],
+      ['c1', 14_200, '2026-08-03', 'Magnum', null],
+      ['c1', 16_800, '2026-08-10', 'Small', null],
+      ['c1', 12_500, '2026-08-17', 'Magnum', null],
+      ['c1', 15_900, '2026-08-24', 'Galmart', null],
+      ['c2', 3_200, '2026-08-04', 'InDrive', null],
+      ['c2', 2_800, '2026-08-11', 'InDrive', null],
+      ['c2', 3_500, '2026-08-19', 'Yandex Go', null],
+      ['c2', 2_900, '2026-08-26', 'InDrive', null],
+      ['c5', 4_500, '2026-08-02', 'Аптека Europharma', null],
+      ['c5', 3_800, '2026-08-14', 'Аптека Садыхан', null],
+      ['c5', 5_200, '2026-08-22', 'Аптека Europharma', null],
+      ['c4', 8_000, '2026-08-09', 'Kinopark', null],
+      ['c4', 6_500, '2026-08-23', 'Chaplin Cinemas', null],
+    ] as const
+  ).map(
+    ([category_id, amount, spent_at, merchant, description], i): Expense => ({
+      id: `aug${i + 1}`,
+      user_id: i % 2 ? 'u2' : 'u1',
+      amount,
+      currency: 'KZT',
+      category_id,
+      merchant,
+      spent_at,
+      description,
+      source: 'manual',
+      receipt_asset_path: null,
+      ai_confidence: null,
+      is_confirmed: true,
+    }),
+  ),
 ]
 
 export const mockGoals: Goal[] = [

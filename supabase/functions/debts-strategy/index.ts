@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
       monthly_surplus,
     )
 
-    const { explanation } = await callClaudeTool({
+    const { explanation } = await callClaudeTool<{ explanation: string }>({
       system: `Долги упорядочены ${algorithmLabel}. Объясни план своими словами, не пересчитывая и не называя других цифр, кроме уже данных. ${currencyInstruction(currency)}`,
       messages: [
         {

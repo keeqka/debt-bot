@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import * as api from '@/lib/api'
 import { computeMonth } from '@/lib/month'
+import { currencySymbol } from '@/lib/format'
+import { simulateDebtStrategy } from '@/lib/debt-strategy'
 import { useCurrentUser } from '@/lib/auth'
 import type { ChatMessage, DebtStrategyKind, User } from '@/types/domain'
 
@@ -10,6 +12,7 @@ export const queryKeys = {
   status: ['status'] as const,
   debts: ['debts'] as const,
   debtPayments: (debtId: string) => ['debt-payments', debtId] as const,
+  allDebtPayments: ['debt-payments', 'all'] as const,
   debtStrategy: (kind: DebtStrategyKind, surplus: number) => ['debt-strategy', kind, surplus] as const,
   incomes: ['incomes'] as const,
   expenses: ['expenses'] as const,
@@ -48,24 +51,53 @@ export const useGoals = () => useQuery({ queryKey: queryKeys.goals, queryFn: api
 export const useBankProducts = () => useQuery({ queryKey: queryKeys.bankProducts, queryFn: api.getBankProducts })
 export const useChatMessages = () => useQuery({ queryKey: queryKeys.chatMessages, queryFn: api.getChatMessages })
 
+export const useAllDebtPayments = () => useQuery({ queryKey: queryKeys.allDebtPayments, queryFn: api.getAllDebtPayments })
+
 /**
- * Overview's budget math (available/perDay/category breakdown) — a pure
- * client-side aggregation over data every one of these hooks already fetches
- * and caches on its own, so this composes them instead of adding a
- * redundant query key. Recomputes whenever any underlying list changes
- * (expenses/incomes/debts/categories), same as any other derived useMemo.
+ * The household budget (lib/budget.ts via lib/month.ts) — the single source
+ * for every number derived from income/expenses/debts: Overview, the debt
+ * plan's monthly extra, goals, insights. A pure aggregation over lists these
+ * hooks already fetch and cache.
  */
 export function useMonth() {
-  const user = useCurrentUser()
+  const currentUser = useCurrentUser()
+  const { data: users } = useUsers()
   const { data: debts } = useDebts()
+  const { data: debtPayments } = useAllDebtPayments()
   const { data: expenses } = useExpenses()
   const { data: incomes } = useIncomes()
   const { data: categories } = useCategories()
+  const { data: goals } = useGoals()
 
   return useMemo(() => {
-    if (!debts || !expenses || !incomes || !categories) return undefined
-    return computeMonth(user, debts, expenses, incomes, categories)
-  }, [user, debts, expenses, incomes, categories])
+    if (!users || !debts || !debtPayments || !expenses || !incomes || !categories || !goals) return undefined
+    // The current user's row comes from the auth cache, which is what
+    // useUpdateUser writes to first — prefer it over the (possibly older) list.
+    const household = users.map((u) => (u.id === currentUser.id ? currentUser : u))
+    if (!household.some((u) => u.id === currentUser.id)) household.push(currentUser)
+    return computeMonth({
+      userIncomes: household.map((u) => u.monthly_income),
+      incomes,
+      expenses,
+      debts,
+      debtPayments,
+      hasActiveGoals: goals.some((g) => g.status === 'active'),
+      categoryNames: Object.fromEntries(categories.map((c) => [c.id, c.name])),
+      currencySymbol: currencySymbol(),
+    })
+  }, [currentUser, users, debts, debtPayments, expenses, incomes, categories, goals])
+}
+
+/** When the last debt closes if the plan's monthly extra keeps going to debts — same math as the Debts screen. */
+export function useDebtFreeDate(): string | null | undefined {
+  const month = useMonth()
+  const { data: debts } = useDebts()
+  return useMemo(() => {
+    if (!month || !debts) return undefined
+    const active = debts.filter((d) => d.status === 'active')
+    if (!active.length) return null
+    return simulateDebtStrategy({ debts: active, monthlySurplus: month.planExtra, strategy: 'avalanche' }).estimated_payoff_date
+  }, [month, debts])
 }
 
 export function useUpdateUser() {
@@ -80,6 +112,7 @@ export function useUpdateUser() {
     }) => api.updateUser(id, patch),
     onSuccess: (user) => {
       queryClient.setQueryData(['current-user'], user)
+      queryClient.invalidateQueries({ queryKey: queryKeys.users })
       queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },
   })
@@ -93,12 +126,13 @@ export const useDebtPayments = (debtId: string) =>
 // window-refocus. staleTime: Infinity means the cached result for a given
 // key is reused forever; it's only invalidated below, when the underlying
 // debts actually change (add/edit/delete/payment).
-export const useDebtStrategy = (kind: DebtStrategyKind, monthlySurplus: number) =>
+export const useDebtStrategy = (kind: DebtStrategyKind, monthlySurplus: number, enabled = true) =>
   useQuery({
     queryKey: queryKeys.debtStrategy(kind, monthlySurplus),
     queryFn: () => api.getDebtStrategy(kind, monthlySurplus),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
+    enabled,
   })
 
 export function useAddDebtPayment() {
@@ -108,6 +142,7 @@ export function useAddDebtPayment() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.debts })
       queryClient.invalidateQueries({ queryKey: queryKeys.debtPayments(variables.debt_id) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.allDebtPayments })
       queryClient.invalidateQueries({ queryKey: queryKeys.status })
       queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },
@@ -142,6 +177,7 @@ export function useDeleteDebt() {
     mutationFn: api.deleteDebt,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.debts })
+      queryClient.invalidateQueries({ queryKey: queryKeys.allDebtPayments })
       queryClient.invalidateQueries({ queryKey: queryKeys.status })
       queryClient.invalidateQueries({ queryKey: ['debt-strategy'] })
     },

@@ -18,12 +18,13 @@ import { handleOptions, jsonResponse, jsonError } from '../_shared/cors.ts'
 import { requireSession } from '../_shared/auth.ts'
 import { callClaudeRaw, CLAUDE_MODEL_DEFAULT, WEB_SEARCH_TOOL, type ClaudeMessage } from '../_shared/claude.ts'
 import { getUserClient } from '../_shared/supabase-admin.ts'
-import { buildFinancialSnapshot, snapshotToPrompt, type FinancialSnapshot } from '../_shared/finance-context.ts'
+import { avalancheOrder, buildFinancialSnapshot, snapshotToPrompt, type FinancialSnapshot } from '../_shared/finance-context.ts'
+import { simulateDebtPayoff } from '../_shared/debt-simulation.ts'
 import { PERSONA } from '../_shared/persona.ts'
 
 const PURCHASE_IMPACT_TOOL = {
   name: 'model_purchase_impact',
-  description: 'Projects how a hypothetical purchase would affect the household financial status and goals.',
+  description: 'Checks a hypothetical purchase against this month\'s budget and the debt payoff plan (debts come first) — returns whether it fits and how far the debt-free date would move.',
   input_schema: {
     type: 'object',
     properties: {
@@ -110,26 +111,75 @@ const SUGGEST_FOLLOWUPS_TOOL = {
 
 const ALL_TOOLS = [PURCHASE_IMPACT_TOOL, PROPOSE_DEBT_TOOL, PROPOSE_CATEGORY_TOOL, DATA_WIDGET_TOOL, SUGGEST_FOLLOWUPS_TOOL, WEB_SEARCH_TOOL]
 
+function monthsBetween(fromIso: string, toIso: string) {
+  const a = new Date(fromIso)
+  const b = new Date(toIso)
+  return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth())
+}
+
+/**
+ * "Могу ли я купить X" against the same budget the app shows (_shared/budget.ts):
+ * a one-off purchase first has to fit this month's spending money; whatever
+ * doesn't comes out of the money earmarked for debts (debts come first), so the
+ * honest consequence is how far the debt-free date moves. Installments eat into
+ * that monthly extra for their whole term — computed with the real simulation.
+ */
 function computePurchaseImpact(
   input: { item_name: string; amount: number; payment_type: 'one_time' | 'installments'; installment_months?: number },
   snapshot: FinancialSnapshot,
 ) {
-  const monthlySurplus = snapshot.totalIncomeLast30d - snapshot.totalExpenseLast30d - snapshot.totalMinPayments
-  const monthlyHit = input.payment_type === 'installments' ? input.amount / Math.max(1, input.installment_months ?? 12) : input.amount
-  const newSurplus = monthlySurplus - (input.payment_type === 'one_time' ? 0 : monthlyHit)
-  const bufferHit = input.payment_type === 'one_time' ? input.amount : 0
+  const b = snapshot.budget
+  const cur = snapshot.currency
+  const r = (n: number) => Math.round(n)
+  const free = Math.max(0, b.available)
+  const base = { available_this_month: r(b.available), plan_extra_per_month: r(b.planExtra), plan_target: b.planTarget, debt_free_date: snapshot.debtFreeDate }
 
-  const monthsToRecoverBuffer = bufferHit > 0 && monthlySurplus > 0 ? Math.ceil(bufferHit / monthlySurplus) : 0
-  const newStatus = newSurplus < 0 ? 'orange' : newSurplus < monthlySurplus * 0.3 ? 'yellow' : 'light_green'
+  if (input.payment_type === 'installments') {
+    const months = Math.max(1, input.installment_months ?? 12)
+    const monthly = input.amount / months
+    let newDebtFreeDate: string | null = snapshot.debtFreeDate
+    if (b.planTarget === 'debts' && snapshot.debts.length) {
+      newDebtFreeDate = simulateDebtPayoff(avalancheOrder(snapshot.debts), Math.max(0, b.planExtra - monthly)).estimatedPayoffDate
+    }
+    const delay = snapshot.debtFreeDate && newDebtFreeDate ? monthsBetween(snapshot.debtFreeDate, newDebtFreeDate) : null
+    return {
+      ...base,
+      monthly_payment: r(monthly),
+      new_debt_free_date: newDebtFreeDate,
+      debt_payoff_delay_months: delay,
+      verdict:
+        monthly > b.planExtra
+          ? `Платёж ${r(monthly)} ${cur} в месяц больше, чем остаётся сверх обычных трат и минимальных платежей (${r(b.planExtra)}) — рассрочка уйдёт в минус.`
+          : b.planTarget === 'debts'
+            ? `Рассрочка заберёт ${r(monthly)} из ${r(b.planExtra)} ${cur} в месяц, которые сейчас идут в долги${delay ? ` — закрытие долгов сдвинется на ${delay} мес.` : '.'}`
+            : `Влезает: ${r(monthly)} из ${r(b.planExtra)} ${cur} свободных в месяц.`,
+    }
+  }
 
+  if (input.amount <= free) {
+    const left = b.available - input.amount
+    return {
+      ...base,
+      fits_this_month: true,
+      available_after: r(left),
+      per_day_after: b.daysLeft > 0 ? Math.floor(left / b.daysLeft / 10) * 10 : r(left),
+      verdict: `Влезает в бюджет месяца: свободно ${r(b.available)} ${cur}, после покупки останется ${r(left)}.`,
+    }
+  }
+
+  const shortfall = input.amount - free
+  const monthsOfPlan = b.planExtra > 0 ? Math.ceil(shortfall / b.planExtra) : null
   return {
-    new_status: newStatus,
-    months_to_recover_buffer: monthsToRecoverBuffer,
-    impact_on_goals: snapshot.goals.map((g) => ({ title: g.title, delayed: bufferHit > 0 })),
+    ...base,
+    fits_this_month: false,
+    shortfall: r(shortfall),
+    months_of_plan_extra: monthsOfPlan,
     verdict:
-      newSurplus < 0
-        ? `После этой покупки расходы превысят доходы примерно на ${Math.abs(Math.round(newSurplus))} ${snapshot.currency} в месяц — стоит отложить или растянуть на рассрочку.`
-        : `Покупка выполнима: свободный остаток снизится с ${Math.round(monthlySurplus)} до ${Math.round(newSurplus)} ${snapshot.currency} в месяц.`,
+      monthsOfPlan == null
+        ? `В бюджет месяца не влезает (свободно ${r(free)} ${cur}), а сверх обычных трат и минимальных платежей ничего не остаётся — покупка уйдёт в минус.`
+        : b.planTarget === 'debts'
+          ? `В бюджет месяца не влезает: свободно ${r(free)} ${cur}. Недостающие ${r(shortfall)} придётся взять из денег на долги — закрытие сдвинется примерно на ${monthsOfPlan} мес.`
+          : `В бюджет месяца не влезает: свободно ${r(free)} ${cur}. Недостающие ${r(shortfall)} наберутся за ${monthsOfPlan} мес. свободных денег.`,
   }
 }
 
@@ -161,8 +211,8 @@ Deno.serve(async (req) => {
     const history = (historyDesc ?? []).slice().reverse()
 
     const snapshot = await buildFinancialSnapshot(supabase)
-    const categoryNames = snapshot.expensesByCategory.map((c) => c.category).join(', ') || '—'
-    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.`
+    const categoryNames = snapshot.categoryNames.join(', ') || '—'
+    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз. Главное последствие — насколько сдвинется закрытие долгов.\n- Спрашивают, где перерасход, на что ушло больше обычного, нет ли странных трат — опирайся на блок «Перерасход и аномалии» и «обычно за месяц» по категориям; разбивку показывай через render_data_widget.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.`
 
     const messages: ClaudeMessage[] = history
       .filter((m: { role: string }) => m.role === 'user' || m.role === 'assistant')

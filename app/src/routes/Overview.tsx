@@ -8,7 +8,7 @@ import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar, Mascot } from '@/components/Mascot'
 import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
 import { GoalsSection } from '@/components/goals/GoalsSection'
-import { useMonth, useExpenses, useDebts, useStatus, useDebtStrategy } from '@/hooks/use-finance-data'
+import { useMonth, useExpenses, useDebts, useStatus, useDebtFreeDate } from '@/hooks/use-finance-data'
 import { computeInsight } from '@/lib/insight'
 import { STATUS_META } from '@/lib/status'
 import { formatMoney, formatMoneyCompact, formatMonthYear, formatPercent } from '@/lib/format'
@@ -40,7 +40,9 @@ export function Overview() {
   const [setupOpen, setSetupOpen] = useState(false)
 
   const activeDebts = (debts ?? []).filter((d) => d.status === 'active')
-  const { data: plan } = useDebtStrategy('avalanche', 0)
+  // Same budget extra and same simulation as the Debts screen's default plan,
+  // so both "Свобода от долгов" numbers are always the same date.
+  const debtFreeDate = useDebtFreeDate()
   const reduced = useReducedMotion()
   // Hooks must run unconditionally, before month's own loading-state early
   // return below — 0 is a harmless placeholder until real data lands, since
@@ -57,7 +59,9 @@ export function Overview() {
   }
 
   const hasAnyExpense = (expenses?.length ?? 0) > 0
-  const ownInsight = expenses && debts ? computeInsight(month.categories, debts, expenses.filter((e) => e.is_confirmed)) : null
+  const ownInsight = expenses && debts ? computeInsight(month, debts, expenses) : null
+  // Про месяц целиком — перерасход в одной категории говорит инсайт, не эта подпись.
+  const overspent = month.signals.some((s) => s.kind === 'pace')
   const statusMeta = status ? STATUS_META[status.status] : null
 
   // Один вывод за раз: свой детерминированный инсайт важнее недельной оценки,
@@ -99,15 +103,32 @@ export function Overview() {
               >
                 {formatMoneyCompact(animatedAvailable)}
               </span>
-              <span className="font-mono text-xs text-hf-ok">в плане</span>
+              {month.available < 0 ? (
+                <span className="font-mono text-xs text-hf-warn-on-dark">перерасход</span>
+              ) : overspent ? (
+                <span className="font-mono text-xs text-hf-text-4">быстрее обычного</span>
+              ) : (
+                <span className="font-mono text-xs text-hf-ok">в плане</span>
+              )}
             </div>
             <p className="text-[13px] leading-snug text-hf-text-3">
-              Можно тратить {formatMoney(month.perDay)} в день и уложиться в бюджет.
+              {month.available > 0
+                ? `Можно тратить ${formatMoney(month.perDay)} в день и уложиться в бюджет.`
+                : `Бюджет на траты этого месяца — ${formatMoney(month.limit)} — уже выбран.`}
             </p>
+            {/* Трек от дохода: траты (синий) + деньги в долги/цели (тёмный) + остаток. */}
             <div className="flex h-3 overflow-hidden rounded-md bg-hf-card">
-              <div className="h-full bg-hf-accent" style={{ width: Math.min(100, (month.spent / (month.limit || 1)) * 100) + '%' }} />
-              <div className="h-full bg-[#2A5A85]" style={{ width: Math.min(100, (month.pending / (month.limit || 1)) * 100) + '%' }} />
+              <div className="h-full bg-hf-accent" style={{ width: Math.min(100, (month.spent / (month.income || 1)) * 100) + '%' }} />
+              <div className="h-full bg-[#2A5A85]" style={{ width: Math.min(100, (month.obligations / (month.income || 1)) * 100) + '%' }} />
             </div>
+            {month.planTarget !== 'none' && month.obligations > 0 && (
+              <p className="text-[11px] leading-snug text-hf-text-4">
+                {month.planTarget === 'debts'
+                  ? `${formatMoney(month.obligations)} в этом месяце — в долги${month.reserved > 0 ? `, ещё не внесено ${formatMoney(month.reserved)}` : ''}.`
+                  : `${formatMoney(month.obligations)} в этом месяце — на цели.`}
+                {month.historyMonths === 0 && ' Первый месяц: план по текущему темпу трат, уточнится после полного месяца.'}
+              </p>
+            )}
           </>
         ) : (
           <button
@@ -197,7 +218,7 @@ export function Overview() {
           <span className="min-w-0">
             <span className="block font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Свобода от долгов</span>
             <span className="mt-1 block text-[15px] font-medium text-hf-text">
-              {plan ? formatMonthYear(plan.estimated_payoff_date) : 'считаю…'}
+              {debtFreeDate === undefined ? 'считаю…' : formatMonthYear(debtFreeDate)}
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-2">

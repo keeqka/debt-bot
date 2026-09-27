@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { FormSheet, FormField, formInputClass, SaveButton } from '@/components/chrome/FormSheet'
-import { useAddGoal, useUpdateGoal, useMonth } from '@/hooks/use-finance-data'
+import { useAddGoal, useUpdateGoal, useMonth, useDebtFreeDate } from '@/hooks/use-finance-data'
 import { formatMoney, currencySymbol } from '@/lib/format'
-import { monthLabel } from '@/lib/goal'
+import { monthLabel, goalMoneyPerMonth } from '@/lib/goal'
 import type { Goal } from '@/types/domain'
 
 interface FormState {
@@ -30,6 +30,7 @@ export function AddGoalDialog({ open, onOpenChange, goal }: { open: boolean; onO
   const addGoal = useAddGoal()
   const updateGoal = useUpdateGoal()
   const month = useMonth()
+  const debtFreeDate = useDebtFreeDate()
   const isEdit = Boolean(goal)
   const isPending = addGoal.isPending || updateGoal.isPending
 
@@ -59,6 +60,23 @@ export function AddGoalDialog({ open, onOpenChange, goal }: { open: boolean; onO
     const left = Math.max(0, target - current)
     if (!left) return null
 
+    // Сначала долги: пока они есть, свободные деньги идут в них, а цель ждёт.
+    if (month?.planTarget === 'debts') {
+      const perMonth = goalMoneyPerMonth(month)
+      const start = debtFreeDate ? new Date(debtFreeDate) : null
+      const done = start && perMonth > 0 ? new Date(start.getFullYear(), start.getMonth() + Math.ceil(left / perMonth), 1) : null
+      const late = done && form.targetDate ? done > new Date(form.targetDate) : false
+      return {
+        text: start ? `Пока есть долги, всё свободное идёт в них. Последний закроется: ${monthLabel(start)}` : 'Пока есть долги, всё свободное идёт в них',
+        hint: done
+          ? `Потом ${formatMoney(perMonth, CURRENCY)} в месяц на цели — соберётся: ${monthLabel(done)}${late ? ' (позже срока)' : ''}`
+          : undefined,
+        tone: late ? ('warn' as const) : ('ok' as const),
+      }
+    }
+
+    const perMonthForGoals = month ? goalMoneyPerMonth(month) : 0
+
     if (form.targetDate) {
       const date = new Date(form.targetDate)
       if (Number.isNaN(date.getTime())) return null
@@ -66,28 +84,28 @@ export function AddGoalDialog({ open, onOpenChange, goal }: { open: boolean; onO
       const months = (date.getFullYear() - now.getFullYear()) * 12 + (date.getMonth() - now.getMonth())
       if (months <= 0) return { text: 'Дата уже прошла — выбери месяц в будущем', tone: 'warn' as const }
       const perMonth = Math.ceil(left / months)
-      const fitsBudget = month?.hasIncome ? perMonth <= Math.max(0, month.available) : null
+      const fitsBudget = month?.hasIncome ? perMonth <= perMonthForGoals : null
       return {
         text: `Откладывать ${formatMoney(perMonth, CURRENCY)} в месяц — ${months} мес`,
         hint:
           fitsBudget === null
             ? undefined
             : fitsBudget
-              ? `Влезает: в этом месяце свободно ${formatMoney(month!.available, CURRENCY)}`
-              : `Больше свободных денег месяца (${formatMoney(month!.available, CURRENCY)}) — сдвинь срок или сумму`,
+              ? `Влезает: на цели свободно ${formatMoney(perMonthForGoals, CURRENCY)} в месяц`
+              : `Больше, чем свободно на цели (${formatMoney(perMonthForGoals, CURRENCY)} в месяц) — сдвинь срок или сумму`,
         tone: fitsBudget === false ? ('warn' as const) : ('ok' as const),
       }
     }
 
-    // Срока нет — считаем обратную задачу: от свободных денег месяца к дате.
-    if (month?.hasIncome && month.available > 0) {
-      const months = Math.ceil(left / month.available)
+    // Срока нет — считаем обратную задачу: от свободных денег к дате.
+    if (month?.hasIncome && perMonthForGoals > 0) {
+      const months = Math.ceil(left / perMonthForGoals)
       const date = new Date()
       date.setMonth(date.getMonth() + months)
       return { text: `Если откладывать всё свободное — ${monthLabel(date)}`, tone: 'ok' as const }
     }
     return { text: 'Без срока цель просто копится — дату можно поставить позже', tone: 'ok' as const }
-  }, [form.targetAmount, form.currentAmount, form.targetDate, month])
+  }, [form.targetAmount, form.currentAmount, form.targetDate, month, debtFreeDate])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

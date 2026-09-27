@@ -22,7 +22,8 @@ export function ContributeDialog({ open, onOpenChange, goal }: { open: boolean; 
   const quick = goal
     ? ([
         math?.monthlyNeeded ? { label: 'по плану', value: math.monthlyNeeded } : null,
-        month?.hasIncome && month.available > 0 ? { label: 'всё свободное', value: Math.round(month.available) } : null,
+        // Сначала долги: пока они есть, «всё свободное» принадлежит им — не предлагаем.
+        month && month.planTarget !== 'debts' && month.planExtra > 0 ? { label: 'свободное за месяц', value: month.planExtra } : null,
         math && math.left > 0 ? { label: 'до цели', value: math.left } : null,
       ].filter(Boolean) as { label: string; value: number }[])
     : []
