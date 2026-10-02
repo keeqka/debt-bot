@@ -8,6 +8,8 @@ import { currencySymbol } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PlanSettingsSection } from '@/components/overview/PlanSettingsSection'
 import { BudgetPeriodSection } from '@/components/overview/BudgetPeriodSection'
+import { SettingsGroups } from '@/components/overview/SettingsGroups'
+import { features } from '@/lib/env'
 import { MerchantRulesSection } from '@/components/overview/MerchantRulesSection'
 import { Toggle } from '@/components/chrome/Toggle'
 import { FamilySection } from '@/components/overview/FamilySection'
@@ -146,7 +148,7 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
             </label>
           )}
 
-          <BudgetPeriodSection />
+          {features.settingsGroups ? <SettingsGroups /> : <BudgetPeriodSection />}
 
           <PlanSettingsSection />
 

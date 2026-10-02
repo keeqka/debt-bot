@@ -10,12 +10,14 @@ import { jsonResponse } from '../_shared/cors.ts'
 import { env } from '../_shared/env.ts'
 import { assertCronSecret, sendTelegramMessageWithRetry } from '../_shared/telegram-send.ts'
 import { getAdminClient } from '../_shared/supabase-admin.ts'
+import { TONE_LINES, toneOf } from '../_shared/persona.ts'
 
 interface ReminderUser {
   id: string
   telegram_id: number
   timezone: string
   daily_reminder_time: string
+  bot_tone?: string
 }
 
 function localDateStr(d: Date, timeZone: string): string {
@@ -27,11 +29,45 @@ function localHour(d: Date, timeZone: string): number {
   return Number(parts.find((p) => p.type === 'hour')?.value ?? '0')
 }
 
+// deno-lint-ignore no-explicit-any
+async function sendDuePauseReminders(supabase: any): Promise<number> {
+  const { data: due } = await supabase
+    .from('reminders')
+    .select('id, user_id, kind, payload, created_at, fire_at')
+    .is('sent_at', null)
+    .lte('fire_at', new Date().toISOString())
+    .limit(100)
+  let sent = 0
+  for (const r of (due ?? []) as Array<{ id: string; user_id: string; kind: string; payload: Record<string, unknown>; created_at: string; fire_at: string }>) {
+    const { data: user } = await supabase.from('users').select('telegram_id, bot_tone').eq('id', r.user_id).maybeSingle()
+    if (!user) {
+      await supabase.from('reminders').update({ sent_at: new Date().toISOString() }).eq('id', r.id)
+      continue
+    }
+    const title = String(r.payload?.title ?? '').trim()
+    const price = Number(r.payload?.price ?? 0)
+    const what = `${title ? `«${title}»` : 'покупку'}${price > 0 ? ` за ${new Intl.NumberFormat('ru-RU').format(price)} ₸` : ''}`
+    const hours = Math.max(1, Math.round((new Date(r.fire_at).getTime() - new Date(r.created_at).getTime()) / 3_600_000))
+    const ok = await sendTelegramMessageWithRetry(user.telegram_id, TONE_LINES.pauseOver[toneOf(user.bot_tone)](hours, what), 3, {
+      inline_keyboard: [[{ text: 'Открыть долги', web_app: { url: `${env.miniAppUrl}/#/plan` } }]],
+    })
+    if (ok) {
+      sent++
+      await supabase.from('reminders').update({ sent_at: new Date().toISOString() }).eq('id', r.id)
+    }
+  }
+  return sent
+}
+
 Deno.serve(async (req) => {
   try {
     assertCronSecret(req)
 
     const supabase = getAdminClient()
+
+    // Напоминания «вернись к покупке» (reminders, SPEC-features 07) — не платная
+    // функция и не зависят от ежедневного напоминания: отправляем всё, чей срок вышел.
+    const pausesSent = await sendDuePauseReminders(supabase)
 
     // A paid-tier feature — only families whose subscription is active.
     const { data: subscriptions } = await supabase.from('subscriptions').select('household_id').eq('status', 'active')
@@ -39,7 +75,7 @@ Deno.serve(async (req) => {
 
     const { data: users } = await supabase
       .from('users')
-      .select('id, household_id, telegram_id, timezone, daily_reminder_time')
+      .select('id, household_id, telegram_id, timezone, daily_reminder_time, bot_tone')
       .eq('daily_reminder_enabled', true)
       .eq('vacation_paused', false)
 
@@ -67,7 +103,8 @@ Deno.serve(async (req) => {
       const dayBefore = localDateStr(new Date(now.getTime() - 48 * 60 * 60 * 1000), user.timezone)
       const threeDayStreak = !scanDates.has(yesterday) && !scanDates.has(dayBefore)
 
-      const text = threeDayStreak ? 'Три дня без чеков — бюджет уже неточный.' : 'Закинь чеки за сегодня.'
+      const tone = toneOf(user.bot_tone)
+      const text = threeDayStreak ? TONE_LINES.dailyReminderStreak[tone] : TONE_LINES.dailyReminder[tone]
 
       const ok = await sendTelegramMessageWithRetry(user.telegram_id, text, 3, {
         inline_keyboard: [
@@ -78,7 +115,7 @@ Deno.serve(async (req) => {
       if (ok) sent++
     }
 
-    return jsonResponse({ ok: true, due: due.length, sent, silent })
+    return jsonResponse({ ok: true, due: due.length, sent, silent, pausesSent })
   } catch (error) {
     console.error('cron-daily-reminder failed', error)
     return jsonResponse({ ok: false, error: String(error) }, 500)

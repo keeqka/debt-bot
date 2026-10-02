@@ -162,7 +162,7 @@ export function AddDebtDialog({
       await updateDebt.mutateAsync({ id: debt.id, patch: payload })
       toast.success('Долг обновлён')
     } else {
-      await addDebt.mutateAsync({ ...payload, owner_user_id: userId, created_at: new Date().toISOString() })
+      await addDebt.mutateAsync({ ...payload, extra_monthly: 0, owner_user_id: userId, created_at: new Date().toISOString() })
       toast.success('Долг добавлен')
     }
     onOpenChange(false)

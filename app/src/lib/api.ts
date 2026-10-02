@@ -451,7 +451,9 @@ export async function getChatMessages(): Promise<ChatMessage[]> {
   return data as ChatMessage[]
 }
 
-export async function sendChatMessage(content: string): Promise<ChatMessage> {
+export async function sendChatMessage(input: string | { content: string; image?: { base64: string; mediaType: string } }): Promise<ChatMessage> {
+  const content = typeof input === 'string' ? input : input.content
+  const image = typeof input === 'string' ? undefined : input.image
   if (!isBackendConfigured) {
     mock.mockChatMessages.push({
       id: crypto.randomUUID(),
@@ -461,6 +463,40 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
       created_at: new Date().toISOString(),
     })
     await new Promise((r) => setTimeout(r, 700))
+
+    if (image) {
+      // Демо: как будто на скриншоте предложение кредитной карты.
+      const reply: ChatMessage = {
+        id: crypto.randomUUID(),
+        user_id: mock.currentMockUser.id,
+        role: 'assistant',
+        content: 'По платежам выходит 38,2% годовых — дороже твоей кредитки (30%). Основное в карточке ниже: комиссия и страховка поднимают ставку.',
+        model: 'claude-sonnet-5',
+        expression: 'alert',
+        card: {
+          kind: 'offer',
+          offer: {
+            product: 'Кредит наличными',
+            amount: 500_000,
+            term_months: 24,
+            monthly_payment: 28_900,
+            nominal_rate: 29.9,
+            effective_rate: 38.2,
+            effective_rate_computed: true,
+            promo_period_months: null,
+            rate_after_promo: null,
+            fees: [{ name: 'Комиссия за выдачу', amount: 15_000, kind: 'upfront' }],
+            insurance_monthly: 2_400,
+            total_overpay: 270_600,
+          },
+          compare: { debt_title: 'Кредитная карта', rate: 30, balance: 480_000, min_payment: 22_000 },
+        },
+        quick_replies: ['Что такое ГЭСВ?', 'Как отказаться от страховки'],
+        created_at: new Date().toISOString(),
+      }
+      mock.mockChatMessages.push(reply)
+      return reply
+    }
 
     const wantsSettings = /режим|подушк|стратеги|снежн|лавин|настройк/i.test(content)
     const closedDebt = /закрыл|погасил/i.test(content)
@@ -561,7 +597,7 @@ export async function sendChatMessage(content: string): Promise<ChatMessage> {
     mock.mockChatMessages.push(reply)
     return reply
   }
-  return callFunction<ChatMessage>('chat', { content })
+  return callFunction<ChatMessage>('chat', { content, ...(image ? { image_base64: image.base64, media_type: image.mediaType } : {}) })
 }
 
 /** Wipes the whole shared thread (both household members see the same chat, so this clears it for everyone) — always gated behind a confirm dialog. */
@@ -579,11 +615,16 @@ export async function getHouseholdSettings(): Promise<HouseholdSettings> {
   if (!isBackendConfigured || !supabase) return { ...mock.mockHouseholdSettings }
   const { data, error } = await supabase
     .from('household_settings')
-    .select('priority_mode, debt_strategy, cushion_months, split_debt_pct, high_rate_threshold, period_start_day')
+    .select('priority_mode, debt_strategy, cushion_months, split_debt_pct, high_rate_threshold, period_start_day, pause_threshold, pause_hours, windfall_to_debt_pct')
     .maybeSingle() // RLS: only this family's row
   if (error) throw error
   if (!data) return { ...mock.mockHouseholdSettings } // same values as the table defaults
-  return { ...data, cushion_months: Number(data.cushion_months), high_rate_threshold: Number(data.high_rate_threshold) } as HouseholdSettings
+  return {
+    ...data,
+    cushion_months: Number(data.cushion_months),
+    high_rate_threshold: Number(data.high_rate_threshold),
+    pause_threshold: data.pause_threshold == null ? null : Number(data.pause_threshold),
+  } as HouseholdSettings
 }
 
 export async function updateHouseholdSettings(patch: Partial<HouseholdSettings>): Promise<HouseholdSettings> {
@@ -610,6 +651,13 @@ export async function createReportLink(): Promise<{ url: string; downloadUrl: st
   if (!isBackendConfigured) throw new Error('Ссылки на выписку работают только с сервером')
   const { url, download_url, expires_at } = await callFunction<{ url: string; download_url: string; expires_at: string }>('report', { link: true })
   return { url, downloadUrl: download_url, expiresAt: expires_at }
+}
+
+/** «Напомнить через N ч» перед крупным долгом: строка в reminders, отправит cron-daily-reminder (раз в час). */
+export async function createReminder(reminder: { fire_at: string; kind: 'pause_purchase'; payload: Record<string, unknown> }): Promise<void> {
+  if (!isBackendConfigured || !supabase) return
+  const { error } = await supabase.from('reminders').insert(reminder)
+  if (error) throw error
 }
 
 /** Stars subscription invoice link (stars-invoice) — opened with Telegram.WebApp.openInvoice. */

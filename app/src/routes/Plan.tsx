@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, CircleDollarSign, Pencil, Trash2, SlidersHorizontal } from 'lucide-react'
+import { Plus, CircleDollarSign, Pencil, Trash2, SlidersHorizontal, Zap } from 'lucide-react'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
@@ -15,10 +15,15 @@ import { MODE_META, STRATEGY_META, modeSummary } from '@/lib/plan-text'
 import { formatMoney, formatMoneyCompact, formatMonthYear } from '@/lib/format'
 import { useAnimatedNumber } from '@/hooks/use-animated-number'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
-import type { Debt } from '@/types/domain'
+import type { Debt, ProposedDebt } from '@/types/domain'
 import { cn } from '@/lib/utils'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { RecordPaymentDialog } from '@/components/debts/RecordPaymentDialog'
+import { EarlyPayoffSheet } from '@/components/debts/EarlyPayoffSheet'
+import { StrategyCompareSheet } from '@/components/debts/StrategyCompareSheet'
+import { NewDebtCheckSheet } from '@/components/debts/NewDebtCheckSheet'
+import { readCheckFirst } from '@/lib/prefs'
+import { features } from '@/lib/env'
 import { DebtPayoffChart } from '@/components/charts/DebtPayoffChart'
 import { GoalsSection } from '@/components/goals/GoalsSection'
 import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
@@ -97,6 +102,19 @@ export function Plan() {
   }, [searchParams, setSearchParams, isLoading])
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
   const [payingDebt, setPayingDebt] = useState<Debt | null>(null)
+  const [earlyDebt, setEarlyDebt] = useState<Debt | null>(null)
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [checkOpen, setCheckOpen] = useState(false)
+  const [addPrefill, setAddPrefill] = useState<ProposedDebt | undefined>(undefined)
+
+  // «+ долг»: сначала проверка (07), если не выключена; иначе сразу форма.
+  function startAddDebt() {
+    if (features.preDebtCheck && readCheckFirst()) setCheckOpen(true)
+    else {
+      setAddPrefill(undefined)
+      setAddOpen(true)
+    }
+  }
   const [deletingDebt, setDeletingDebt] = useState<Debt | null>(null)
 
   async function confirmDelete() {
@@ -137,7 +155,7 @@ export function Plan() {
         <div className="flex items-center gap-3 rounded-[16px] bg-hf-card px-3.5 py-3">
           <MascotAvatar size={34} expression="calm" />
           <p className="min-w-0 flex-1 text-[13px] leading-snug text-hf-text-3">Долгов нет — свободные деньги идут в подушку и цели.</p>
-          <button type="button" onClick={() => setAddOpen(true)} className="shrink-0 text-[13px] font-medium text-hf-accent-on-dark">
+          <button type="button" onClick={startAddDebt} className="shrink-0 text-[13px] font-medium text-hf-accent-on-dark">
             + долг
           </button>
         </div>
@@ -185,6 +203,19 @@ export function Plan() {
           </Paper>
 
           <div className="space-y-2">
+            {features.strategyCompare && (
+              <button
+                type="button"
+                onClick={() => setCompareOpen(true)}
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-[14px] bg-hf-card px-3.5 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent"
+              >
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium text-hf-text">Пересчитать план</span>
+                  <span className="block text-[11px] text-hf-text-4">Лавина или снежный ком — бок о бок</span>
+                </span>
+                <SlidersHorizontal className="h-4 w-4 shrink-0 text-hf-text-4" />
+              </button>
+            )}
             <div className="flex rounded-[13px] bg-hf-card p-1">
               {STRATEGIES.map((kind) => (
                 <button
@@ -250,15 +281,25 @@ export function Plan() {
                     <button
                       type="button"
                       onClick={() => setPayingDebt(debt)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar py-2 text-xs text-hf-text-2"
+                      className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar py-2 text-xs text-hf-text-2"
                     >
                       <CircleDollarSign className="h-3.5 w-3.5" />
                       Платёж
                     </button>
+                    {features.debtSim && (
+                      <button
+                        type="button"
+                        onClick={() => setEarlyDebt(debt)}
+                        className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar py-2 text-xs text-hf-accent-on-dark"
+                      >
+                        <Zap className="h-3.5 w-3.5" />
+                        Досрочно
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setEditingDebt(debt)}
-                      className="flex items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-text-2"
+                      className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-text-2"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -266,7 +307,7 @@ export function Plan() {
                       type="button"
                       onClick={() => setDeletingDebt(debt)}
                       aria-label={`Удалить ${debt.title}`}
-                      className="flex items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-warn-on-dark"
+                      className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-warn-on-dark"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -280,7 +321,7 @@ export function Plan() {
           {plans && <DebtPayoffChart timelines={plans.byStrategy} selected={strategy} />}
 
           <ActionBar>
-            <Action variant="muted" onClick={() => setAddOpen(true)}>
+            <Action variant="muted" onClick={startAddDebt}>
               <Plus className="mr-1.5 inline h-4 w-4 align-[-3px]" />
               Новый долг
             </Action>
@@ -294,9 +335,19 @@ export function Plan() {
 
       <BudgetSetupSheet open={settingsOpen} onOpenChange={setSettingsOpen} />
 
-      <AddDebtDialog open={addOpen} onOpenChange={setAddOpen} />
+      <NewDebtCheckSheet
+        open={checkOpen}
+        onOpenChange={setCheckOpen}
+        onProceed={(prefill) => {
+          setAddPrefill(prefill ?? undefined)
+          setAddOpen(true)
+        }}
+      />
+      <AddDebtDialog open={addOpen} onOpenChange={setAddOpen} prefill={addPrefill} />
       <AddDebtDialog open={Boolean(editingDebt)} onOpenChange={(open) => !open && setEditingDebt(null)} debt={editingDebt ?? undefined} />
       <RecordPaymentDialog open={Boolean(payingDebt)} onOpenChange={(open) => !open && setPayingDebt(null)} debt={payingDebt} />
+      <StrategyCompareSheet open={compareOpen} onOpenChange={setCompareOpen} />
+      <EarlyPayoffSheet open={Boolean(earlyDebt)} onOpenChange={(open) => !open && setEarlyDebt(null)} debt={earlyDebt} />
 
       <ConfirmSheet
         open={Boolean(deletingDebt)}

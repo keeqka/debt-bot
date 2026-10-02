@@ -2,6 +2,8 @@ export type FinancialStatus = 'green' | 'light_green' | 'yellow' | 'orange' | 'r
 
 export type Uuid = string
 
+export type BotTone = 'soft' | 'neutral' | 'direct'
+
 export interface User {
   id: Uuid
   telegram_id: number
@@ -16,6 +18,8 @@ export interface User {
   daily_reminder_time: string
   vacation_paused: boolean
   onboarding_completed_at: string | null
+  /** Голос бота в чате и пушах. */
+  bot_tone: BotTone
   /** Семья — все данные делятся внутри неё (0017_households_and_invites.sql). */
   household_id: Uuid
   /** Может приглашать новые семьи. */
@@ -47,6 +51,8 @@ export interface Debt {
   interest_rate: number | null
   minimum_payment: number
   due_day: number | null
+  /** Ежемесячный взнос сверх минимума (экран «Досрочка»); входит в обязательные платежи. */
+  extra_monthly: number
   status: DebtStatus
   notes: string | null
   created_at: string
@@ -175,6 +181,11 @@ export interface HouseholdSettings {
   high_rate_threshold: number
   /** День, с которого начинается бюджетный месяц (обычно день зарплаты); null — календарный месяц. */
   period_start_day: number | null
+  /** Покупка дороже — сначала пауза; null — правило выключено. */
+  pause_threshold: number | null
+  pause_hours: 24 | 72
+  /** Доля разового дохода, которую предлагается отправить в долг, %. */
+  windfall_to_debt_pct: number
 }
 
 
@@ -237,10 +248,54 @@ export interface ChatMessage {
   data_widget?: ChatDataWidgetRow[] | null
   /** 2-3 suggested follow-up questions shown under this message. */
   quick_replies?: string[] | null
+  /** Карточка под ответом: разбор предложения банка (08) или «Что изменится» перед новым долгом (07). */
+  card?: ChatCard | null
   /** С каким лицом «Чек» сказал этот ответ (выбирает сам ИИ); null — ответ из времени до характера. */
   expression?: MascotExpression | null
   created_at: string
 }
+
+export interface OfferFee {
+  name: string
+  amount: number
+  kind: 'upfront' | 'monthly' | 'other'
+}
+
+/** Условия банковского предложения со скриншота (supabase/functions/_shared/offer-tool.ts). */
+export interface OfferParse {
+  product: string | null
+  amount: number | null
+  term_months: number | null
+  monthly_payment: number | null
+  nominal_rate: number | null
+  /** ГЭСВ: из предложения или посчитан по платежам (effective_rate_computed). */
+  effective_rate: number | null
+  effective_rate_computed: boolean
+  promo_period_months: number | null
+  rate_after_promo: number | null
+  fees: OfferFee[]
+  insurance_monthly: number | null
+  total_overpay: number | null
+}
+
+export interface OfferCompare {
+  debt_title: string
+  rate: number | null
+  balance: number
+  min_payment: number
+}
+
+export interface DebtCheckCard {
+  kind: 'debt_check'
+  title: string
+  price: number
+  term_months: number
+  rate_pct: number
+  impact: import('@/lib/debt-check').NewDebtImpact
+  pause: { threshold: number | null; hours: number; exceeds: boolean }
+}
+
+export type ChatCard = { kind: 'offer'; offer: OfferParse; compare: OfferCompare | null } | DebtCheckCard
 
 export interface ReceiptParseResult {
   is_valid_receipt: boolean

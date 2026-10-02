@@ -6,7 +6,8 @@ import { computeMonth } from '@/lib/month'
 import { currencySymbol } from '@/lib/format'
 import { toPlanSettings } from '@/lib/month'
 import { useCurrentUser } from '@/lib/auth'
-import type { ChatMessage, User } from '@/types/domain'
+import type { BudgetInput } from '@/lib/budget'
+import type { ChatMessage, HouseholdSettings, User } from '@/types/domain'
 
 export const queryKeys = {
   status: ['status'] as const,
@@ -61,7 +62,7 @@ export const useAllDebtPayments = () => useQuery({ queryKey: queryKeys.allDebtPa
  * plan's monthly extra, goals, insights. A pure aggregation over lists these
  * hooks already fetch and cache.
  */
-export function useMonth() {
+export function useBudgetInput(): BudgetInput | undefined {
   const currentUser = useCurrentUser()
   const { data: users } = useUsers()
   const { data: debts } = useDebts()
@@ -78,7 +79,7 @@ export function useMonth() {
     // useUpdateUser writes to first — prefer it over the (possibly older) list.
     const household = users.map((u) => (u.id === currentUser.id ? currentUser : u))
     if (!household.some((u) => u.id === currentUser.id)) household.push(currentUser)
-    return computeMonth({
+    return {
       userIncomes: household.map((u) => u.monthly_income),
       incomes,
       expenses,
@@ -89,8 +90,13 @@ export function useMonth() {
       settings: toPlanSettings(settings),
       categoryNames: Object.fromEntries(categories.map((c) => [c.id, c.name])),
       currencySymbol: currencySymbol(),
-    })
+    }
   }, [currentUser, users, debts, debtPayments, expenses, incomes, categories, goals, settings])
+}
+
+export function useMonth() {
+  const input = useBudgetInput()
+  return useMemo(() => (input ? computeMonth(input) : undefined), [input])
 }
 
 /** When the last debt closes under the household's plan (lib/budget.ts simulatePlan) — undefined while loading. */
@@ -110,12 +116,29 @@ export function useCreateInvite() {
 
 export const useHouseholdSettings = () => useQuery({ queryKey: queryKeys.householdSettings, queryFn: api.getHouseholdSettings })
 
+export function useCreateReminder() {
+  return useMutation({
+    mutationFn: api.createReminder,
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Не удалось поставить напоминание'),
+  })
+}
+
+/** Настройки сохраняются оптимистично: экран меняется сразу, при ошибке откатывается к прежним. */
 export function useUpdateHouseholdSettings() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: api.updateHouseholdSettings,
+    onMutate: async (patch) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.householdSettings })
+      const previous = queryClient.getQueryData<HouseholdSettings>(queryKeys.householdSettings)
+      if (previous) queryClient.setQueryData<HouseholdSettings>(queryKeys.householdSettings, { ...previous, ...patch })
+      return { previous }
+    },
     onSuccess: (settings) => queryClient.setQueryData(queryKeys.householdSettings, settings),
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Не удалось сохранить настройки'),
+    onError: (error, _patch, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKeys.householdSettings, context.previous)
+      toast.error(error instanceof Error ? error.message : 'Не удалось сохранить настройки')
+    },
   })
 }
 
@@ -127,8 +150,18 @@ export function useUpdateUser() {
       patch,
     }: {
       id: string
-      patch: Partial<Pick<User, 'monthly_income' | 'payday' | 'daily_reminder_enabled' | 'daily_reminder_time' | 'vacation_paused' | 'onboarding_completed_at'>>
+      patch: Partial<Pick<User, 'monthly_income' | 'payday' | 'daily_reminder_enabled' | 'daily_reminder_time' | 'vacation_paused' | 'onboarding_completed_at' | 'bot_tone'>>
     }) => api.updateUser(id, patch),
+    // Оптимистично: собственная строка в кэше меняется сразу, откат — при ошибке.
+    onMutate: async ({ id, patch }) => {
+      const current = queryClient.getQueryData<User>(['current-user'])
+      if (current && current.id === id) queryClient.setQueryData(['current-user'], { ...current, ...patch })
+      return { current }
+    },
+    onError: (error, _vars, context) => {
+      if (context?.current) queryClient.setQueryData(['current-user'], context.current)
+      toast.error(error instanceof Error ? error.message : 'Не удалось сохранить')
+    },
     onSuccess: (user) => {
       // A settings card from chat can change the partner's row (their income) —
       // only overwrite the session's own user with its own row.
@@ -351,7 +384,8 @@ export function useSendChatMessage() {
     mutationFn: api.sendChatMessage,
     // Optimistically show the user's own bubble immediately instead of waiting
     // for the AI reply to round-trip before anything appears.
-    onMutate: async (content: string) => {
+    onMutate: async (input: Parameters<typeof api.sendChatMessage>[0]) => {
+      const content = typeof input === 'string' ? input : input.content
       const optimisticId = `optimistic-${Date.now()}`
       queryClient.setQueryData<ChatMessage[]>(queryKeys.chatMessages, (old = []) => [
         ...old,

@@ -25,7 +25,9 @@ import { callClaudeRaw, CLAUDE_MODEL_DEFAULT, WEB_SEARCH_TOOL, type ClaudeMessag
 import { getUserClient } from '../_shared/supabase-admin.ts'
 import { buildFinancialSnapshot, snapshotToPrompt, type FinancialSnapshot } from '../_shared/finance-context.ts'
 import { computeBudget, orderDebts, simulatePlan, type DebtStrategy, type PlanDebt, type PlanSettings } from '../_shared/budget.ts'
-import { PERSONA } from '../_shared/persona.ts'
+import { PERSONA, withTone, toneOf, type BotTone } from '../_shared/persona.ts'
+import { parseOfferImage, pickCompareDebt } from '../_shared/offer-tool.ts'
+import { newDebtImpact } from '../_shared/debt-check.ts'
 
 const PURCHASE_IMPACT_TOOL = {
   name: 'model_purchase_impact',
@@ -140,6 +142,22 @@ const LIST_CATEGORY_EXPENSES_TOOL = {
   },
 }
 
+const CHECK_NEW_DEBT_TOOL = {
+  name: 'check_new_debt',
+  description:
+    'Checks a NEW debt / credit / installment the user is thinking about taking: monthly payment, how far the debt-free date moves, free money per month before → after, price in working hours, and whether the pause rule applies. Use for "хочу рассрочку / кредит / взять в долг на X" BEFORE anything is created.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'что берёт, коротко' },
+      price: { type: 'number' },
+      term_months: { type: 'number' },
+      rate_pct: { type: 'number', description: '% годовых, 0 для рассрочки без процентов' },
+    },
+    required: ['price', 'term_months'],
+  },
+}
+
 const DATA_WIDGET_TOOL = {
   name: 'render_data_widget',
   description:
@@ -184,6 +202,7 @@ const ALL_TOOLS = [
   PROPOSE_DEBT_TOOL,
   PROPOSE_CATEGORY_TOOL,
   LIST_CATEGORY_EXPENSES_TOOL,
+  CHECK_NEW_DEBT_TOOL,
   DATA_WIDGET_TOOL,
   SUGGEST_FOLLOWUPS_TOOL,
   WEB_SEARCH_TOOL,
@@ -196,7 +215,7 @@ function monthsBetween(fromIso: string, toIso: string) {
 }
 
 function planDebts(snapshot: FinancialSnapshot): PlanDebt[] {
-  return snapshot.debts.map((d) => ({ id: d.id, title: d.title, balance: d.balance, rate: d.rate, min: d.min_payment }))
+  return snapshot.debts.map((d) => ({ id: d.id, title: d.title, balance: d.balance, rate: d.rate, min: d.min_payment + d.extra_monthly }))
 }
 
 /** The household plan with some inputs swapped — same simulation the app runs (_shared/budget.ts). */
@@ -450,6 +469,88 @@ function listCategoryExpenses(input: { category: string }, snapshot: FinancialSn
   }
 }
 
+/** Проверка нового долга для чата и карточки «Что изменится» — та же математика, что и в приложении (_shared/debt-check.ts). */
+function checkNewDebt(input: { title?: string; price: number; term_months: number; rate_pct?: number }, snapshot: FinancialSnapshot, userId: string) {
+  const title = (input.title ?? '').trim() || 'Новый долг'
+  const price = Math.max(0, Number(input.price) || 0)
+  const termMonths = Math.max(1, Math.round(Number(input.term_months) || 1))
+  const ratePct = Math.max(0, Number(input.rate_pct) || 0)
+  const income = snapshot.users.find((u) => u.id === userId)?.monthly_income ?? null
+  const impact = newDebtImpact(snapshot.budgetInput, { title, price, termMonths, ratePct }, income)
+  const threshold = snapshot.pause.threshold
+  return {
+    kind: 'debt_check',
+    title,
+    price,
+    term_months: termMonths,
+    rate_pct: ratePct,
+    impact,
+    pause: { threshold, hours: snapshot.pause.hours, exceeds: threshold != null && price > threshold },
+  }
+}
+
+/**
+ * Скриншот банковского предложения (08): извлекаем условия, ГЭСВ при
+ * отсутствии считаем кодом, сравниваем ТОЛЬКО с долгами самого пользователя
+ * (без рекомендаций банков) и отвечаем карточкой OfferWidget + короткой репликой.
+ */
+async function answerOffer(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  userId: string,
+  snapshot: FinancialSnapshot,
+  tone: BotTone,
+  imageBase64: string,
+  mediaType: string,
+) {
+  const save = async (row: Record<string, unknown>) => {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .insert({ user_id: userId, role: 'assistant', model: CLAUDE_MODEL_DEFAULT, ...row })
+      .select()
+      .single()
+    if (error) throw error
+    return jsonResponse(data)
+  }
+
+  const offer = await parseOfferImage(imageBase64, mediaType)
+  if (!offer.is_offer) {
+    return await save({
+      content:
+        'Это не похоже на предложение банка: не вижу ни ставки, ни срока, ни платежа. Чек или выписку загрузи на вкладке «Чеки» — разберу там.',
+      expression: 'calm',
+    })
+  }
+
+  const compare = pickCompareDebt(snapshot.debts)
+  const rate = offer.effective_rate ?? offer.nominal_rate
+  const worse = compare?.rate != null && rate != null && rate > compare.rate
+
+  const facts = {
+    offer,
+    твоя_кредитка_или_самый_дорогой_долг: compare,
+    предложение_дороже_текущего_долга: compare?.rate != null && rate != null ? worse : null,
+  }
+  const reply = await callClaudeRaw({
+    system: `${withTone(PERSONA, tone)}\n\nТебе показали скриншот банковского предложения — условия уже извлечены (JSON ниже). Скажи в двух-трёх предложениях по-русски, что в нём главное для человека: ставка (если ГЭСВ посчитан тобой по платежам, скажи «по платежам выходит»), комиссии и страховка, переплата — и сравни ТОЛЬКО с его собственным долгом из данных, если он есть. Не рекомендуй и не критикуй конкретные банки, не говори «бери» или «не бери». Без списков и без заголовков. Начни ответ с метки лица на отдельной строке: [alert], если предложение дороже его текущего долга, иначе [calm].`,
+    messages: [{ role: 'user', content: JSON.stringify(facts) }],
+    maxTokens: 500,
+  })
+  const text = reply.content
+    .filter((b) => b.type === 'text')
+    .map((b) => (b as { text: string }).text)
+    .join('\n')
+    .trim()
+
+  return await save({
+    content: stripMood(text) || 'Разобрал предложение — условия в карточке ниже.',
+    expression: readMood(text) ?? (worse ? 'alert' : 'calm'),
+    card: { kind: 'offer', offer, compare },
+    quick_replies: ['Что такое ГЭСВ?', 'Как отказаться от страховки'],
+    context_snapshot: snapshot,
+  })
+}
+
 type Mood = 'calm' | 'focused' | 'happy' | 'alert'
 const MOOD_RE = /\[(calm|focused|happy|alert)\]/
 
@@ -521,7 +622,8 @@ Deno.serve(async (req) => {
 
   try {
     const session = await requireSession(req)
-    const { content } = await req.json()
+    const { content: rawContent, image_base64, media_type } = await req.json()
+    const content: string = rawContent || (image_base64 ? 'Скриншот предложения' : '')
     if (!content) return jsonResponse({ error: 'content is required' }, 400)
 
     const supabase = getUserClient(req.headers.get('Authorization')!)
@@ -539,8 +641,10 @@ Deno.serve(async (req) => {
     const history = (historyDesc ?? []).slice().reverse()
 
     const snapshot = await buildFinancialSnapshot(supabase)
+    const { data: me } = await supabase.from('users').select('bot_tone').eq('id', session.sub).maybeSingle()
+    if (image_base64) return await answerOffer(supabase, session.sub, snapshot, toneOf(me?.bot_tone), image_base64, media_type || 'image/jpeg')
     const categoryNames = snapshot.categoryNames.join(', ') || '—'
-    const system = `${PERSONA}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию, поменять настройки и модель денег семьи), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз. Главное последствие — насколько сдвинется закрытие долгов.\n- Стратегии погашения, «что если», как закрыть быстрее, рефинансирование, сравнение режимов — сначала simulate_debt_scenarios, потом объясняй полученные цифры. Даты, переплату и порядок закрытия бери только из результата — никогда не считай в уме.\n- Про методы говори как есть: лавина экономит больше всего на процентах; снежный ком чаще закрывает долги (это мотивация, а не экономия); поток (Cash Flow Index) быстрее освобождает деньги в месяц; подушка защищает от новых долгов при потере дохода, но долги закрываются позже и переплата выше. Рефинансирование выгодно, только если новая ставка ниже с учётом комиссий — комиссии спроси, если их не назвали.\n- Просят поменять режим, стратегию, подушку, долю в долги, порог дорогого долга, доход, день зарплаты, напоминания — propose_settings_change. НИКОГДА не говори, что настройка уже изменена: она применится по кнопке «Применить». Спрашивают, какой режим выбрать, — посчитай варианты через simulate_debt_scenarios (параметр mode), назови плюсы и минусы и предложи одну смену карточкой.\n- Спрашивают, где перерасход, на что ушло больше обычного, нет ли странных трат — опирайся на блок «Перерасход и аномалии» и «обычно за месяц» по категориям; разбивку показывай через render_data_widget.\n- Спрашивают, ПОЧЕМУ конкретная категория такая большая/маленькая или что туда попало ("почему в Прочее так много", "что за траты в Транспорте") — список сумм в снапшоте не объясняет состав, сначала вызови list_category_expenses с этим названием категории и отвечай по реальным операциям (магазин, сумма, дата), а не догадками.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.\n\n${MOOD_AND_EXAMPLES}`
+    const system = `${withTone(PERSONA, toneOf(me?.bot_tone))}\n\nФорматирование: ответ рендерится в узком чат-пузыре в мессенджере, а не в документе. Можно **жирный** для ключевых цифр и короткие списки (-), если пунктов несколько. НЕ используй заголовки (#, ##, ###) — в пузыре они выглядят как сломанная вёрстка. Два-три коротких абзаца — норма.\n\nТекущее финансовое состояние:\n${snapshotToPrompt(snapshot)}\n\nТы — помощник по всему приложению, не только по разговору: можешь предлагать реальные действия (добавить долг, завести категорию, поменять настройки и модель денег семьи), а не только отвечать текстом.\n\nИнструменты:\n- Влияние конкретной покупки на бюджет — model_purchase_impact, а не оценка на глаз. Главное последствие — насколько сдвинется закрытие долгов.\n- Стратегии погашения, «что если», как закрыть быстрее, рефинансирование, сравнение режимов — сначала simulate_debt_scenarios, потом объясняй полученные цифры. Даты, переплату и порядок закрытия бери только из результата — никогда не считай в уме.\n- Про методы говори как есть: лавина экономит больше всего на процентах; снежный ком чаще закрывает долги (это мотивация, а не экономия); поток (Cash Flow Index) быстрее освобождает деньги в месяц; подушка защищает от новых долгов при потере дохода, но долги закрываются позже и переплата выше. Рефинансирование выгодно, только если новая ставка ниже с учётом комиссий — комиссии спроси, если их не назвали.\n- Просят поменять режим, стратегию, подушку, долю в долги, порог дорогого долга, доход, день зарплаты, напоминания — propose_settings_change. НИКОГДА не говори, что настройка уже изменена: она применится по кнопке «Применить». Спрашивают, какой режим выбрать, — посчитай варианты через simulate_debt_scenarios (параметр mode), назови плюсы и минусы и предложи одну смену карточкой.\n- Спрашивают, где перерасход, на что ушло больше обычного, нет ли странных трат — опирайся на блок «Перерасход и аномалии» и «обычно за месяц» по категориям; разбивку показывай через render_data_widget.\n- Спрашивают, ПОЧЕМУ конкретная категория такая большая/маленькая или что туда попало ("почему в Прочее так много", "что за траты в Транспорте") — список сумм в снапшоте не объясняет состав, сначала вызови list_category_expenses с этим названием категории и отвечай по реальным операциям (магазин, сумма, дата), а не догадками.\n- Просят добавить/записать/завести долг — propose_debt с лучшими известными полями (null, если что-то не названо). НИКОГДА не говори, что долг уже добавлен — он появится в форме на подтверждение.\n- Хотят рассрочку, кредит, «взять в долг» на конкретную вещь или сумму — сначала check_new_debt (что берёт, цена, срок, ставка; ставка 0, если не названа), потом объясни полученные цифры одним-двумя предложениями: платёж, на сколько сдвинется свобода от долгов, сколько останется свободно в месяц. Если сработало правило паузы (pause.exceeds) — предложи подождать, не давай команд. Сам долг не создавай: человек увидит карточку «Что изменится» с кнопками.\n- Просят добавить/завести категорию расходов или доходов — propose_category. Уже существующие категории: ${categoryNames} — не предлагай дубликат, если похожая уже есть, скажи об этом вместо предложения. НИКОГДА не говори, что категория уже добавлена — она появится с кнопкой подтверждения.\n- Вопрос про разбивку по цифрам ("сколько я трачу на X", "на что уходят деньги") — render_data_widget, а не перечисление процентов текстом.\n- После содержательного ответа обычно вызывай suggest_followups с 2-3 короткими вопросами.\n- Веб-поиск — только для общих вопросов не про личные финансы пользователя (типичные цены, курсы). Если использовал — скажи об этом одной фразой.\n- Ты сам не принимаешь файлы и не добавляешь траты напрямую. Фото/PDF чека и PDF выписки грузятся на вкладке "Чеки", а боту в Telegram чек можно просто прислать. Если просят добавить траты — направь туда.\n\n${MOOD_AND_EXAMPLES}`
 
     const messages = buildHistory(history)
 
@@ -558,12 +662,14 @@ Deno.serve(async (req) => {
     // directly, but model_purchase_impact needs its own round trip first.
     let followupSource = first.content
     let purchaseImpact: Record<string, unknown> | null = null
+    // Карточка под ответом: «Что изменится» перед новым долгом (07).
+    let card: Record<string, unknown> | null = null
 
     // Compute tools (purchase check, strategy scenarios) need a second turn:
     // the model gets the real numbers back and only then writes the answer.
     // Every tool_use block of the first turn gets a tool_result — the API
     // rejects a turn where any of them is left unanswered.
-    const computeNames = new Set(['model_purchase_impact', 'simulate_debt_scenarios', 'list_category_expenses'])
+    const computeNames = new Set(['model_purchase_impact', 'simulate_debt_scenarios', 'list_category_expenses', 'check_new_debt'])
     const toolUses = first.content.filter((b) => b.type === 'tool_use') as Array<{ id: string; name: string; input: Record<string, unknown> }>
     const computed = first.stop_reason === 'tool_use' && toolUses.some((b) => computeNames.has(b.name))
     let turn = first.content
@@ -577,6 +683,9 @@ Deno.serve(async (req) => {
           out = simulateScenarios(b.input as never, snapshot)
         } else if (b.name === 'list_category_expenses') {
           out = listCategoryExpenses(b.input as never, snapshot)
+        } else if (b.name === 'check_new_debt') {
+          card = checkNewDebt(b.input as never, snapshot, session.sub)
+          out = card
         }
         return { type: 'tool_result', tool_use_id: b.id, content: JSON.stringify(out) }
       })
@@ -657,6 +766,7 @@ Deno.serve(async (req) => {
         proposed_settings: proposedSettings,
         data_widget: dataWidget,
         quick_replies: quickReplies,
+        card,
         expression,
       })
       .select()

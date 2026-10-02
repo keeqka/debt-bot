@@ -17,6 +17,9 @@ function changeLines(p: ProposedSettings): string[] {
     u.payday !== undefined && `День зарплаты: ${u.payday ?? 'не указан'}`,
     u.daily_reminder_enabled !== undefined && `Напоминание о чеках: ${u.daily_reminder_enabled ? 'включить' : 'выключить'}`,
     u.daily_reminder_time && `Время напоминания: ${u.daily_reminder_time.slice(0, 5)}`,
+    h.windfall_to_debt_pct !== undefined && `Найденные деньги в долг: ${h.windfall_to_debt_pct}%`,
+    h.pause_threshold !== undefined && `Пауза перед покупкой: ${h.pause_threshold == null ? 'выключена' : `дороже ${formatMoney(h.pause_threshold)}`}`,
+    h.pause_hours !== undefined && `Пауза: ${h.pause_hours} ч`,
   ].filter(Boolean) as string[]
 }
 
@@ -42,17 +45,20 @@ export function ProposedSettingsCard({
   applied,
   pending,
   onApply,
+  inline = false,
 }: {
   proposal: ProposedSettings
   applied: boolean
   pending: boolean
   onApply: () => void
+  /** В листе настроек, а не в пузыре чата: на всю ширину, без отступа под аватар. */
+  inline?: boolean
 }) {
   const changes = changeLines(proposal)
   const effects = previewLines(proposal)
   if (!changes.length) return null
   return (
-    <div className="ml-9 w-fit max-w-[82%] space-y-2 rounded-[16px_16px_16px_4px] bg-hf-card p-3">
+    <div className={inline ? 'w-full space-y-2 rounded-[16px] bg-hf-card p-3' : 'ml-9 w-fit max-w-[82%] space-y-2 rounded-[16px_16px_16px_4px] bg-hf-card p-3'}>
       <div className="flex items-center gap-1.5 text-xs font-semibold text-hf-text">
         <Settings2 className="h-3.5 w-3.5" />
         Изменить настройки

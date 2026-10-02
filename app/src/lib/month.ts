@@ -1,4 +1,5 @@
-import { computeBudget, simulatePlan, type Budget, type BudgetInput, type PlanSettings } from '@/lib/budget'
+import { computeBudget, type Budget, type BudgetInput, type PlanSettings } from '@/lib/budget'
+import { simulate, type SimInput, type SimOverrides } from '@/lib/debt-sim'
 import type { Debt, HouseholdSettings } from '@/types/domain'
 
 export function toPlanSettings(s: HouseholdSettings): PlanSettings {
@@ -73,24 +74,24 @@ export function computeMonth(input: BudgetInput): Month {
   return { ...budget, label, categories }
 }
 
+/** Вводные симуляции долгов из бюджета месяца: те же, с которыми считается «Свобода от долгов» на «Обзоре». */
+export function simInputOf(month: Month, debts: Debt[]): SimInput {
+  return {
+    debts: debts
+      .filter((d) => d.status === 'active' && d.current_balance > 0)
+      .map((d) => ({ id: d.id, title: d.title, balance: d.current_balance, rate: d.interest_rate, min: d.minimum_payment + d.extra_monthly })),
+    monthlyExtra: month.planExtra,
+    settings: month.settings,
+    cushionBalance: month.cushionBalance,
+    monthlyNeed: month.monthlyNeed,
+    start: new Date(),
+  }
+}
+
 /**
  * Тот же план, но с другими вводными — «что если»: другая стратегия, другая
  * сумма сверх минимумов, только минимумы (rollover: false, extra 0).
  */
-export function replan(
-  month: Month,
-  debts: Debt[],
-  overrides: { monthlyExtra?: number; settings?: Partial<PlanSettings>; rollover?: boolean } = {},
-) {
-  return simulatePlan({
-    debts: debts
-      .filter((d) => d.status === 'active' && d.current_balance > 0)
-      .map((d) => ({ id: d.id, title: d.title, balance: d.current_balance, rate: d.interest_rate, min: d.minimum_payment })),
-    monthlyExtra: overrides.monthlyExtra ?? month.planExtra,
-    settings: { ...month.settings, ...overrides.settings },
-    cushionBalance: month.cushionBalance,
-    monthlyNeed: month.monthlyNeed,
-    start: new Date(),
-    rollover: overrides.rollover,
-  })
+export function replan(month: Month, debts: Debt[], overrides: SimOverrides = {}) {
+  return simulate(simInputOf(month, debts), overrides).plan
 }

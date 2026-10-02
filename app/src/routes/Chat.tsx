@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Copy, Check, CreditCard, Tag, Trash2 } from 'lucide-react'
+import { Send, Copy, Check, CreditCard, Tag, Trash2, Paperclip } from 'lucide-react'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
@@ -12,6 +12,10 @@ import { ProposedSettingsCard } from '@/components/chat/ProposedSettingsCard'
 import { formatMoney } from '@/lib/format'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
+import { OfferWidget } from '@/components/chat/OfferWidget'
+import { DebtCheckCard } from '@/components/chat/DebtCheckCard'
+import { imageToBase64Resized } from '@/lib/file-to-base64'
+import { features } from '@/lib/env'
 import { useHeaderAction } from '@/lib/header-action'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import type { ChatDataWidgetRow, ProposedCategory, ProposedDebt, ProposedSettings } from '@/types/domain'
@@ -48,6 +52,7 @@ export function Chat() {
   const [appliedSettingsIds, setAppliedSettingsIds] = useState<Set<string>>(new Set())
   const [confirmClear, setConfirmClear] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const reduced = useReducedMotion()
 
   // Only newly-arrived messages slide in (ANIMATIONS.md §5) — the history
@@ -68,6 +73,23 @@ export function Chat() {
     if (!trimmed || sendMessage.isPending) return
     setDraft('')
     sendMessage.mutate(trimmed)
+  }
+
+  // Скрепка (08): скриншот банковского предложения. Сжимаем и отправляем вместе с подписью, если она есть.
+  async function handleAttach(file: File) {
+    if (sendMessage.isPending) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Нужна картинка — скриншот предложения')
+      return
+    }
+    try {
+      const image = await imageToBase64Resized(file)
+      const caption = draft.trim()
+      setDraft('')
+      sendMessage.mutate({ content: caption || 'Скриншот предложения', image })
+    } catch {
+      toast.error('Не получилось прочитать картинку')
+    }
   }
 
   async function handleCopy(id: string, content: string) {
@@ -156,6 +178,8 @@ export function Chat() {
                   )}
                 </div>
 
+                {m.card?.kind === 'offer' && <OfferWidget offer={m.card.offer} compare={m.card.compare} />}
+                {m.card?.kind === 'debt_check' && <DebtCheckCard card={m.card} onProceed={setDebtPrefill} />}
                 {m.proposed_debt && <ProposedDebtCard debt={m.proposed_debt} onAdd={() => setDebtPrefill(m.proposed_debt!)} />}
                 {m.proposed_settings && (
                   <ProposedSettingsCard
@@ -245,6 +269,30 @@ export function Chat() {
         }}
         className="flex items-center gap-2.5 pt-1"
       >
+        {features.offerParse && (
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleAttach(file)
+                e.target.value = ''
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={sendMessage.isPending}
+              aria-label="Прикрепить скриншот предложения банка"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-hf-card text-hf-text-2 disabled:opacity-40"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+          </>
+        )}
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

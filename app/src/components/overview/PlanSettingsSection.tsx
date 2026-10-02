@@ -4,6 +4,7 @@ import { useAddGoal, useGoals, useHouseholdSettings, useMonth, useUpdateGoal, us
 import { MODE_META, STRATEGY_META } from '@/lib/plan-text'
 import { formatMoney, formatMonthYear } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { features } from '@/lib/env'
 import type { DebtStrategyKind, HouseholdSettings, PriorityMode } from '@/types/domain'
 
 const MODES: PriorityMode[] = ['debts_first', 'cushion_first', 'split', 'ladder']
@@ -158,6 +159,7 @@ export function PlanSettingsSection() {
         </button>
       )}
 
+      {!features.settingsGroups && (
       <div className="space-y-2">
         <p className="text-[13px] text-hf-text-2">Порядок погашения долгов</p>
         <div className="flex rounded-[12px] bg-hf-card p-1">
@@ -177,6 +179,7 @@ export function PlanSettingsSection() {
         </div>
         <p className="text-[11px] leading-snug text-hf-text-4">{STRATEGY_META[settings.debt_strategy].why}</p>
       </div>
+      )}
 
       {month && (
         <p className="rounded-[12px] bg-hf-card px-3.5 py-2.5 text-[12px] leading-snug text-hf-text-3">

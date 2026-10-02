@@ -26,7 +26,7 @@ export interface BudgetInput {
   userIncomes: Array<number | null | undefined>
   incomes: Array<{ amount: number; received_at: string }>
   expenses: BudgetExpense[]
-  debts: Array<{ id: string; title: string; status: string; minimum_payment: number; current_balance: number; interest_rate: number | null }>
+  debts: Array<{ id: string; title: string; status: string; minimum_payment: number; /** Ежемесячный взнос сверх минимума — часть платежа по долгу. */ extra_monthly?: number; current_balance: number; interest_rate: number | null }>
   debtPayments: Array<{ debt_id: string; amount: number; paid_at: string }>
   hasActiveGoals: boolean
   /** Накоплено в подушке (цели с пометкой is_cushion). */
@@ -462,7 +462,9 @@ export function computeBudget(input: BudgetInput): Budget {
   // ── Долги и план ───────────────────────────────────────────────────────
   // Нулевой остаток — долг закрыт, даже если статус ещё не успел смениться.
   const activeDebts = input.debts.filter((d) => d.status === 'active' && d.current_balance > 0)
-  const minPayments = activeDebts.reduce((s, d) => s + d.minimum_payment, 0)
+  // Платёж по долгу в месяц: минимум плюс взнос, который семья сама назначила (экран «Досрочка»).
+  const dueOf = (d: (typeof activeDebts)[number]) => d.minimum_payment + (d.extra_monthly ?? 0)
+  const minPayments = activeDebts.reduce((s, d) => s + dueOf(d), 0)
   const freeMonthly = income - minPayments - typicalSpend
   const monthlyNeed = typicalSpend + minPayments
   const cushionTarget = Math.round(input.settings.cushionMonths * monthlyNeed)
@@ -472,7 +474,7 @@ export function computeBudget(input: BudgetInput): Budget {
   const planExtra = nothingToFund ? 0 : Math.max(0, Math.floor(freeMonthly / 1000) * 1000)
 
   const plan = simulatePlan({
-    debts: activeDebts.map((d) => ({ id: d.id, title: d.title, balance: d.current_balance, rate: d.interest_rate, min: d.minimum_payment })),
+    debts: activeDebts.map((d) => ({ id: d.id, title: d.title, balance: d.current_balance, rate: d.interest_rate, min: dueOf(d) })),
     monthlyExtra: planExtra,
     settings: input.settings,
     cushionBalance: input.cushionBalance,
@@ -489,8 +491,8 @@ export function computeBudget(input: BudgetInput): Budget {
     if (idxOf(pos.y, pos.m, pos.d) === current) paidThisMonth.set(p.debt_id, (paidThisMonth.get(p.debt_id) ?? 0) + p.amount)
   }
   const debtPaid = [...paidThisMonth.values()].reduce((s, v) => s + v, 0)
-  const unpaidMins = activeDebts.reduce((s, d) => s + Math.max(0, d.minimum_payment - (paidThisMonth.get(d.id) ?? 0)), 0)
-  const extraPaid = activeDebts.reduce((s, d) => s + Math.max(0, (paidThisMonth.get(d.id) ?? 0) - d.minimum_payment), 0)
+  const unpaidMins = activeDebts.reduce((s, d) => s + Math.max(0, dueOf(d) - (paidThisMonth.get(d.id) ?? 0)), 0)
+  const extraPaid = activeDebts.reduce((s, d) => s + Math.max(0, (paidThisMonth.get(d.id) ?? 0) - dueOf(d)), 0)
   const remainingDebt = activeDebts.reduce((s, d) => s + d.current_balance, 0)
   // Досрочные уже внесённые засчитываются в план по долгам; взносы в подушку
   // и цели не отслеживаются поштучно — их доля резервируется целиком.
