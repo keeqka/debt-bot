@@ -37,8 +37,13 @@ export const env = {
   get cronSecret() {
     return required('CRON_SECRET')
   },
-  /** Deployed Mini App origin (no trailing slash), e.g. https://debt-bot.pages.dev — used for the daily reminder's web_app deep link. */
+  /**
+   * Deployed Mini App origin (no trailing slash) — the bot's «Открыть» button,
+   * the daily reminder's deep link and the /report/<token> links. Public
+   * anyway, so it defaults to the production host instead of failing when
+   * nobody set MINI_APP_URL (CI never did); set it to override.
+   */
   get miniAppUrl() {
-    return required('MINI_APP_URL')
+    return (Deno.env.get('MINI_APP_URL') || 'https://debt-bot.pages.dev').replace(/\/+$/, '')
   },
 }
