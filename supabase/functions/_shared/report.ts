@@ -167,8 +167,81 @@ export async function collectReportData(supabase: SupabaseLike, householdId?: st
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-/** Лицо «Чека» — те же формы и цвета, что у маскота в приложении (Mascot.tsx), спокойное выражение. */
-const FACE = `<svg class="face" viewBox="0 0 100 62" aria-hidden="true"><rect x="20" y="11" width="60" height="4" rx="1" fill="#BDB4A5"/><g fill="#191C21"><ellipse cx="28.5" cy="31" rx="7.5" ry="5.5"/><ellipse cx="71.5" cy="31" rx="7.5" ry="5.5"/><rect x="40" y="48" width="20" height="3.8" rx="1.6"/></g></svg>`
+export type Mood = 'happy' | 'calm' | 'alert'
+
+export interface Pace {
+  /** Потрачено / обычно к этому дню; null — сравнивать не с чем (нет истории или месяц только начался). */
+  ratio: number | null
+  /** Подпись «+61%» / «−32%»; «—» без сравнения. */
+  delta: string
+  mood: Mood
+  /** Строк печати на ленте: 4 — обычная, меньше — короче, больше — длиннее. */
+  rows: number
+  caption: string
+}
+
+/**
+ * Темп трат месяца против обычного — из него шапка выписки берёт длину ленты и
+ * лицо (брендбук «Длина ленты = объём трат»): −32% короткая и довольная, норма —
+ * обычная, +61% длинная и встревоженная. Первые дни месяца не сравниваем: два
+ * дня трат против двух обычных дней — шум, а не темп.
+ */
+export function paceOf(c: Pick<ReportData['current'], 'spent' | 'expectedByNow' | 'day' | 'available' | 'hasIncome'>): Pace {
+  const overspent = c.hasIncome && c.available < 0
+  if (c.expectedByNow == null || c.expectedByNow <= 0 || c.day < 3) {
+    return {
+      ratio: null,
+      delta: '—',
+      mood: overspent ? 'alert' : 'calm',
+      rows: 4,
+      caption: overspent ? 'Бюджет месяца уже израсходован' : 'Сравнивать пока не с чем — истории мало',
+    }
+  }
+  const ratio = c.spent / c.expectedByNow
+  const pct = Math.round((ratio - 1) * 100)
+  const mood: Mood = overspent || ratio >= 1.15 ? 'alert' : ratio <= 0.9 ? 'happy' : 'calm'
+  return {
+    ratio,
+    delta: pct === 0 ? '±0%' : `${pct > 0 ? '+' : '−'}${Math.abs(pct)}%`,
+    mood,
+    rows: Math.min(10, Math.max(2, Math.round(4 + (ratio - 1) * 9))),
+    caption: mood === 'alert' ? 'Траты идут быстрее обычного' : mood === 'happy' ? 'Укладываешься с запасом' : 'Как обычно',
+  }
+}
+
+const TINT: Record<Mood, string> = { happy: '#EDF3EA', calm: '#EDE9E1', alert: '#F7EEE3' }
+
+// Формы лица — те же, что в Mascot.tsx (faceShapes); держать одинаковыми.
+const FACES: Record<Mood, string> = {
+  calm: '<ellipse cx="28.5" cy="31" rx="7.5" ry="5.5"/><ellipse cx="71.5" cy="31" rx="7.5" ry="5.5"/><rect x="40" y="55" width="20" height="3.8" rx="1.6"/>',
+  happy: '<path d="M20,36 a8,7 0 0 1 16,0 Z"/><path d="M64,36 a8,7 0 0 1 16,0 Z"/><path d="M34,52 h32 a16,9 0 0 1 -32,0 Z"/>',
+  alert: '<ellipse cx="28" cy="33" rx="8" ry="7.5"/><ellipse cx="72" cy="33" rx="8" ry="7.5"/><ellipse cx="50" cy="57" rx="6" ry="5.5"/>',
+}
+
+/** Лента «Чека» нужной длины — геометрия как у <Mascot rows> в приложении. */
+function ribbonSvg(mood: Mood, rows: number): string {
+  const step = 15
+  const shift = (rows - 4) * step
+  const h = 250 + shift
+  const labelW = [24, 34, 28, 20]
+  const amountW = [16, 12, 18, 14]
+  const torn =
+    'M0,4 L8.33,0 L16.67,4 L25,0 L33.33,4 L41.67,0 L50,4 L58.33,0 L66.67,4 L75,0 L83.33,4 L91.67,0 L100,4 ' +
+    `V${h - 4} L91.67,${h} L83.33,${h - 4} L75,${h} L66.67,${h - 4} L58.33,${h} L50,${h - 4} L41.67,${h} L33.33,${h - 4} L25,${h} L16.67,${h - 4} L8.33,${h} L0,${h - 4} Z`
+  const lines = Array.from({ length: rows }, (_, i) => {
+    const y = 97.5 + i * step
+    return `<rect x="20" y="${y}" width="${labelW[i % 4]}" height="3" rx="1"/><rect x="${80 - amountW[i % 4]}" y="${y}" width="${amountW[i % 4]}" height="3" rx="1"/>`
+  }).join('')
+  return (
+    `<svg class="ribbon" viewBox="-6 -4 112 ${h + 8}" role="img" aria-label="Чек — маскот Hlow Flow"><g transform="rotate(-2.5 50 ${h / 2})">` +
+    `<path d="${torn}" fill="#F6F1E8"/><rect x="20" y="11" width="60" height="4" rx="1" fill="#BDB4A5"/>` +
+    `<g fill="#191C21">${FACES[mood]}</g><rect x="20" y="82.5" width="60" height="1" fill="#DED6C8"/><g fill="#D8D0C2">${lines}</g>` +
+    `<rect x="20" y="${162.5 + shift}" width="60" height="1" fill="#DED6C8"/><rect x="20" y="${172 + shift}" width="22" height="5.5" rx="1" fill="#BDB4A5"/>` +
+    `<rect x="54" y="${172 + shift}" width="26" height="5.5" rx="1" fill="#3C82C8"/>` +
+    `<rect x="20" y="${205 + shift}" width="60" height="2.8" rx="1" fill="#E2DACC"/><rect x="20" y="${217 + shift}" width="34" height="2.8" rx="1" fill="#E2DACC"/><rect x="20" y="${229 + shift}" width="24" height="2.8" rx="1" fill="#E2DACC"/>` +
+    `</g></svg>`
+  )
+}
 
 const CSS = `
 *{box-sizing:border-box}
@@ -178,7 +251,12 @@ body{margin:0;padding:28px 12px 40px;font-family:ui-monospace,'JetBrains Mono',S
 .receipt:before,.receipt:after{content:"";position:absolute;left:0;right:0;height:8px;background-repeat:repeat-x;background-size:16px 8px}
 .receipt:before{top:-7px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='8'><path d='M0 8 L8 0 L16 8 Z' fill='%23F6F1E8'/></svg>")}
 .receipt:after{bottom:-7px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='8'><path d='M0 0 L8 8 L16 0 Z' fill='%23F6F1E8'/></svg>")}
-.face{display:block;width:64px;margin:0 auto 6px}
+.hero{display:flex;align-items:center;gap:20px;max-width:400px;margin:0 auto 26px;border-radius:22px;padding:18px 22px}
+.hero .ribbon{flex:none;width:96px;height:auto;display:block;filter:drop-shadow(0 2px 5px rgba(25,28,33,.22))}
+.hero .eyebrow{font-size:10px;letter-spacing:.14em;color:#6b6558;text-transform:uppercase}
+.hero .delta{font-size:38px;line-height:1.05;font-weight:700;letter-spacing:-.03em;margin:6px 0 4px}
+.hero .cap{font-size:13px;line-height:1.35}
+.hero .fine2{font-size:11px;color:#6b6558;margin-top:8px}
 h1{margin:0;text-align:center;font-size:17px;letter-spacing:.32em;font-weight:700}
 .sub{text-align:center;color:#6b6558;font-size:11px;letter-spacing:.08em;margin-top:4px}
 h2{margin:22px 0 8px;text-align:center;font-size:12px;letter-spacing:.2em;font-weight:700;border-top:1px dashed #BDB4A5;border-bottom:1px dashed #BDB4A5;padding:6px 0}
@@ -221,7 +299,19 @@ export function renderReport(d: ReportData): string {
   }
 
   const out: string[] = []
-  out.push(`<div class="receipt">${FACE}<h1>HLOW FLOW</h1><div class="sub">ВЫПИСКА · ${esc(fullDate(d.generatedOn))}</div>`)
+  const pace = paceOf(d.current)
+  const tone = pace.mood === 'alert' ? 'warn' : pace.mood === 'happy' ? 'ok' : 'mute'
+  out.push(
+    `<div class="hero" style="background:${TINT[pace.mood]}">${ribbonSvg(pace.mood, pace.rows)}<div>` +
+      `<div class="eyebrow">Темп трат · ${esc(d.current.label)}</div>` +
+      `<div class="delta ${tone}">${esc(pace.delta)}</div><div class="cap">${esc(pace.caption)}</div>` +
+      `<div class="fine2">${
+        d.current.expectedByNow != null
+          ? `Потрачено ${money(d.current.spent)}, обычно к ${d.current.day}-му дню ${money(d.current.expectedByNow)}`
+          : `Потрачено ${money(d.current.spent)}`
+      }</div></div></div>`,
+  )
+  out.push(`<div class="receipt"><h1>HLOW FLOW</h1><div class="sub">ВЫПИСКА · ${esc(fullDate(d.generatedOn))}</div>`)
 
   // Прошлый месяц
   out.push(`<h2>ПРОШЛЫЙ МЕСЯЦ</h2><div class="sub2">${esc(d.last?.label ?? '')}</div>`)
