@@ -8,6 +8,8 @@ import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar, Mascot } from '@/components/Mascot'
 import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
 import { ReportSheet } from '@/components/overview/ReportSheet'
+import { ForecastSheet } from '@/components/overview/ForecastSheet'
+import { features } from '@/lib/env'
 import { SettingsRow, rowClass } from '@/components/overview/SettingsRow'
 import { useMonth, useExpenses, useDebts, useGoals, useStatus, useDebtFreeDate } from '@/hooks/use-finance-data'
 import { goalsWaitUntil } from '@/lib/goal'
@@ -42,6 +44,7 @@ export function Overview() {
   const { data: status } = useStatus()
   const [setupOpen, setSetupOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
+  const [forecastOpen, setForecastOpen] = useState(false)
 
   const activeDebts = (debts ?? []).filter((d) => d.status === 'active')
   // Same budget extra and same simulation as the Debts screen's default plan,
@@ -69,6 +72,7 @@ export function Overview() {
     <>
       <BudgetSetupSheet open={setupOpen} onOpenChange={setSetupOpen} />
       <ReportSheet open={reportOpen} onOpenChange={setReportOpen} />
+      <ForecastSheet open={forecastOpen} onOpenChange={setForecastOpen} />
     </>
   )
 
@@ -119,7 +123,15 @@ export function Overview() {
 
         {month.hasIncome ? (
           <>
-            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            {/* Тап по главной цифре — прогноз конца месяца (02). */}
+            <div
+              role={features.forecast ? 'button' : undefined}
+              tabIndex={features.forecast ? 0 : undefined}
+              aria-label={features.forecast ? 'Прогноз до конца месяца' : undefined}
+              onClick={features.forecast ? () => setForecastOpen(true) : undefined}
+              onKeyDown={features.forecast ? (e) => (e.key === 'Enter' || e.key === ' ') && setForecastOpen(true) : undefined}
+              className={cn('flex flex-wrap items-baseline gap-x-2.5 gap-y-1', features.forecast && 'min-h-11 cursor-pointer items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent')}
+            >
               <span
                 className={cn(
                   'text-[34px] leading-none font-bold tracking-[-0.03em]',

@@ -7,7 +7,7 @@ import { currencySymbol } from '@/lib/format'
 import { toPlanSettings } from '@/lib/month'
 import { useCurrentUser } from '@/lib/auth'
 import type { BudgetInput } from '@/lib/budget'
-import type { ChatMessage, HouseholdSettings, User } from '@/types/domain'
+import type { ChatMessage, HouseholdSettings, NeedKind, User } from '@/types/domain'
 
 export const queryKeys = {
   status: ['status'] as const,
@@ -26,6 +26,7 @@ export const queryKeys = {
   users: ['users'] as const,
   subscription: ['subscription'] as const,
   receiptScanCount: ['receipt-scan-count'] as const,
+  annualExpenses: ['annual-expenses'] as const,
 }
 
 // Pure DB read (see api.getStatus) — cheap no matter how often it's called,
@@ -50,6 +51,7 @@ export const useDebts = () => useQuery({ queryKey: queryKeys.debts, queryFn: api
 export const useIncomes = () => useQuery({ queryKey: queryKeys.incomes, queryFn: api.getIncomes })
 export const useExpenses = () => useQuery({ queryKey: queryKeys.expenses, queryFn: api.getExpenses })
 export const useCategories = () => useQuery({ queryKey: queryKeys.categories, queryFn: api.getCategories })
+export const useAnnualExpenses = () => useQuery({ queryKey: queryKeys.annualExpenses, queryFn: api.getAnnualExpenses })
 export const useGoals = () => useQuery({ queryKey: queryKeys.goals, queryFn: api.getGoals })
 export const useBankProducts = () => useQuery({ queryKey: queryKeys.bankProducts, queryFn: api.getBankProducts })
 export const useChatMessages = () => useQuery({ queryKey: queryKeys.chatMessages, queryFn: api.getChatMessages })
@@ -72,9 +74,10 @@ export function useBudgetInput(): BudgetInput | undefined {
   const { data: categories } = useCategories()
   const { data: goals } = useGoals()
   const { data: settings } = useHouseholdSettings()
+  const { data: annualExpenses } = useAnnualExpenses()
 
   return useMemo(() => {
-    if (!users || !debts || !debtPayments || !expenses || !incomes || !categories || !goals || !settings) return undefined
+    if (!annualExpenses || !users || !debts || !debtPayments || !expenses || !incomes || !categories || !goals || !settings) return undefined
     // The current user's row comes from the auth cache, which is what
     // useUpdateUser writes to first — prefer it over the (possibly older) list.
     const household = users.map((u) => (u.id === currentUser.id ? currentUser : u))
@@ -89,9 +92,11 @@ export function useBudgetInput(): BudgetInput | undefined {
       cushionBalance: goals.filter((g) => g.is_cushion && g.status === 'active').reduce((s, g) => s + g.current_amount, 0),
       settings: toPlanSettings(settings),
       categoryNames: Object.fromEntries(categories.map((c) => [c.id, c.name])),
+      categoryNeedKinds: Object.fromEntries(categories.map((c) => [c.id, c.need_kind ?? null])),
+      annualExpenses,
       currencySymbol: currencySymbol(),
     }
-  }, [currentUser, users, debts, debtPayments, expenses, incomes, categories, goals, settings])
+  }, [currentUser, users, debts, debtPayments, expenses, incomes, categories, goals, settings, annualExpenses])
 }
 
 export function useMonth() {
@@ -115,6 +120,28 @@ export function useCreateInvite() {
 }
 
 export const useHouseholdSettings = () => useQuery({ queryKey: queryKeys.householdSettings, queryFn: api.getHouseholdSettings })
+
+function useAnnualMutation<TVars>(fn: (v: TVars) => Promise<unknown>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.annualExpenses }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Не удалось сохранить'),
+  })
+}
+
+export const useAddAnnualExpense = () => useAnnualMutation(api.addAnnualExpense)
+export const useUpdateAnnualExpense = () =>
+  useAnnualMutation(({ id, patch }: { id: string; patch: Parameters<typeof api.updateAnnualExpense>[1] }) => api.updateAnnualExpense(id, patch))
+export const useDeleteAnnualExpense = () => useAnnualMutation(api.deleteAnnualExpense)
+
+export function useSetCategoryNeedKind() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, needKind }: { id: string; needKind: NeedKind }) => api.updateCategoryNeedKind(id, needKind),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.categories }),
+  })
+}
 
 export function useCreateReminder() {
   return useMutation({

@@ -4,15 +4,17 @@ import { ChevronRight } from 'lucide-react'
 import { FormSheet, FormField, Segmented, formInputClass } from '@/components/chrome/FormSheet'
 import { ToggleVisual } from '@/components/chrome/Toggle'
 import { ProposedSettingsCard } from '@/components/chat/ProposedSettingsCard'
-import { useBudgetInput, useHouseholdSettings, useMonth, useUpdateHouseholdSettings, useUpdateUser } from '@/hooks/use-finance-data'
+import { useBudgetInput, useCategories, useHouseholdSettings, useMonth, useSetCategoryNeedKind, useUpdateHouseholdSettings, useUpdateUser } from '@/hooks/use-finance-data'
+import { MODEL_META, assessMonth } from '@/lib/budget-model'
+import { features } from '@/lib/env'
 import { useCurrentUser } from '@/lib/auth'
 import { formatMoney, formatMoneyCompact } from '@/lib/format'
 import { STRATEGY_META } from '@/lib/plan-text'
 import { previewSettingsChange } from '@/lib/settings-preview'
 import { cn } from '@/lib/utils'
-import type { BotTone, DebtStrategyKind, HouseholdSettings } from '@/types/domain'
+import type { BotTone, BudgetModel, DebtStrategyKind, ForecastMode, HouseholdSettings } from '@/types/domain'
 
-type SheetKey = 'period' | 'strategy' | 'windfall' | 'pause' | 'tone'
+type SheetKey = 'period' | 'model' | 'forecast' | 'strategy' | 'windfall' | 'pause' | 'tone'
 
 const TONES: Array<{ id: BotTone; label: string; sample: string }> = [
   { id: 'soft', label: 'Мягкий', sample: 'Если будет минутка — закинь чеки за сегодня.' },
@@ -21,6 +23,9 @@ const TONES: Array<{ id: BotTone; label: string; sample: string }> = [
 ]
 
 const STRATEGIES: DebtStrategyKind[] = ['avalanche', 'snowball', 'cash_flow']
+
+const FORECAST_LABEL: Record<ForecastMode, string> = { cautious: 'осторожный', normal: 'обычный', optimistic: 'оптимист' }
+const MODELS: BudgetModel[] = ['50_30_20', 'zero_based', 'pay_yourself_first']
 
 /**
  * Настройки тремя группами (12): Бюджет, Долги, Чек. Каждая строка показывает
@@ -40,6 +45,8 @@ export function SettingsGroups() {
     <div className="space-y-5 border-t border-hf-line pt-4">
       <Group title="Бюджет">
         <Row label="Расчётный месяц" value={settings.period_start_day == null ? 'календарный' : `с ${settings.period_start_day}-го числа`} onClick={() => setOpen('period')} />
+        {features.budgetModel && <Row label="Модель оценки" value={MODEL_META[settings.budget_model].label} onClick={() => setOpen('model')} />}
+        {features.forecast && <Row label="Прогноз" value={FORECAST_LABEL[settings.forecast_mode]} onClick={() => setOpen('forecast')} />}
       </Group>
       <Group title="Долги">
         <Row label="Стратегия" value={STRATEGY_META[settings.debt_strategy].label} onClick={() => setOpen('strategy')} />
@@ -55,6 +62,8 @@ export function SettingsGroups() {
       </Group>
 
       <PeriodSheet open={open === 'period'} onClose={() => setOpen(null)} settings={settings} />
+      <ModelSheet open={open === 'model'} onClose={() => setOpen(null)} settings={settings} />
+      <ForecastModeSheet open={open === 'forecast'} onClose={() => setOpen(null)} settings={settings} />
       <StrategySheet open={open === 'strategy'} onClose={() => setOpen(null)} settings={settings} />
       <WindfallSheet open={open === 'windfall'} onClose={() => setOpen(null)} settings={settings} />
       <PauseSheet open={open === 'pause'} onClose={() => setOpen(null)} settings={settings} />
@@ -325,6 +334,109 @@ function ToneSheet({ open, onClose, current }: { open: boolean; onClose: () => v
           </button>
         ))}
       </div>
+    </FormSheet>
+  )
+}
+
+// ── Прогноз ─────────────────────────────────────────────────────────────
+
+function ForecastModeSheet({ open, onClose, settings }: { open: boolean; onClose: () => void; settings: HouseholdSettings }) {
+  const update = useUpdateHouseholdSettings()
+  const HINT: Record<ForecastMode, string> = {
+    cautious: 'Остаток месяца — по самой дорогой неделе. Прогноз с запасом.',
+    normal: 'Остаток месяца — по среднему темпу трат.',
+    optimistic: 'Остаток месяца — по обычному дню, без редких крупных трат.',
+  }
+  return (
+    <FormSheet open={open} onOpenChange={(o) => !o && onClose()} title="Прогноз до конца месяца" footer={<CloseButton onClose={onClose} />}>
+      <p className="text-[12px] leading-relaxed text-hf-text-3">Так считается прогноз при тапе на главную цифру «Обзора». Регулярные платежи учитываются по датам при любом режиме.</p>
+      <Segmented
+        value={settings.forecast_mode}
+        onChange={(v) => update.mutate({ forecast_mode: v })}
+        options={[
+          { value: 'cautious', label: 'Осторожный' },
+          { value: 'normal', label: 'Обычный' },
+          { value: 'optimistic', label: 'Оптимист' },
+        ]}
+      />
+      <p className="text-[12px] text-hf-text-4">{HINT[settings.forecast_mode]}</p>
+    </FormSheet>
+  )
+}
+
+// ── Модель оценки ───────────────────────────────────────────────────────
+
+function ModelSheet({ open, onClose, settings }: { open: boolean; onClose: () => void; settings: HouseholdSettings }) {
+  const update = useUpdateHouseholdSettings()
+  const input = useBudgetInput()
+  const { data: categories } = useCategories()
+  const setKind = useSetCategoryNeedKind()
+  const a = input && open ? assessMonth(input, settings.budget_model) : null
+  // Пользовательские расходные категории без пометки «нужное / желание» — спрашиваем один раз.
+  const unmarked = (categories ?? []).filter((c) => c.type === 'expense' && !c.is_system && !c.need_kind)
+
+  return (
+    <FormSheet open={open} onOpenChange={(o) => !o && onClose()} title="Модель оценки" footer={<CloseButton onClose={onClose} />}>
+      <p className="text-[12px] leading-relaxed text-hf-text-3">Модель решает, как оценивается месяц и статус. Цифру «можно тратить в день» она не меняет.</p>
+      <div className="space-y-2" role="radiogroup" aria-label="Модель оценки">
+        {MODELS.map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={settings.budget_model === m}
+            onClick={() => update.mutate({ budget_model: m })}
+            className={cn('min-h-11 w-full rounded-[12px] border px-3.5 py-2.5 text-left', settings.budget_model === m ? 'border-hf-accent bg-hf-card' : 'border-transparent bg-hf-card')}
+          >
+            <span className="block text-[13px] font-medium text-hf-text">{MODEL_META[m].label}</span>
+            <span className="mt-0.5 block text-[11px] leading-snug text-hf-text-4">{MODEL_META[m].description}</span>
+          </button>
+        ))}
+      </div>
+
+      {a && (
+        <div className="space-y-2 rounded-[16px] bg-hf-receipt p-3.5 text-hf-ink">
+          <p className="text-[13px] leading-snug font-medium">{a.headline}</p>
+          {a.rows.map((r) => (
+            <div key={r.label} className="flex items-baseline justify-between gap-2 text-[12px]">
+              <span className="min-w-0">{r.label}</span>
+              <span className={cn('shrink-0 font-mono', r.state === 'warn' ? 'text-hf-warn-ink' : r.state === 'ok' ? 'text-hf-accent-ink' : '')}>
+                {r.value}
+                {r.target ? <span className="ml-1.5 text-[10px] text-hf-ink-soft">{r.target}</span> : null}
+              </span>
+            </div>
+          ))}
+          {a.freedomIndex != null && (
+            <div className="border-t border-hf-receipt-line pt-2 text-[12px]">
+              <div className="flex justify-between gap-2">
+                <span>Индекс свободы</span>
+                <span className="font-mono">{Math.round(a.freedomIndex * 100)}%</span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-hf-ink-soft">
+                Столько дохода уходит на обязательное{a.freedomMain ? `; главный вес — ${a.freedomMain}` : ''}.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {unmarked.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[12px] text-hf-text-3">Твои категории без пометки — это нужное или желание? Спрошу один раз.</p>
+          {unmarked.map((c) => (
+            <div key={c.id} className="flex items-center justify-between gap-2 rounded-[12px] bg-hf-card px-3 py-1.5">
+              <span className="min-w-0 truncate text-[13px] text-hf-text">{c.name}</span>
+              <span className="flex shrink-0 gap-1.5">
+                {([['need', 'Нужное'], ['want', 'Желание']] as const).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setKind.mutate({ id: c.id, needKind: k })} className="min-h-11 rounded-[9px] bg-hf-bar px-3 text-[12px] text-hf-text-2">
+                    {label}
+                  </button>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </FormSheet>
   )
 }

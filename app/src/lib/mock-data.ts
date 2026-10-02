@@ -7,6 +7,7 @@ import type {
   Expense,
   Goal,
   HouseholdSettings,
+  AnnualExpense,
   MerchantRule,
   Income,
   Subscription,
@@ -61,12 +62,12 @@ export const mockUsers: User[] = [
 export const currentMockUser = mockUsers[0]
 
 export const mockCategories: Category[] = [
-  { id: 'c1', name: 'Продукты', icon: 'shopping-cart', type: 'expense', is_system: true },
-  { id: 'c2', name: 'Транспорт', icon: 'car', type: 'expense', is_system: true },
-  { id: 'c3', name: 'Жильё', icon: 'home', type: 'expense', is_system: true },
-  { id: 'c4', name: 'Развлечения', icon: 'popcorn', type: 'expense', is_system: true },
-  { id: 'c5', name: 'Здоровье', icon: 'heart-pulse', type: 'expense', is_system: true },
-  { id: 'c6', name: 'Прочее', icon: 'more-horizontal', type: 'expense', is_system: true },
+  { id: 'c1', name: 'Продукты', icon: 'shopping-cart', type: 'expense', is_system: true, need_kind: 'need' },
+  { id: 'c2', name: 'Транспорт', icon: 'car', type: 'expense', is_system: true, need_kind: 'need' },
+  { id: 'c3', name: 'Жильё', icon: 'home', type: 'expense', is_system: true, need_kind: 'need' },
+  { id: 'c4', name: 'Развлечения', icon: 'popcorn', type: 'expense', is_system: true, need_kind: 'want' },
+  { id: 'c5', name: 'Здоровье', icon: 'heart-pulse', type: 'expense', is_system: true, need_kind: 'need' },
+  { id: 'c6', name: 'Прочее', icon: 'more-horizontal', type: 'expense', is_system: true, need_kind: 'want' },
   { id: 'c7', name: 'Зарплата', icon: 'wallet', type: 'income', is_system: true },
   { id: 'c8', name: 'Фриланс', icon: 'laptop', type: 'income', is_system: true },
 ]
@@ -299,7 +300,14 @@ export const mockHouseholdSettings: HouseholdSettings = {
   pause_threshold: null,
   pause_hours: 24,
   windfall_to_debt_pct: 0,
+  forecast_mode: 'normal',
+  budget_model: '50_30_20',
 }
+
+export const mockAnnualExpenses: AnnualExpense[] = [
+  { id: 'ae1', title: 'Страховка авто', amount: 180_000, month: 2, saved: 60_000 },
+  { id: 'ae2', title: 'Отпуск', amount: 600_000, month: 7, saved: 0 },
+]
 
 export const mockGoals: Goal[] = [
   {

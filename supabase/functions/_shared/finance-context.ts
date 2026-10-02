@@ -5,6 +5,7 @@
 
 import { resolveBaseCurrency, currencyInstruction } from './currency.ts'
 import { computeBudget, DEFAULT_PLAN_SETTINGS, type Budget, type BudgetInput, type PlanSettings } from './budget.ts'
+import { assessMonth, type BudgetModelId } from './budget-model.ts'
 
 // deno-lint-ignore no-explicit-any
 type SupabaseLike = any
@@ -33,6 +34,8 @@ export interface FinancialSnapshot {
   goals: { title: string; target: number; current: number; target_date: string | null }[]
   /** Every category name the household has — for the chat's duplicate check. */
   categoryNames: string[]
+  /** Модель оценки месяца из настроек: влияет на оценку и status, но не на «можно тратить». */
+  budgetModel: BudgetModelId
   /** Правило паузы перед покупкой (настройки): порог null — выключено. */
   pause: { threshold: number | null; hours: number }
 }
@@ -66,7 +69,7 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
   ])
   const today = localToday(users?.[0]?.timezone ?? 'Asia/Almaty')
 
-  const [{ data: incomes }, { data: expenses }, { data: debts }, { data: debtPayments }, { data: goals }, { data: categories }, { data: settingsRow }] =
+  const [{ data: incomes }, { data: expenses }, { data: debts }, { data: debtPayments }, { data: goals }, { data: categories }, { data: settingsRow }, { data: annual }] =
     await Promise.all([
       scope(supabase.from('incomes').select('amount, received_at')).gte('received_at', monthStart(today, 2)),
       scope(supabase.from('expenses').select('id, amount, category_id, spent_at, is_confirmed, merchant, description')).gte(
@@ -77,9 +80,10 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
       scope(supabase.from('debt_payments').select('debt_id, amount, paid_at')).gte('paid_at', monthStart(today, 1)),
       scope(supabase.from('goals').select('title, target_amount, current_amount, target_date, is_cushion')).eq('status', 'active'),
       householdId
-        ? supabase.from('categories').select('id, name').or(`household_id.is.null,household_id.eq.${householdId}`)
-        : supabase.from('categories').select('id, name'),
+        ? supabase.from('categories').select('id, name, need_kind').or(`household_id.is.null,household_id.eq.${householdId}`)
+        : supabase.from('categories').select('id, name, need_kind'),
       scope(supabase.from('household_settings').select('*')).maybeSingle(),
+      scope(supabase.from('annual_expenses').select('amount, saved, month')),
     ])
 
   const settings: PlanSettings = settingsRow
@@ -127,6 +131,8 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
     cushionBalance: goalRows.filter((g) => g.is_cushion).reduce((s, g) => s + num(g.current_amount), 0),
     settings,
     categoryNames: Object.fromEntries((categories ?? []).map((c: { id: string; name: string }) => [c.id, c.name])),
+    categoryNeedKinds: Object.fromEntries((categories ?? []).map((c: { id: string; need_kind: 'need' | 'want' | null }) => [c.id, c.need_kind ?? null])),
+    annualExpenses: (annual ?? []).map((a: { amount: number; saved: number; month: number }) => ({ amount: num(a.amount), saved: num(a.saved), month: Number(a.month) })),
     currencySymbol: CURRENCY_SYMBOLS[currency] ?? currency,
     today,
   }
@@ -156,6 +162,7 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
       target_date: (g.target_date as string | null) ?? null,
     })),
     categoryNames: (categories ?? []).map((c: { name: string }) => c.name),
+    budgetModel: (['50_30_20', 'zero_based', 'pay_yourself_first'].includes(settingsRow?.budget_model) ? settingsRow.budget_model : '50_30_20') as BudgetModelId,
     pause: {
       threshold: settingsRow?.pause_threshold == null ? null : Number(settingsRow.pause_threshold),
       hours: Number(settingsRow?.pause_hours ?? 24),
@@ -194,10 +201,11 @@ export function snapshotToPrompt(s: FinancialSnapshot): string {
     `Настройки семьи. Режим: ${MODE_TEXT[st.mode]}${modeDetails}. Подушка: ${st.cushionMonths} мес. расходов = ${r(p.cushionTarget)}, накоплено ${r(b.cushionBalance)}. Порядок погашения: ${STRATEGY_TEXT[st.strategy]}. Минимальный платёж закрытого долга переходит в следующий.`,
     `Доход в месяц: ${r(b.income)} (${INCOME_SOURCE[b.incomeSource]}).`,
     `Обычные траты в месяц: ${r(b.typicalSpend)} (${b.historyMonths ? `среднее за ${b.historyMonths} мес.` : 'первый месяц — оценка по текущему темпу, истории ещё нет'}).`,
-    `Минимальные платежи по долгам: ${r(b.minPayments)} в месяц. Сверх обычных трат и минимумов: ${r(b.planExtra)} в месяц; в этом месяце по плану — в долги ${r(p.now.toDebts)}, в подушку ${r(p.now.toCushion)}, на цели ${r(p.now.toGoals)}.`,
+    `Минимальные платежи по долгам: ${r(b.minPayments)} в месяц.${b.annualReserve > 0 ? ` Резерв под крупные траты года: ${r(b.annualReserve)} в месяц.` : ''} Сверх обычных трат и минимумов: ${r(b.planExtra)} в месяц; в этом месяце по плану — в долги ${r(p.now.toDebts)}, в подушку ${r(p.now.toCushion)}, на цели ${r(p.now.toGoals)}.`,
     `${b.settings.periodStartDay == null ? 'Этот месяц' : `Бюджетный месяц с ${b.periodStart} по ${b.periodEnd} (от дня зарплаты)`} (день ${b.dayOfMonth} из ${b.daysInMonth}, осталось ${b.daysLeft} дн.): потрачено ${r(b.spent)}; по долгам внесено ${r(b.debtPaid)}; ещё отложить по плану ${r(b.reserved)}; бюджет на траты ${r(b.limit)}; свободно до конца месяца ${r(b.available)} (≈${r(b.perDay)} в день).`,
     b.expectedByNow != null ? `Обычно к этому дню месяца потрачено: ${r(b.expectedByNow)}.` : '',
     `Траты этого месяца по категориям: ${b.categories.map((c) => `${c.name}=${r(c.amount)}${c.typical != null ? ` (обычно за месяц ${r(c.typical)})` : ''}`).join(', ') || '—'}.`,
+    assessMonth(s.budgetInput, s.budgetModel).note,
     `Перерасход и аномалии: ${b.signals.length ? b.signals.map((x) => x.text).join(' ') : 'не найдено'}`,
     `Долги: ${s.debts.map((d) => `${d.title} (остаток ${r(d.balance)}, ${d.rate ?? 0}%, мин. платёж ${r(d.min_payment)}${d.extra_monthly > 0 ? `, сверх него вносят ${r(d.extra_monthly)} в месяц` : ''})`).join('; ') || 'нет'}. Общий долг: ${r(s.totalDebt)}.`,
     p.hasDebts

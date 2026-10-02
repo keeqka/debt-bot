@@ -33,6 +33,10 @@ export interface BudgetInput {
   cushionBalance: number
   settings: PlanSettings
   categoryNames: Record<string, string>
+  /** Нужное / желание по id категории; нет записи или null — считается нужным (консервативно). */
+  categoryNeedKinds?: Record<string, 'need' | 'want' | null>
+  /** Крупные траты года: под них каждый месяц откладывается резерв (входит в обязательства). */
+  annualExpenses?: Array<{ amount: number; saved: number; month: number }>
   currencySymbol: string
   today?: Date
 }
@@ -89,6 +93,8 @@ export interface Budget {
   reserved: number
   /** debtPaid + reserved — всё, что в этом месяце уходит не на траты. */
   obligations: number
+  /** Резерв в месяц под крупные траты года — часть obligations. */
+  annualReserve: number
   /** Бюджет на траты: income − obligations. */
   limit: number
   available: number
@@ -384,6 +390,11 @@ export function budgetPeriod(today: Date, startDay: number | null, back = 0): { 
   return { start: iso(startOf(idx)), end: iso(startOf(idx + 1) - 86_400_000), days: Math.round((startOf(idx + 1) - startOf(idx)) / 86_400_000) }
 }
 
+/** Месяцев до срока крупной траты (1–12); срок в этом же месяце — 1: откладывать нужно сразу всё. */
+export function annualMonthsLeft(dueMonth: number, today: Date): number {
+  return Math.max(1, (((dueMonth - (today.getMonth() + 1)) % 12) + 12) % 12)
+}
+
 export function computeBudget(input: BudgetInput): Budget {
   const today = input.today ?? new Date()
   // Бюджетный месяц: календарный или от дня зарплаты (settings.periodStartDay).
@@ -465,7 +476,9 @@ export function computeBudget(input: BudgetInput): Budget {
   // Платёж по долгу в месяц: минимум плюс взнос, который семья сама назначила (экран «Досрочка»).
   const dueOf = (d: (typeof activeDebts)[number]) => d.minimum_payment + (d.extra_monthly ?? 0)
   const minPayments = activeDebts.reduce((s, d) => s + dueOf(d), 0)
-  const freeMonthly = income - minPayments - typicalSpend
+  // Резерв под крупные траты года: (сумма − отложено) / месяцев до срока. Срок в этом же месяце — откладывать нужно всё сразу.
+  const annualReserve = (input.annualExpenses ?? []).reduce((s, a) => s + Math.max(0, a.amount - a.saved) / annualMonthsLeft(a.month, today), 0)
+  const freeMonthly = income - minPayments - typicalSpend - annualReserve
   const monthlyNeed = typicalSpend + minPayments
   const cushionTarget = Math.round(input.settings.cushionMonths * monthlyNeed)
   // Откладывать некуда — нет ни долгов, ни целей, подушка набрана: тогда
@@ -498,7 +511,7 @@ export function computeBudget(input: BudgetInput): Budget {
   // и цели не отслеживаются поштучно — их доля резервируется целиком.
   const reserved = Math.min(remainingDebt, unpaidMins + Math.max(0, toDebts - extraPaid)) + toCushion + toGoals
 
-  const obligations = debtPaid + reserved
+  const obligations = debtPaid + reserved + annualReserve
   const limit = income - obligations
   const available = limit - spent
   const perDay = daysLeft > 0 ? Math.floor(available / daysLeft / 10) * 10 : available
@@ -608,6 +621,7 @@ export function computeBudget(input: BudgetInput): Budget {
     spent,
     debtPaid,
     reserved,
+    annualReserve,
     obligations,
     limit,
     available,

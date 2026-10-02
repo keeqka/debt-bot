@@ -9,6 +9,9 @@ import { formatMoney, formatMoneyCompact, formatMoneyShort, formatPercent } from
 import { goalMath, goalsWaitUntil, monthLabel } from '@/lib/goal'
 import { AddGoalDialog } from '@/components/goals/AddGoalDialog'
 import { GoalDetailSheet } from '@/components/goals/GoalDetailSheet'
+import { StressTestSheet } from '@/components/goals/StressTestSheet'
+import { AnnualExpensesSheet } from '@/components/goals/AnnualExpensesSheet'
+import { features } from '@/lib/env'
 import type { Goal } from '@/types/domain'
 
 /**
@@ -21,11 +24,16 @@ import type { Goal } from '@/types/domain'
  * тёмными строками: один вывод за раз, список целей не должен спорить
  * с главной цифрой экрана.
  */
+const ACTION_CLASS =
+  'min-h-11 flex-1 rounded-[14px] bg-hf-card px-3.5 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent'
+
 export function GoalsSection() {
   const { data: goals } = useGoals()
   const month = useMonth()
   const [addOpen, setAddOpen] = useState(false)
   const [detail, setDetail] = useState<Goal | null>(null)
+  const [stressOpen, setStressOpen] = useState(false)
+  const [annualOpen, setAnnualOpen] = useState(false)
 
   const active = (goals ?? []).filter((g) => g.status === 'active')
   const [first, ...rest] = active
@@ -61,6 +69,26 @@ export function GoalsSection() {
       {rest.map((goal) => (
         <GoalCompactRow key={goal.id} goal={goal} onOpen={() => setDetail(goal)} />
       ))}
+
+      {(features.stressTest || features.annualExpenses) && (
+        <div className="flex gap-2">
+          {features.stressTest && (
+            <button type="button" onClick={() => setStressOpen(true)} className={ACTION_CLASS}>
+              <span className="block text-[13px] font-medium text-hf-text">Что если…</span>
+              <span className="block text-[11px] text-hf-text-4">Стресс-тест подушки</span>
+            </button>
+          )}
+          {features.annualExpenses && (
+            <button type="button" onClick={() => setAnnualOpen(true)} className={ACTION_CLASS}>
+              <span className="block text-[13px] font-medium text-hf-text">Крупные траты</span>
+              <span className="block text-[11px] text-hf-text-4">Резерв на год</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      <StressTestSheet open={stressOpen} onOpenChange={setStressOpen} />
+      <AnnualExpensesSheet open={annualOpen} onOpenChange={setAnnualOpen} />
 
       <AddGoalDialog open={addOpen} onOpenChange={setAddOpen} />
       <GoalDetailSheet goal={detail} open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)} />

@@ -3,6 +3,20 @@ export type FinancialStatus = 'green' | 'light_green' | 'yellow' | 'orange' | 'r
 export type Uuid = string
 
 export type BotTone = 'soft' | 'neutral' | 'direct'
+export type ForecastMode = 'cautious' | 'normal' | 'optimistic'
+export type BudgetModel = '50_30_20' | 'zero_based' | 'pay_yourself_first'
+export type NeedKind = 'need' | 'want'
+
+/** Крупная трата года, под которую откладывается резерв (annual_expenses). */
+export interface AnnualExpense {
+  id: Uuid
+  title: string
+  amount: number
+  /** Месяц срока, 1–12. */
+  month: number
+  /** Уже отложено под неё. */
+  saved: number
+}
 
 export interface User {
   id: Uuid
@@ -103,6 +117,8 @@ export interface Category {
   icon: string
   type: CategoryType
   is_system: boolean
+  /** Нужное или желание (модель 50/30/20, индекс свободы); null — ещё не спрашивали. */
+  need_kind?: NeedKind | null
 }
 
 export type GoalStatus = 'active' | 'achieved' | 'paused'
@@ -186,6 +202,10 @@ export interface HouseholdSettings {
   pause_hours: 24 | 72
   /** Доля разового дохода, которую предлагается отправить в долг, %. */
   windfall_to_debt_pct: number
+  /** Как строится прогноз конца месяца на «Обзоре». */
+  forecast_mode: ForecastMode
+  /** По какой модели оценивается месяц (не меняет «можно тратить»). */
+  budget_model: BudgetModel
 }
 
 

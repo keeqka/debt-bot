@@ -8,6 +8,8 @@ import type {
   DebtDraft,
   DebtPayment,
   HouseholdSettings,
+  AnnualExpense,
+  NeedKind,
   MerchantRule,
   AccessInfo,
   InviteKind,
@@ -329,6 +331,54 @@ export async function deleteCategory(id: string): Promise<void> {
   if (error) throw error
 }
 
+export async function getAnnualExpenses(): Promise<AnnualExpense[]> {
+  if (!isBackendConfigured || !supabase) return [...mock.mockAnnualExpenses]
+  const { data, error } = await supabase.from('annual_expenses').select('id, title, amount, month, saved').order('month', { ascending: true })
+  if (error) throw error
+  return (data ?? []).map((a) => ({ ...a, amount: Number(a.amount), saved: Number(a.saved) })) as AnnualExpense[]
+}
+
+export async function addAnnualExpense(expense: Omit<AnnualExpense, 'id'>): Promise<AnnualExpense> {
+  if (!isBackendConfigured || !supabase) {
+    const created = { ...expense, id: crypto.randomUUID() }
+    mock.mockAnnualExpenses.push(created)
+    return created
+  }
+  const { data, error } = await supabase.from('annual_expenses').insert(expense).select('id, title, amount, month, saved').single()
+  if (error) throw error
+  return { ...data, amount: Number(data.amount), saved: Number(data.saved) } as AnnualExpense
+}
+
+export async function updateAnnualExpense(id: string, patch: Partial<Omit<AnnualExpense, 'id'>>): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const i = mock.mockAnnualExpenses.findIndex((a) => a.id === id)
+    if (i !== -1) mock.mockAnnualExpenses[i] = { ...mock.mockAnnualExpenses[i], ...patch }
+    return
+  }
+  const { error } = await supabase.from('annual_expenses').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteAnnualExpense(id: string): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const i = mock.mockAnnualExpenses.findIndex((a) => a.id === id)
+    if (i !== -1) mock.mockAnnualExpenses.splice(i, 1)
+    return
+  }
+  const { error } = await supabase.from('annual_expenses').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function updateCategoryNeedKind(id: string, needKind: NeedKind): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const c = mock.mockCategories.find((x) => x.id === id)
+    if (c) c.need_kind = needKind
+    return
+  }
+  const { error } = await supabase.from('categories').update({ need_kind: needKind }).eq('id', id)
+  if (error) throw error
+}
+
 export async function getGoals(): Promise<Goal[]> {
   if (!isBackendConfigured || !supabase) return [...mock.mockGoals]
   const { data, error } = await supabase.from('goals').select('*')
@@ -615,7 +665,7 @@ export async function getHouseholdSettings(): Promise<HouseholdSettings> {
   if (!isBackendConfigured || !supabase) return { ...mock.mockHouseholdSettings }
   const { data, error } = await supabase
     .from('household_settings')
-    .select('priority_mode, debt_strategy, cushion_months, split_debt_pct, high_rate_threshold, period_start_day, pause_threshold, pause_hours, windfall_to_debt_pct')
+    .select('priority_mode, debt_strategy, cushion_months, split_debt_pct, high_rate_threshold, period_start_day, pause_threshold, pause_hours, windfall_to_debt_pct, forecast_mode, budget_model')
     .maybeSingle() // RLS: only this family's row
   if (error) throw error
   if (!data) return { ...mock.mockHouseholdSettings } // same values as the table defaults
