@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getPublicReport, type PublicReport } from '@/lib/public-report'
+import { getPublicReport, reportDownloadUrl, type PublicReport } from '@/lib/public-report'
 
 /**
  * Страница ссылки /report/<токен>: «Выписка» без входа в приложение. Живёт до
@@ -51,8 +51,11 @@ export function ReportPublic({ token }: { token: string }) {
       ) : (
         <>
           <iframe title="Выписка" sandbox="" srcDoc={report.html} className="min-h-0 w-full flex-1 border-0" />
-          <p className="px-4 py-2 text-center font-mono text-[11px] text-[#7b7568]">
-            Ссылка действует до {new Date(report.expiresAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+          <p className="flex items-center justify-center gap-3 px-4 py-2 font-mono text-[11px] text-[#7b7568]">
+            <span>Ссылка действует до {new Date(report.expiresAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+            <a href={reportDownloadUrl(token)} className="text-[#8fb7dc] underline">
+              Скачать HTML
+            </a>
           </p>
         </>
       )}

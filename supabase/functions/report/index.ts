@@ -20,8 +20,8 @@ Deno.serve(async (req) => {
     const html = await buildReportHtml(supabase)
 
     if (link) {
-      const { url, expiresAt } = await createReportLink(getAdminClient(), session.household_id, html)
-      return jsonResponse({ url, expires_at: expiresAt, expires_in: REPORT_LINK_TTL_SECONDS })
+      const { url, downloadUrl, expiresAt } = await createReportLink(getAdminClient(), session.household_id, html)
+      return jsonResponse({ url, download_url: downloadUrl, expires_at: expiresAt, expires_in: REPORT_LINK_TTL_SECONDS })
     }
     return jsonResponse({ html })
   } catch (error) {

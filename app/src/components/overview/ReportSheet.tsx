@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Copy, Link2, Send } from 'lucide-react'
+import { Copy, Download, Link2, Send } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { createReportLink, getReportHtml } from '@/lib/api'
 import { shareLink } from '@/lib/bot'
@@ -16,7 +16,7 @@ export function ReportSheet({ open, onOpenChange }: { open: boolean; onOpenChang
   const [html, setHtml] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [link, setLink] = useState<{ url: string; expiresAt: string } | null>(null)
+  const [link, setLink] = useState<{ url: string; downloadUrl: string; expiresAt: string } | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -105,6 +105,15 @@ export function ReportSheet({ open, onOpenChange }: { open: boolean; onOpenChang
                   Копировать
                 </button>
               </div>
+              <a
+                href={link.downloadUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-[13px] bg-hf-card py-3 text-[14px] text-hf-text-2"
+              >
+                <Download className="h-4 w-4" />
+                Скачать HTML
+              </a>
             </>
           ) : (
             <button

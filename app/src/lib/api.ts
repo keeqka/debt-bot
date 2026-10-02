@@ -606,10 +606,10 @@ export async function getReportHtml(): Promise<string> {
   return html
 }
 
-export async function createReportLink(): Promise<{ url: string; expiresAt: string }> {
+export async function createReportLink(): Promise<{ url: string; downloadUrl: string; expiresAt: string }> {
   if (!isBackendConfigured) throw new Error('Ссылки на выписку работают только с сервером')
-  const { url, expires_at } = await callFunction<{ url: string; expires_at: string }>('report', { link: true })
-  return { url, expiresAt: expires_at }
+  const { url, download_url, expires_at } = await callFunction<{ url: string; download_url: string; expires_at: string }>('report', { link: true })
+  return { url, downloadUrl: download_url, expiresAt: expires_at }
 }
 
 /** Stars subscription invoice link (stars-invoice) — opened with Telegram.WebApp.openInvoice. */

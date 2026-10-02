@@ -511,11 +511,11 @@ Deno.serve(async (req) => {
     if (command === '/report') {
       try {
         const admin = getAdminClient()
-        const { url } = await createReportLink(admin, member.household_id, await buildReportHtml(admin, member.household_id))
+        const { url, downloadUrl } = await createReportLink(admin, member.household_id, await buildReportHtml(admin, member.household_id))
         await sendTelegramMessage(
           message.chat.id,
-          `Выписка готова. Ссылка живёт ${REPORT_LINK_TTL_SECONDS / 60} минут — её можно открыть без входа и переслать партнёру.`,
-          { inline_keyboard: [[{ text: 'Открыть выписку', url }]] },
+          `Выписка готова. Ссылки живут ${REPORT_LINK_TTL_SECONDS / 60} минут — их можно открыть без входа и переслать партнёру. Скачанный файл останется у тебя.`,
+          { inline_keyboard: [[{ text: 'Открыть выписку', url }], [{ text: 'Скачать HTML', url: downloadUrl }]] },
         )
       } catch (error) {
         console.error('report failed', error)
