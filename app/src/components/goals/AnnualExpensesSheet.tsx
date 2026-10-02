@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import { DeleteIcon } from '@/components/icons/hf'
 import { FormSheet, FormField, formInputClass } from '@/components/chrome/FormSheet'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
@@ -127,7 +128,7 @@ function ItemActions({ item, reserve, onSave, onDelete }: { item: AnnualExpense;
         Отложить
       </button>
       <button type="button" onClick={onDelete} aria-label={`Удалить ${item.title}`} className="grid h-11 w-11 place-items-center rounded-[10px] bg-hf-receipt-line text-hf-warn-ink">
-        <Trash2 className="h-4 w-4" />
+        <DeleteIcon className="h-4 w-4" />
       </button>
     </div>
   )

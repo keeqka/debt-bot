@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, type ComponentType } from 'react'
 import { toast } from 'sonner'
-import { Trash2, Check, Camera, FileStack, Pencil, Receipt as ReceiptIcon } from 'lucide-react'
+import { Check, FileStack, Receipt as ReceiptIcon } from 'lucide-react'
+import { CameraReceiptIcon, DeleteIcon, EditIcon } from '@/components/icons/hf'
 import { FormSheet } from '@/components/chrome/FormSheet'
 import { Eyebrow } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
@@ -12,11 +13,11 @@ import { formatMoney, formatPercent } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { Expense, ExpenseSource } from '@/types/domain'
 
-const SOURCE_META: Record<ExpenseSource, { label: string; Icon: typeof Camera }> = {
-  receipt_photo: { label: 'фото чека', Icon: Camera },
+const SOURCE_META: Record<ExpenseSource, { label: string; Icon: ComponentType<{ className?: string }> }> = {
+  receipt_photo: { label: 'фото чека', Icon: CameraReceiptIcon },
   screenshot: { label: 'скриншот', Icon: ReceiptIcon },
   statement: { label: 'выписка', Icon: FileStack },
-  manual: { label: 'вручную', Icon: Pencil },
+  manual: { label: 'вручную', Icon: EditIcon },
 }
 
 /**
@@ -102,7 +103,7 @@ export function ExpenseDetailSheet({
               onClick={() => setConfirmDelete(true)}
               className="flex w-full items-center justify-center gap-2 rounded-[13px] bg-hf-card py-3.5 text-[15px] text-hf-text-2"
             >
-              <Trash2 className="h-4 w-4" />
+              <DeleteIcon className="h-4 w-4" />
               Удалить трату
             </button>
           ) : (
@@ -122,7 +123,7 @@ export function ExpenseDetailSheet({
                 aria-label="Удалить трату"
                 className="flex items-center justify-center rounded-[13px] bg-hf-card px-4 py-3.5 text-hf-text-2"
               >
-                <Trash2 className="h-4 w-4" />
+                <DeleteIcon className="h-4 w-4" />
               </button>
             </div>
           )

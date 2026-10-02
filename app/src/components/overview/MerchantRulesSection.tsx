@@ -1,5 +1,5 @@
 import { toast } from 'sonner'
-import { Trash2 } from 'lucide-react'
+import { DeleteIcon } from '@/components/icons/hf'
 import { useCategories, useDeleteMerchantRule, useExpenses, useMerchantRules, useUpdateExpensesCategory } from '@/hooks/use-finance-data'
 import { findMerchantRule } from '@/lib/merchant'
 
@@ -52,7 +52,7 @@ export function MerchantRulesSection() {
               aria-label={`Удалить правило ${r.merchant_label}`}
               className="shrink-0 text-hf-text-4"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <DeleteIcon className="h-3.5 w-3.5" />
             </button>
           </li>
         ))}

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Camera, ChevronRight, Settings } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
+import { CameraReceiptIcon, SettingsIcon } from '@/components/icons/hf'
 import { Eyebrow } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
@@ -75,7 +76,7 @@ export function Overview() {
       aria-label="Настройки"
       className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-hf-card text-hf-text-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent"
     >
-      <Settings className="h-4 w-4" />
+      <SettingsIcon className="h-4 w-4" />
     </button>,
     [],
   )
@@ -244,7 +245,7 @@ export function Overview() {
         onClick={() => navigate('/receipt?add=receipt')}
         className="flex min-h-11 w-full items-center justify-center gap-2 rounded-[14px] bg-hf-accent py-3 text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent"
       >
-        <Camera className="h-[18px] w-[18px]" />
+        <CameraReceiptIcon className="h-[18px] w-[18px]" />
         <span className="text-[13px] font-medium">Загрузить чек</span>
       </button>
 

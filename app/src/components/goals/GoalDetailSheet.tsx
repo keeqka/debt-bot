@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { PiggyBank, Pencil, Landmark, PauseCircle } from 'lucide-react'
+import { PiggyBank, Landmark, PauseCircle } from 'lucide-react'
+import { EditIcon } from '@/components/icons/hf'
 import { FormSheet } from '@/components/chrome/FormSheet'
 import { Eyebrow } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
@@ -67,7 +68,7 @@ export function GoalDetailSheet({ goal, open, onOpenChange }: { goal: Goal | nul
               aria-label="Изменить цель"
               className="flex items-center justify-center rounded-[13px] bg-hf-card px-4 py-3.5 text-hf-text-2"
             >
-              <Pencil className="h-4 w-4" />
+              <EditIcon className="h-4 w-4" />
             </button>
           </div>
         }

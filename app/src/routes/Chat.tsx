@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Copy, Check, CreditCard, Tag, Trash2, Paperclip } from 'lucide-react'
+import { Send, Check, CreditCard, Tag, Paperclip } from 'lucide-react'
+import { CopyIcon, DeleteIcon } from '@/components/icons/hf'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
@@ -137,7 +138,7 @@ export function Chat() {
       aria-label="Очистить чат"
       className="text-hf-text-4 hover:text-hf-warn-on-dark disabled:pointer-events-none disabled:opacity-40"
     >
-      <Trash2 className="h-[18px] w-[18px]" />
+      <DeleteIcon className="h-[18px] w-[18px]" />
     </button>,
     [messages?.length],
   )
@@ -213,7 +214,7 @@ export function Chat() {
                   aria-label="Скопировать сообщение"
                   className="flex items-center gap-1 self-start pl-9 text-hf-text-4"
                 >
-                  {copiedId === m.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  {copiedId === m.id ? <Check className="h-3 w-3" /> : <CopyIcon className="h-3 w-3" />}
                 </button>
               </motion.div>
             )

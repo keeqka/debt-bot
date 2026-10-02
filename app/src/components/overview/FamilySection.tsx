@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Copy, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
+import { CopyIcon } from '@/components/icons/hf'
 import { useAccessInfo, useCreateInvite, useUsers } from '@/hooks/use-finance-data'
 import { useCurrentUser } from '@/lib/auth'
 import { inviteLink, shareLink } from '@/lib/bot'
@@ -64,7 +65,7 @@ export function FamilySection() {
             onClick={() => copy(url)}
             className="flex items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-text-2"
           >
-            <Copy className="h-3.5 w-3.5" />
+            <CopyIcon className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, CircleDollarSign, HandCoins, Pencil, Trash2, Settings, Scale, Zap } from 'lucide-react'
+import { Plus, HandCoins, Scale } from 'lucide-react'
+import { DeleteIcon, EditIcon, PayExtraIcon, PayIcon, SettingsIcon } from '@/components/icons/hf'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
@@ -152,7 +153,7 @@ export function Plan() {
               {MODE_META[month.settings.mode].label} · {STRATEGY_META[month.settings.strategy].label}
             </span>
           </span>
-          <Settings className="h-4 w-4 shrink-0 text-hf-text-4" />
+          <SettingsIcon className="h-4 w-4 shrink-0 text-hf-text-4" />
         </button>
       )}
 
@@ -271,7 +272,7 @@ export function Plan() {
                     aria-label={`Редактировать ${debt.title}`}
                     className="flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-text-2"
                   >
-                    <Pencil className="h-3.5 w-3.5" />
+                    <EditIcon className="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
@@ -279,7 +280,7 @@ export function Plan() {
                     aria-label={`Удалить ${debt.title}`}
                     className="flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-warn-on-dark"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <DeleteIcon className="h-3.5 w-3.5" />
                   </button>
                 </>
               )
@@ -309,7 +310,7 @@ export function Plan() {
                       onClick={() => setPayingDebt(debt)}
                       className="flex min-h-11 min-w-[84px] flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar py-2 text-xs text-hf-text-2"
                     >
-                      <CircleDollarSign className="h-3.5 w-3.5" />
+                      <PayIcon className="h-3.5 w-3.5" />
                       Платёж
                     </button>
                     {debt.kind === 'credit_card' && (
@@ -328,7 +329,7 @@ export function Plan() {
                         onClick={() => setEarlyDebt(debt)}
                         className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar py-2 text-xs text-hf-accent-on-dark"
                       >
-                        <Zap className="h-3.5 w-3.5" />
+                        <PayExtraIcon className="h-3.5 w-3.5" />
                         Досрочно
                       </button>
                     )}
@@ -384,7 +385,7 @@ export function Plan() {
                 aria-label={`Редактировать ${card.title}`}
                 className="flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-hf-bar text-hf-text-2"
               >
-                <Pencil className="h-3.5 w-3.5" />
+                <EditIcon className="h-3.5 w-3.5" />
               </button>
             </div>
           ))}

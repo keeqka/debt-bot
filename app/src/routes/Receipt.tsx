@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Camera, FileStack, Plus, Trash2 } from 'lucide-react'
+import { FileStack, Plus } from 'lucide-react'
+import { CameraReceiptIcon, DeleteIcon } from '@/components/icons/hf'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
@@ -480,7 +481,7 @@ function IdleView({
     <>
       <div className="flex gap-2.5">
         <button type="button" onClick={onReceipt} className="flex flex-1 flex-col items-center gap-1.5 rounded-[14px] bg-hf-accent py-3.5 text-white">
-          <Camera className="h-4.5 w-4.5" />
+          <CameraReceiptIcon className="h-4.5 w-4.5" />
           <span className="text-[13px] font-medium">Чек</span>
         </button>
         <button type="button" onClick={onStatement} className="flex flex-1 flex-col items-center gap-1.5 rounded-[14px] bg-hf-card py-3.5 text-hf-text-2">
@@ -557,7 +558,7 @@ function IdleView({
                   aria-label={`Удалить: ${row.label}`}
                   className="text-hf-text-4"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <DeleteIcon className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
@@ -748,7 +749,7 @@ function ParsedReceiptView({
               className="w-20 shrink-0 bg-transparent text-right font-mono"
             />
             <button type="button" onClick={() => removeItem(i)} aria-label="Удалить позицию" className="shrink-0 text-hf-ink-soft">
-              <Trash2 className="h-3.5 w-3.5" />
+              <DeleteIcon className="h-3.5 w-3.5" />
             </button>
           </motion.div>
         ))}

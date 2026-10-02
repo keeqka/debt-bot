@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Copy, Download, Link2, Send } from 'lucide-react'
+import { Download, Link2, Send } from 'lucide-react'
+import { CopyIcon } from '@/components/icons/hf'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { createReportLink, getReportHtml } from '@/lib/api'
 import { shareLink } from '@/lib/bot'
@@ -101,7 +102,7 @@ export function ReportSheet({ open, onOpenChange }: { open: boolean; onOpenChang
                   onClick={() => copy(link.url)}
                   className="flex flex-1 items-center justify-center gap-2 rounded-[13px] bg-hf-card py-3.5 text-[15px] text-hf-text-2"
                 >
-                  <Copy className="h-4 w-4" />
+                  <CopyIcon className="h-4 w-4" />
                   Копировать
                 </button>
               </div>
