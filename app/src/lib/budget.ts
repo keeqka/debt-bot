@@ -363,6 +363,27 @@ function median(values: number[]) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
+/**
+ * Границы бюджетного месяца со сдвигом: back=0 — текущий, 1 — прошлый и т.д.
+ * startDay — settings.periodStartDay (null — календарный). Конец включительно.
+ * Та же арифметика, что внутри computeBudget; нужна выписке, чтобы суммировать прошлый месяц.
+ */
+export function budgetPeriod(today: Date, startDay: number | null, back = 0): { start: string; end: string; days: number } {
+  const lastDayOf = (y: number, m: number) => new Date(y, m + 1, 0).getDate()
+  const startOf = (idx: number) => {
+    const y = Math.floor(idx / 12)
+    const m = idx % 12
+    return Date.UTC(y, m, startDay == null ? 1 : Math.min(startDay, lastDayOf(y, m)))
+  }
+  const y = today.getFullYear()
+  const m = today.getMonth()
+  const d = today.getDate()
+  const cur = startDay != null && d < Math.min(startDay, lastDayOf(y, m)) ? monthIndex(y, m) - 1 : monthIndex(y, m)
+  const idx = cur - back
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+  return { start: iso(startOf(idx)), end: iso(startOf(idx + 1) - 86_400_000), days: Math.round((startOf(idx + 1) - startOf(idx)) / 86_400_000) }
+}
+
 export function computeBudget(input: BudgetInput): Budget {
   const today = input.today ?? new Date()
   // Бюджетный месяц: календарный или от дня зарплаты (settings.periodStartDay).

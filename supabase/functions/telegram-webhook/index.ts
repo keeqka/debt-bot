@@ -29,6 +29,8 @@ import { findMember, inviteErrorCode, type AppUser } from '../_shared/get-or-cre
 import { downloadTelegramFile } from '../_shared/telegram-file.ts'
 import { parseReceiptFile } from '../_shared/receipt-tool.ts'
 import { findMerchantRule } from '../_shared/merchant.ts'
+import { buildReportHtml } from '../_shared/report.ts'
+import { sendTelegramDocument } from '../_shared/telegram-send.ts'
 import { decodePayload } from '../_shared/stars.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -243,7 +245,7 @@ async function handleStart(message: AnyRecord, member: AppUser | null) {
   if (member) {
     await sendTelegramMessage(
       chatId,
-      'Открой приложение кнопкой ниже. Сюда будут приходить сводки и напоминания.\n\nЧек можно прислать прямо в этот чат — разберу и предложу добавить расход.\n\nПригласить партнёра в семью — /partner.',
+      'Открой приложение кнопкой ниже. Сюда будут приходить сводки и напоминания.\n\nЧек можно прислать прямо в этот чат — разберу и предложу добавить расход.\n\nВыписка за месяц — /report. Пригласить партнёра в семью — /partner.',
       openAppButton(),
     )
     return
@@ -503,6 +505,18 @@ Deno.serve(async (req) => {
 
     if (command === '/partner') {
       await sendInvite(message.chat.id, member, 'partner')
+      return jsonResponse({ ok: true })
+    }
+
+    if (command === '/report') {
+      try {
+        const html = await buildReportHtml(getAdminClient(), member.household_id)
+        const ok = await sendTelegramDocument(message.chat.id, `hlow-flow-vypiska-${new Date().toISOString().slice(0, 10)}.html`, html, 'Выписка Hlow Flow. Открой файл в браузере.')
+        if (!ok) await sendTelegramMessage(message.chat.id, 'Не получилось отправить выписку — попробуй ещё раз или открой её в приложении.')
+      } catch (error) {
+        console.error('report failed', error)
+        await sendTelegramMessage(message.chat.id, 'Не получилось собрать выписку — попробуй позже.')
+      }
       return jsonResponse({ ok: true })
     }
 

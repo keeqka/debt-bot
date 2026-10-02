@@ -25,3 +25,19 @@ export function assertCronSecret(req: Request) {
     throw new Error('Unauthorized cron call')
   }
 }
+
+/** Файл в чат (sendDocument): выписка уходит как .html — открывается в браузере, пересылается и хранится. */
+export async function sendTelegramDocument(chatId: number, filename: string, content: string, caption?: string): Promise<boolean> {
+  const form = new FormData()
+  form.append('chat_id', String(chatId))
+  form.append('document', new Blob([content], { type: 'text/html' }), filename)
+  if (caption) form.append('caption', caption)
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.telegramBotToken}/sendDocument`, { method: 'POST', body: form })
+    if (res.ok) return true
+    console.error(`Telegram sendDocument failed: ${res.status} ${await res.text()}`)
+  } catch (error) {
+    console.error('Telegram sendDocument threw', error)
+  }
+  return false
+}

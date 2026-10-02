@@ -597,6 +597,20 @@ export async function updateHouseholdSettings(patch: Partial<HouseholdSettings>)
   return getHouseholdSettings()
 }
 
+/** «Выписка» — HTML-чек (supabase/functions/report); send: true присылает его файлом в Telegram. */
+export async function getReportHtml(): Promise<string> {
+  if (!isBackendConfigured) {
+    return '<!doctype html><meta charset="utf-8"><body style="font:14px monospace;padding:24px;background:#F6F1E8">Выписка собирается на сервере — в демо-режиме её нет.</body>'
+  }
+  const { html } = await callFunction<{ html: string }>('report', {})
+  return html
+}
+
+export async function sendReportToTelegram(): Promise<void> {
+  if (!isBackendConfigured) throw new Error('Отправка работает только в Telegram')
+  await callFunction<{ ok: boolean }>('report', { send: true })
+}
+
 /** Stars subscription invoice link (stars-invoice) — opened with Telegram.WebApp.openInvoice. */
 export async function createStarsInvoice(): Promise<string> {
   if (!isBackendConfigured) throw new Error('Оплата работает только в Telegram')

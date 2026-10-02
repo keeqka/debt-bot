@@ -7,6 +7,7 @@ import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar, Mascot } from '@/components/Mascot'
 import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
+import { ReportSheet } from '@/components/overview/ReportSheet'
 import { useMonth, useExpenses, useDebts, useGoals, useStatus, useDebtFreeDate } from '@/hooks/use-finance-data'
 import { goalsWaitUntil } from '@/lib/goal'
 import { computeInsight } from '@/lib/insight'
@@ -38,6 +39,7 @@ export function Overview() {
   const { data: debts } = useDebts()
   const { data: status } = useStatus()
   const [setupOpen, setSetupOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
 
   const activeDebts = (debts ?? []).filter((d) => d.status === 'active')
   // Same budget extra and same simulation as the Debts screen's default plan,
@@ -232,6 +234,18 @@ export function Overview() {
 
       <button
         type="button"
+        onClick={() => setReportOpen(true)}
+        className="flex w-full items-center justify-between gap-3 rounded-[16px] bg-hf-card px-3.5 py-3 text-left"
+      >
+        <span className="min-w-0">
+          <span className="block text-[13px] font-medium text-hf-text">Выписка</span>
+          <span className="block text-[11px] text-hf-text-4">Как прошёл месяц, что поправить, долги и цели</span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-hf-text-4" />
+      </button>
+
+      <button
+        type="button"
         onClick={() => setSetupOpen(true)}
         className="w-full pt-1 text-center text-[11px] text-hf-text-4"
       >
@@ -239,6 +253,7 @@ export function Overview() {
       </button>
 
       <BudgetSetupSheet open={setupOpen} onOpenChange={setSetupOpen} />
+      <ReportSheet open={reportOpen} onOpenChange={setReportOpen} />
     </div>
   )
 }

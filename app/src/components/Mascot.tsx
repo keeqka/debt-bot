@@ -11,16 +11,18 @@ export type Expression = 'calm' | 'focused' | 'happy' | 'alert' | 'thinking'
  *
  * Между состояниями меняются ТОЛЬКО глаза и рот. Бровей нет.
  */
-const TORN =
-  'M0,4 L8.33,0 L16.67,4 L25,0 L33.33,4 L41.67,0 L50,4 L58.33,0 L66.67,4 L75,0 L83.33,4 L91.67,0 L100,4 ' +
-  'V246 L91.67,250 L83.33,246 L75,250 L66.67,246 L58.33,250 L50,246 L41.67,250 L33.33,246 L25,250 L16.67,246 L8.33,250 L0,246 Z'
+const BASE_ROWS = 4
+const ROW_STEP = 15
+const LABEL_W = [24, 34, 28, 20]
+const AMOUNT_W = [16, 12, 18, 14]
 
-const PRINT_ROWS = [
-  { y: 97.5, labelW: 24, amountW: 16 },
-  { y: 112.5, labelW: 34, amountW: 12 },
-  { y: 127.5, labelW: 28, amountW: 18 },
-  { y: 142.5, labelW: 20, amountW: 14 },
-]
+/** Рваный верх и низ — 13 зубцов; низ сидит на высоте `h`, поэтому лента может быть длиннее или короче. */
+function tornPath(h: number) {
+  return (
+    'M0,4 L8.33,0 L16.67,4 L25,0 L33.33,4 L41.67,0 L50,4 L58.33,0 L66.67,4 L75,0 L83.33,4 L91.67,0 L100,4 ' +
+    `V${h - 4} L91.67,${h} L83.33,${h - 4} L75,${h} L66.67,${h - 4} L58.33,${h} L50,${h - 4} L41.67,${h} L33.33,${h - 4} L25,${h} L16.67,${h - 4} L8.33,${h} L0,${h - 4} Z`
+  )
+}
 
 function faceShapes(expression: Expression) {
   if (expression === 'focused') {
@@ -96,10 +98,16 @@ export function Mascot({
   className,
   title = 'Чек — маскот Hlow Flow',
   bounce = false,
+  rows = BASE_ROWS,
 }: {
   expression?: Expression
   className?: string
   title?: string
+  /**
+   * Длина ленты = объём трат (брендбук «Фирменный трюк»): число строк печати
+   * между лицом и «итого». 4 — обычная лента, меньше — короче, больше — длиннее.
+   */
+  rows?: number
   /**
    * One-shot celebratory bounce (ANIMATIONS.md §1, e.g. a debt just closed) —
    * flip this from false to true to play it; framer-motion only replays a
@@ -110,11 +118,14 @@ export function Mascot({
 }) {
   const reduced = useReducedMotion()
   const isThinking = expression === 'thinking'
+  const count = Math.max(1, Math.round(rows))
+  const shift = (count - BASE_ROWS) * ROW_STEP
+  const height = 250 + shift
 
   return (
-    <svg viewBox="0 0 100 250" className={cn('h-full w-full', className)} role="img" aria-label={title}>
+    <svg viewBox={`0 0 100 ${height}`} className={cn('h-full w-full', className)} role="img" aria-label={title}>
       <motion.g
-        style={{ transformOrigin: '50px 125px' }}
+        style={{ transformOrigin: `50px ${height / 2}px` }}
         animate={{
           rotate: isThinking && !reduced ? [-2.5, -1.5, -2.5] : -2.5,
           y: bounce && !reduced ? [0, -6, 0] : 0,
@@ -127,27 +138,27 @@ export function Mascot({
           y: { duration: reduced ? 0 : 0.5, ease: 'easeOut' },
         }}
       >
-        <path d={TORN} fill="#F6F1E8" />
+        <path d={tornPath(height)} fill="#F6F1E8" />
         <rect x="20" y="11" width="60" height="4" rx="1" fill="#BDB4A5" />
 
         <Face expression={expression} />
 
         <rect x="20" y="82.5" width="60" height="1" fill="#DED6C8" />
-        {PRINT_ROWS.map((r) => (
-          <g key={r.y} fill="#D8D0C2">
-            <rect x="20" y={r.y} width={r.labelW} height="3" rx="1" />
-            <rect x={80 - r.amountW} y={r.y} width={r.amountW} height="3" rx="1" />
+        {Array.from({ length: count }, (_, i) => (
+          <g key={i} fill="#D8D0C2">
+            <rect x="20" y={97.5 + i * ROW_STEP} width={LABEL_W[i % LABEL_W.length]} height="3" rx="1" />
+            <rect x={80 - AMOUNT_W[i % AMOUNT_W.length]} y={97.5 + i * ROW_STEP} width={AMOUNT_W[i % AMOUNT_W.length]} height="3" rx="1" />
           </g>
         ))}
 
-        <rect x="20" y="162.5" width="60" height="1" fill="#DED6C8" />
-        <rect x="20" y="172" width="22" height="5.5" rx="1" fill="#BDB4A5" />
+        <rect x="20" y={162.5 + shift} width="60" height="1" fill="#DED6C8" />
+        <rect x="20" y={172 + shift} width="22" height="5.5" rx="1" fill="#BDB4A5" />
         {/* единственный синий элемент на маскоте — строка «итого» */}
-        <rect x="54" y="172" width="26" height="5.5" rx="1" fill="#3C82C8" />
+        <rect x="54" y={172 + shift} width="26" height="5.5" rx="1" fill="#3C82C8" />
 
-        <rect x="20" y="205" width="60" height="2.8" rx="1" fill="#E2DACC" />
-        <rect x="20" y="217" width="34" height="2.8" rx="1" fill="#E2DACC" />
-        <rect x="20" y="229" width="24" height="2.8" rx="1" fill="#E2DACC" />
+        <rect x="20" y={205 + shift} width="60" height="2.8" rx="1" fill="#E2DACC" />
+        <rect x="20" y={217 + shift} width="34" height="2.8" rx="1" fill="#E2DACC" />
+        <rect x="20" y={229 + shift} width="24" height="2.8" rx="1" fill="#E2DACC" />
       </motion.g>
     </svg>
   )
