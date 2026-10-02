@@ -90,6 +90,7 @@ export interface AccessInfo {
 export type InviteKind = 'household' | 'partner'
 
 export type DebtStatus = 'active' | 'closed'
+export type DebtKind = 'loan' | 'credit_card'
 
 export interface Debt {
   id: Uuid
@@ -102,6 +103,10 @@ export interface Debt {
   interest_rate: number | null
   minimum_payment: number
   due_day: number | null
+  /** Кредит или кредитная карта: с карты можно снимать, остаток при этом растёт. */
+  kind: DebtKind
+  /** Лимит карты; null — не указан. */
+  credit_limit: number | null
   /** Ежемесячный взнос сверх минимума (экран «Досрочка»); входит в обязательные платежи. */
   extra_monthly: number
   status: DebtStatus
@@ -115,6 +120,15 @@ export interface DebtPayment {
   amount: number
   paid_at: string
   is_extra: boolean
+  note: string | null
+}
+
+/** Снятие с кредитной карты: остаток долга растёт на сумму (debt_draws). */
+export interface DebtDraw {
+  id: Uuid
+  debt_id: Uuid
+  amount: number
+  drawn_at: string
   note: string | null
 }
 

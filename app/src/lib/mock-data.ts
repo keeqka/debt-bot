@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   Debt,
   DebtPayment,
+  DebtDraw,
   Expense,
   Goal,
   HouseholdSettings,
@@ -78,6 +79,8 @@ export const mockCategories: Category[] = [
   { id: 'c8', name: 'Фриланс', icon: 'laptop', type: 'income', is_system: true },
 ]
 
+export const mockDebtDraws: DebtDraw[] = []
+
 export const mockDebts: Debt[] = [
   {
     id: 'd1',
@@ -89,6 +92,8 @@ export const mockDebts: Debt[] = [
     currency: 'KZT',
     interest_rate: 18.5,
     minimum_payment: 145_000,
+    kind: 'loan',
+    credit_limit: null,
     extra_monthly: 0,
     due_day: 5,
     status: 'active',
@@ -105,6 +110,8 @@ export const mockDebts: Debt[] = [
     currency: 'KZT',
     interest_rate: 0,
     minimum_payment: 40_000,
+    kind: 'loan',
+    credit_limit: null,
     extra_monthly: 0,
     due_day: 12,
     status: 'active',
@@ -121,6 +128,8 @@ export const mockDebts: Debt[] = [
     currency: 'KZT',
     interest_rate: 25,
     minimum_payment: 15_000,
+    kind: 'credit_card',
+    credit_limit: 200_000,
     extra_monthly: 0,
     due_day: 20,
     status: 'active',
@@ -137,6 +146,8 @@ export const mockDebts: Debt[] = [
     currency: 'KZT',
     interest_rate: 0,
     minimum_payment: 0,
+    kind: 'loan',
+    credit_limit: null,
     extra_monthly: 0,
     due_day: 15,
     status: 'closed',

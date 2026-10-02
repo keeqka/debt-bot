@@ -1,4 +1,4 @@
-import { Settings2 } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import { MODE_META, STRATEGY_META } from '@/lib/plan-text'
 import { formatMoney, formatMonthYear } from '@/lib/format'
 import type { ProposedSettings } from '@/types/domain'
@@ -60,7 +60,7 @@ export function ProposedSettingsCard({
   return (
     <div className={inline ? 'w-full space-y-2 rounded-[16px] bg-hf-card p-3' : 'ml-9 w-fit max-w-[82%] space-y-2 rounded-[16px_16px_16px_4px] bg-hf-card p-3'}>
       <div className="flex items-center gap-1.5 text-xs font-semibold text-hf-text">
-        <Settings2 className="h-3.5 w-3.5" />
+        <Settings className="h-3.5 w-3.5" />
         Изменить настройки
       </div>
       <ul className="space-y-0.5 text-xs text-hf-text-2">

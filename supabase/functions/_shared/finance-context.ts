@@ -18,6 +18,9 @@ export interface SnapshotDebt {
   min_payment: number
   /** Ежемесячный взнос сверх минимума; в min_payment его нет, но в плане он часть платежа. */
   extra_monthly: number
+  /** Кредитная карта: с неё снимают, остаток растёт. */
+  is_card: boolean
+  credit_limit: number | null
 }
 
 export interface FinancialSnapshot {
@@ -76,7 +79,7 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
         'spent_at',
         monthStart(today, 4),
       ),
-      scope(supabase.from('debts').select('id, title, current_balance, interest_rate, minimum_payment, extra_monthly, status')).eq('status', 'active'),
+      scope(supabase.from('debts').select('id, title, current_balance, interest_rate, minimum_payment, extra_monthly, status, kind, credit_limit')).eq('status', 'active'),
       scope(supabase.from('debt_payments').select('debt_id, amount, paid_at')).gte('paid_at', monthStart(today, 1)),
       scope(supabase.from('goals').select('title, target_amount, current_amount, target_date, is_cushion')).eq('status', 'active'),
       householdId
@@ -98,7 +101,7 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
     : DEFAULT_PLAN_SETTINGS
 
   const num = (v: unknown) => Number(v ?? 0)
-  const activeDebts: Array<{ id: string; title: string; status: string; current_balance: number; interest_rate: number | null; minimum_payment: number; extra_monthly: number }> = (debts ?? []).map((d: Record<string, unknown>) => ({
+  const activeDebts: Array<{ id: string; title: string; status: string; current_balance: number; interest_rate: number | null; minimum_payment: number; extra_monthly: number; is_card: boolean; credit_limit: number | null }> = (debts ?? []).map((d: Record<string, unknown>) => ({
     id: String(d.id),
     title: String(d.title),
     status: 'active',
@@ -106,6 +109,8 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
     interest_rate: d.interest_rate == null ? null : num(d.interest_rate),
     minimum_payment: num(d.minimum_payment),
     extra_monthly: num(d.extra_monthly),
+    is_card: d.kind === 'credit_card',
+    credit_limit: d.credit_limit == null ? null : num(d.credit_limit),
   }))
 
   const householdUsers = (users ?? []).map((u: { id: string; monthly_income: number | null }) => ({
@@ -145,6 +150,8 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
     rate: d.interest_rate,
     min_payment: d.minimum_payment,
     extra_monthly: d.extra_monthly,
+    is_card: d.is_card,
+    credit_limit: d.credit_limit,
   }))
 
   return {
@@ -207,7 +214,7 @@ export function snapshotToPrompt(s: FinancialSnapshot): string {
     `Траты этого месяца по категориям: ${b.categories.map((c) => `${c.name}=${r(c.amount)}${c.typical != null ? ` (обычно за месяц ${r(c.typical)})` : ''}`).join(', ') || '—'}.`,
     assessMonth(s.budgetInput, s.budgetModel).note,
     `Перерасход и аномалии: ${b.signals.length ? b.signals.map((x) => x.text).join(' ') : 'не найдено'}`,
-    `Долги: ${s.debts.map((d) => `${d.title} (остаток ${r(d.balance)}, ${d.rate ?? 0}%, мин. платёж ${r(d.min_payment)}${d.extra_monthly > 0 ? `, сверх него вносят ${r(d.extra_monthly)} в месяц` : ''})`).join('; ') || 'нет'}. Общий долг: ${r(s.totalDebt)}.`,
+    `Долги: ${s.debts.map((d) => `${d.title} (${d.is_card ? `кредитная карта${d.credit_limit != null ? `, лимит ${r(d.credit_limit)}, доступно ${r(Math.max(0, d.credit_limit - d.balance))}` : ''}, ` : ''}остаток ${r(d.balance)}, ${d.rate ?? 0}%, мин. платёж ${r(d.min_payment)}${d.extra_monthly > 0 ? `, сверх него вносят ${r(d.extra_monthly)} в месяц` : ''})`).join('; ') || 'нет'}. Общий долг: ${r(s.totalDebt)}.`,
     p.hasDebts
       ? `План по текущим настройкам: ${p.closures.map((c) => `${c.title} закроется ${c.date}`).join(', ') || 'долги не закрываются'}; все долги — ${p.debtFreeDate ?? 'не закроются за 50 лет'}; переплата по процентам ${r(p.totalInterest)}.`
       : '',

@@ -7,6 +7,7 @@ import type {
   Debt,
   DebtDraft,
   DebtPayment,
+  DebtDraw,
   HouseholdSettings,
   AnnualExpense,
   NeedKind,
@@ -98,6 +99,24 @@ export async function addDebtPayment(payment: Omit<DebtPayment, 'id'>): Promise<
   }
   const { error } = await supabase.from('debt_payments').insert(payment)
   if (error) throw error
+}
+
+/** Снятие с кредитной карты: остаток растёт (в БД то же делает триггер 0025; лимит проверяет и он). */
+export async function addDebtDraw(draw: Omit<DebtDraw, 'id'>): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const debt = mock.mockDebts.find((d) => d.id === draw.debt_id)
+    if (!debt || debt.kind !== 'credit_card') throw new Error('Снятие доступно только для кредитной карты')
+    if (debt.credit_limit != null && debt.current_balance + draw.amount > debt.credit_limit) {
+      throw new Error(`Превышен лимит карты: доступно ${Math.max(0, debt.credit_limit - debt.current_balance)}`)
+    }
+    mock.mockDebtDraws.unshift({ ...draw, id: crypto.randomUUID() })
+    debt.current_balance += draw.amount
+    debt.principal_amount = Math.max(debt.principal_amount, debt.current_balance)
+    debt.status = 'active'
+    return
+  }
+  const { error } = await supabase.from('debt_draws').insert(draw)
+  if (error) throw new Error(error.message.replace(/^.*?(Превышен лимит[^"]*)$/, '$1'))
 }
 
 export async function addDebt(debt: Omit<Debt, 'id'>): Promise<Debt> {

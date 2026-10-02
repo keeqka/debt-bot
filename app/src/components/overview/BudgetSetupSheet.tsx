@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, X } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { useAddCategory, useCategories, useDeleteAllExpenses, useDeleteCategory, useExpenses, useUpdateUser } from '@/hooks/use-finance-data'
 import { useCurrentUser } from '@/lib/auth'
@@ -174,7 +174,7 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
                       aria-label={`Удалить категорию ${c.name}`}
                       className="shrink-0 text-hf-text-4"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   )}
                 </li>

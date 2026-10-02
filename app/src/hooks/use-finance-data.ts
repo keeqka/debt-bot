@@ -284,6 +284,19 @@ export function useAddDebtPayment() {
   })
 }
 
+/** Снятие с кредитки: пересчитывается всё, что считается от остатков долгов (план, дата свободы, статус). */
+export function useAddDebtDraw() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.addDebtDraw,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.debts })
+      queryClient.invalidateQueries({ queryKey: queryKeys.status })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Не удалось записать снятие'),
+  })
+}
+
 export function useAddDebt() {
   const queryClient = useQueryClient()
   return useMutation({

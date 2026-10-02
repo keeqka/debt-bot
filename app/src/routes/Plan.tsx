@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, CircleDollarSign, Pencil, Trash2, SlidersHorizontal, Zap } from 'lucide-react'
+import { Plus, CircleDollarSign, HandCoins, Pencil, Trash2, Settings, Scale, Zap } from 'lucide-react'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
 import { Eyebrow, Action, ActionBar } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
@@ -19,6 +19,8 @@ import type { Debt, ProposedDebt } from '@/types/domain'
 import { cn } from '@/lib/utils'
 import { AddDebtDialog } from '@/components/debts/AddDebtDialog'
 import { RecordPaymentDialog } from '@/components/debts/RecordPaymentDialog'
+import { DrawDebtDialog } from '@/components/debts/DrawDebtDialog'
+import { cardAvailable } from '@/lib/credit-card'
 import { EarlyPayoffSheet } from '@/components/debts/EarlyPayoffSheet'
 import { StrategyCompareSheet } from '@/components/debts/StrategyCompareSheet'
 import { NewDebtCheckSheet } from '@/components/debts/NewDebtCheckSheet'
@@ -55,6 +57,8 @@ export function Plan() {
   const updateSettings = useUpdateHouseholdSettings()
 
   const activeDebts = useMemo(() => debts?.filter((d) => d.status === 'active' && d.current_balance > 0) ?? [], [debts])
+  // Погашенные карты: долга нет, но снимать с них можно — оставляем отдельным списком.
+  const idleCards = useMemo(() => debts?.filter((d) => d.kind === 'credit_card' && !(d.status === 'active' && d.current_balance > 0)) ?? [], [debts])
 
   // Сколько сверх минимумов — из бюджета (lib/budget.ts); поле можно поправить
   // руками, чтобы посмотреть «что если». Всё считается локально той же
@@ -102,6 +106,7 @@ export function Plan() {
   }, [searchParams, setSearchParams, isLoading])
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
   const [payingDebt, setPayingDebt] = useState<Debt | null>(null)
+  const [drawingDebt, setDrawingDebt] = useState<Debt | null>(null)
   const [earlyDebt, setEarlyDebt] = useState<Debt | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
   const [checkOpen, setCheckOpen] = useState(false)
@@ -147,7 +152,7 @@ export function Plan() {
               {MODE_META[month.settings.mode].label} · {STRATEGY_META[month.settings.strategy].label}
             </span>
           </span>
-          <SlidersHorizontal className="h-4 w-4 shrink-0 text-hf-text-4" />
+          <Settings className="h-4 w-4 shrink-0 text-hf-text-4" />
         </button>
       )}
 
@@ -213,7 +218,7 @@ export function Plan() {
                   <span className="block text-[13px] font-medium text-hf-text">Пересчитать план</span>
                   <span className="block text-[11px] text-hf-text-4">Лавина или снежный ком — бок о бок</span>
                 </span>
-                <SlidersHorizontal className="h-4 w-4 shrink-0 text-hf-text-4" />
+                <Scale className="h-4 w-4 shrink-0 text-hf-text-4" />
               </button>
             )}
             <div className="flex rounded-[13px] bg-hf-card p-1">
@@ -257,6 +262,27 @@ export function Plan() {
               const debt = activeDebts.find((x) => x.id === d.id)
               if (!debt) return null
               const progress = ((debt.principal_amount - debt.current_balance) / debt.principal_amount) * 100
+              const isCard = debt.kind === 'credit_card'
+              const manage = (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setEditingDebt(debt)}
+                    aria-label={`Редактировать ${debt.title}`}
+                    className="flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-text-2"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeletingDebt(debt)}
+                    aria-label={`Удалить ${debt.title}`}
+                    className="flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-warn-on-dark"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )
               return (
                 <motion.div
                   key={debt.id}
@@ -277,15 +303,25 @@ export function Plan() {
                     {isCheap(debt) ? 'Дешёвый долг — после полной подушки' : i === 0 ? STRATEGY_META[strategy].first : 'Минимальный платёж, пока не дойдёт очередь'}
                     {closureOf(debt.id) ? ` · закроется: ${formatMonthYear(closureOf(debt.id))}` : ''}
                   </p>
-                  <div className="flex gap-2 pt-1">
+                  <div className={cn('gap-2 pt-1', debt.kind === 'credit_card' ? 'grid grid-cols-3' : 'flex flex-wrap')}>
                     <button
                       type="button"
                       onClick={() => setPayingDebt(debt)}
-                      className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar py-2 text-xs text-hf-text-2"
+                      className="flex min-h-11 min-w-[84px] flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar py-2 text-xs text-hf-text-2"
                     >
                       <CircleDollarSign className="h-3.5 w-3.5" />
                       Платёж
                     </button>
+                    {debt.kind === 'credit_card' && (
+                      <button
+                        type="button"
+                        onClick={() => setDrawingDebt(debt)}
+                        className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar py-2 text-xs text-hf-text-2"
+                      >
+                        <HandCoins className="h-3.5 w-3.5" />
+                        Снять
+                      </button>
+                    )}
                     {features.debtSim && (
                       <button
                         type="button"
@@ -296,22 +332,16 @@ export function Plan() {
                         Досрочно
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => setEditingDebt(debt)}
-                      className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-text-2"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeletingDebt(debt)}
-                      aria-label={`Удалить ${debt.title}`}
-                      className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar px-3 py-2 text-xs text-hf-warn-on-dark"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {!isCard && manage}
                   </div>
+                  {isCard && (
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0 font-mono text-[11px] text-hf-text-4">
+                        {debt.credit_limit != null ? `Лимит ${formatMoney(debt.credit_limit)} · доступно ${formatMoney(cardAvailable(debt) ?? 0)}` : 'Лимит не указан'}
+                      </p>
+                      <div className="flex shrink-0 gap-2">{manage}</div>
+                    </div>
+                  )}
                 </motion.div>
               )
             })}
@@ -327,6 +357,38 @@ export function Plan() {
             </Action>
           </ActionBar>
         </>
+      )}
+
+      {idleCards.length > 0 && (
+        <div className="flex flex-col gap-2.5">
+          <Eyebrow>Кредитки без долга</Eyebrow>
+          {idleCards.map((card) => (
+            <div key={card.id} className="flex items-center gap-2.5 rounded-[16px] bg-hf-card p-3.5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-hf-text">{card.title}</p>
+                <p className="font-mono text-[11px] text-hf-text-4">
+                  {card.credit_limit != null ? `доступно ${formatMoney(cardAvailable(card) ?? 0)}` : 'лимит не указан'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDrawingDebt(card)}
+                className="flex min-h-11 items-center justify-center gap-1.5 rounded-[10px] bg-hf-bar px-3.5 text-xs text-hf-text-2"
+              >
+                <HandCoins className="h-3.5 w-3.5" />
+                Снять
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingDebt(card)}
+                aria-label={`Редактировать ${card.title}`}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-[10px] bg-hf-bar text-hf-text-2"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
       )}
 
       <div ref={goalsRef} className="scroll-mt-4 pt-2">
@@ -346,6 +408,7 @@ export function Plan() {
       <AddDebtDialog open={addOpen} onOpenChange={setAddOpen} prefill={addPrefill} />
       <AddDebtDialog open={Boolean(editingDebt)} onOpenChange={(open) => !open && setEditingDebt(null)} debt={editingDebt ?? undefined} />
       <RecordPaymentDialog open={Boolean(payingDebt)} onOpenChange={(open) => !open && setPayingDebt(null)} debt={payingDebt} />
+      <DrawDebtDialog open={Boolean(drawingDebt)} onOpenChange={(open) => !open && setDrawingDebt(null)} debt={drawingDebt} />
       <StrategyCompareSheet open={compareOpen} onOpenChange={setCompareOpen} />
       <EarlyPayoffSheet open={Boolean(earlyDebt)} onOpenChange={(open) => !open && setEarlyDebt(null)} debt={earlyDebt} />
 

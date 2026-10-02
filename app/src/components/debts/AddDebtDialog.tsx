@@ -5,7 +5,7 @@ import { FormSheet, FormField, Segmented, SaveButton, formInputClass } from '@/c
 import { useAddDebt, useUpdateDebt } from '@/hooks/use-finance-data'
 import { useCurrentUserId } from '@/lib/auth'
 import { assistDebtDraft } from '@/lib/api'
-import type { Debt, DebtDraft, DebtStatus, ProposedDebt } from '@/types/domain'
+import type { Debt, DebtDraft, DebtKind, DebtStatus, ProposedDebt } from '@/types/domain'
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -26,6 +26,8 @@ interface FormState {
   dueDay: string
   status: DebtStatus
   notes: string
+  kind: DebtKind
+  creditLimit: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -38,6 +40,8 @@ const EMPTY_FORM: FormState = {
   dueDay: '',
   status: 'active',
   notes: '',
+  kind: 'loan',
+  creditLimit: '',
 }
 
 /**
@@ -86,6 +90,8 @@ export function AddDebtDialog({
         dueDay: debt.due_day != null ? String(debt.due_day) : '',
         status: debt.status,
         notes: debt.notes ?? '',
+        kind: debt.kind,
+        creditLimit: debt.credit_limit != null ? String(debt.credit_limit) : '',
       })
     } else if (prefill) {
       setForm({
@@ -124,6 +130,8 @@ export function AddDebtDialog({
         dueDay: draft.due_day != null ? String(draft.due_day) : f.dueDay,
         status: f.status,
         notes: f.notes,
+        kind: f.kind,
+        creditLimit: f.creditLimit,
       }))
       setDraftNote(draft)
       toast.success('Черновик заполнен — проверь перед сохранением')
@@ -156,6 +164,8 @@ export function AddDebtDialog({
       due_day: form.dueDay ? Number(form.dueDay) : null,
       status: form.status,
       notes: form.notes.trim() || null,
+      kind: form.kind,
+      credit_limit: form.kind === 'credit_card' && Number(form.creditLimit) > 0 ? Number(form.creditLimit) : null,
     }
 
     if (isEdit && debt) {
@@ -216,6 +226,15 @@ export function AddDebtDialog({
         {draftNote && <p className="text-[11px] leading-snug text-hf-accent-on-dark">{draftNote.source_note}</p>}
       </div>
 
+      <Segmented
+        value={form.kind}
+        onChange={(v) => update('kind', v)}
+        options={[
+          { value: 'loan', label: 'Кредит / рассрочка' },
+          { value: 'credit_card', label: 'Кредитная карта' },
+        ]}
+      />
+
       <FormField label="Название">
         <input value={form.title} onChange={(e) => update('title', e.target.value)} placeholder="Кредит на авто" className={formInputClass} />
       </FormField>
@@ -245,6 +264,11 @@ export function AddDebtDialog({
           <input type="number" inputMode="decimal" value={form.minimumPayment} onChange={(e) => update('minimumPayment', e.target.value)} placeholder="0" className={formInputClass} />
         </FormField>
       </div>
+      {form.kind === 'credit_card' && (
+        <FormField label="Лимит карты, ₸ (чтобы знать, сколько можно снять)">
+          <input type="number" inputMode="decimal" value={form.creditLimit} onChange={(e) => update('creditLimit', e.target.value)} placeholder="0" className={formInputClass} />
+        </FormField>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <FormField label="День платежа">
           <input type="number" min={1} max={31} value={form.dueDay} onChange={(e) => update('dueDay', e.target.value)} placeholder="5" className={formInputClass} />
