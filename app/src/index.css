@@ -172,3 +172,11 @@
 .pb-safe {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
+
+/* Горизонтальные полосы (чипы фильтра) скроллятся без видимой полосы прокрутки. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

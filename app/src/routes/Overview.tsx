@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Camera, FileText, ChevronRight } from 'lucide-react'
+import { Camera, ChevronRight, Settings } from 'lucide-react'
 import { Eyebrow } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { MascotAvatar, Mascot } from '@/components/Mascot'
 import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
 import { ReportSheet } from '@/components/overview/ReportSheet'
+import { SettingsRow, rowClass } from '@/components/overview/SettingsRow'
 import { useMonth, useExpenses, useDebts, useGoals, useStatus, useDebtFreeDate } from '@/hooks/use-finance-data'
 import { goalsWaitUntil } from '@/lib/goal'
 import { computeInsight } from '@/lib/insight'
@@ -15,6 +16,7 @@ import { STATUS_META } from '@/lib/status'
 import { formatMoney, formatMoneyCompact, formatMonthYear, formatPercent } from '@/lib/format'
 import { useAnimatedNumber } from '@/hooks/use-animated-number'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
+import { useHeaderAction } from '@/lib/header-action'
 import { cn } from '@/lib/utils'
 
 /**
@@ -51,11 +53,31 @@ export function Overview() {
   // useAnimatedNumber never animates the very first value it sees anyway.
   const animatedAvailable = useAnimatedNumber(month?.available ?? 0)
 
+  useHeaderAction(
+    <button
+      type="button"
+      onClick={() => setSetupOpen(true)}
+      aria-label="Настройки"
+      className="grid h-[30px] w-[30px] place-items-center rounded-[9px] bg-hf-card text-hf-text-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent"
+    >
+      <Settings className="h-4 w-4" />
+    </button>,
+    [],
+  )
+
+  const sheets = (
+    <>
+      <BudgetSetupSheet open={setupOpen} onOpenChange={setSetupOpen} />
+      <ReportSheet open={reportOpen} onOpenChange={setReportOpen} />
+    </>
+  )
+
   if (!month) {
     return (
       <div className="space-y-3.5 pb-6">
         <div className="h-28 animate-pulse rounded-[18px] bg-hf-card" />
         <div className="h-44 animate-pulse rounded-[18px] bg-hf-card" />
+        {sheets}
       </div>
     )
   }
@@ -75,6 +97,7 @@ export function Overview() {
     return (
       <div className="space-y-3.5 pb-6">
         <EmptyState onUpload={() => navigate('/receipt?add=receipt')} />
+        {sheets}
       </div>
     )
   }
@@ -190,70 +213,47 @@ export function Overview() {
         )}
       </AnimatePresence>
 
-      <div className="flex gap-2.5">
-        <button
-          type="button"
-          onClick={() => navigate('/receipt?add=receipt')}
-          className="flex flex-1 flex-col items-center gap-1.5 rounded-[14px] bg-hf-accent py-3.5 text-white"
-        >
-          <Camera className="h-[18px] w-[18px]" />
-          <span className="text-[13px] font-medium">Загрузить чек</span>
+      <button
+        type="button"
+        onClick={() => navigate('/receipt?add=receipt')}
+        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-[14px] bg-hf-accent py-3 text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent"
+      >
+        <Camera className="h-[18px] w-[18px]" />
+        <span className="text-[13px] font-medium">Загрузить чек</span>
+      </button>
+
+      <div className="flex flex-col gap-2">
+        {activeDebts.length > 0 && (
+          <button type="button" onClick={() => navigate('/plan')} className={rowClass}>
+            <span className="min-w-0">
+              <span className="block font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Свобода от долгов</span>
+              <span className="mt-1 block text-[15px] font-medium text-hf-text">
+                {debtFreeDate === undefined ? 'считаю…' : formatMonthYear(debtFreeDate)}
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="font-mono text-[11px] text-hf-text-4">
+                {formatMoneyCompact(activeDebts.reduce((s, d) => s + d.current_balance, 0))}
+              </span>
+              <ChevronRight className="h-4 w-4 text-hf-text-4" />
+            </span>
+          </button>
+        )}
+
+        <GoalsLinkRow onOpen={() => navigate('/plan?to=goals')} />
+
+        <button type="button" onClick={() => setReportOpen(true)} className={rowClass}>
+          <span className="min-w-0">
+            <span className="block font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Выписка</span>
+            <span className="mt-1 block text-[13px] text-hf-text">Как прошёл месяц, что поправить</span>
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-hf-text-4" />
         </button>
-        <button
-          type="button"
-          onClick={() => navigate('/receipt')}
-          className="flex flex-1 flex-col items-center gap-1.5 rounded-[14px] bg-hf-card py-3.5 text-hf-text-2"
-        >
-          <FileText className="h-[18px] w-[18px]" />
-          <span className="text-[13px]">Выписка PDF</span>
-        </button>
+
+        <SettingsRow onClick={() => setSetupOpen(true)} />
       </div>
 
-      {activeDebts.length > 0 && (
-        <button
-          type="button"
-          onClick={() => navigate('/plan')}
-          className="flex w-full items-center justify-between gap-3 rounded-[16px] bg-hf-card px-3.5 py-3 text-left"
-        >
-          <span className="min-w-0">
-            <span className="block font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Свобода от долгов</span>
-            <span className="mt-1 block text-[15px] font-medium text-hf-text">
-              {debtFreeDate === undefined ? 'считаю…' : formatMonthYear(debtFreeDate)}
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-2">
-            <span className="font-mono text-[11px] text-hf-text-4">
-              {formatMoneyCompact(activeDebts.reduce((s, d) => s + d.current_balance, 0))}
-            </span>
-            <ChevronRight className="h-4 w-4 text-hf-text-4" />
-          </span>
-        </button>
-      )}
-
-      <GoalsLinkRow onOpen={() => navigate('/plan?to=goals')} />
-
-      <button
-        type="button"
-        onClick={() => setReportOpen(true)}
-        className="flex w-full items-center justify-between gap-3 rounded-[16px] bg-hf-card px-3.5 py-3 text-left"
-      >
-        <span className="min-w-0">
-          <span className="block text-[13px] font-medium text-hf-text">Выписка</span>
-          <span className="block text-[11px] text-hf-text-4">Как прошёл месяц, что поправить, долги и цели</span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-hf-text-4" />
-      </button>
-
-      <button
-        type="button"
-        onClick={() => setSetupOpen(true)}
-        className="w-full pt-1 text-center text-[11px] text-hf-text-4"
-      >
-        Настройки: доход, режим бота, стратегия, категории
-      </button>
-
-      <BudgetSetupSheet open={setupOpen} onOpenChange={setSetupOpen} />
-      <ReportSheet open={reportOpen} onOpenChange={setReportOpen} />
+      {sheets}
     </div>
   )
 }
@@ -288,7 +288,7 @@ function GoalsLinkRow({ onOpen }: { onOpen: () => void }) {
   ].filter(Boolean)
 
   return (
-    <button type="button" onClick={onOpen} className="flex w-full items-center justify-between gap-3 rounded-[16px] bg-hf-card px-3.5 py-3 text-left">
+    <button type="button" onClick={onOpen} className={rowClass}>
       <span className="min-w-0">
         <span className="block font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Подушка и цели</span>
         <span className="mt-1 block truncate text-[13px] text-hf-text">{parts.length ? parts.join(' · ') : 'Поставить первую цель'}</span>

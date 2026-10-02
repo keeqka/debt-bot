@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -42,6 +42,27 @@ function validateFile(file: File): string | null {
   if (!okType) return 'Неподдерживаемый формат — нужно фото или PDF.'
   if (file.size > MAX_FILE_BYTES) return 'Файл слишком большой (максимум 15 МБ).'
   return null
+}
+
+/** «1 чек / 2–4 чека / 5+ чеков» — с учётом 11–14. */
+function receiptsWord(n: number) {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return 'чек'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'чека'
+  return 'чеков'
+}
+
+/** Чипы фильтра: только категории, где есть хотя бы один расход, крупные суммы первыми. */
+function categoryChips(expenses: Expense[], categories: Category[]) {
+  const sums = new Map<string, number>()
+  for (const e of expenses) {
+    if (e.category_id) sums.set(e.category_id, (sums.get(e.category_id) ?? 0) + e.amount)
+  }
+  return categories
+    .filter((c) => sums.has(c.id))
+    .map((c) => ({ id: c.id, name: c.name, sum: sums.get(c.id)! }))
+    .sort((a, b) => b.sum - a.sum)
 }
 
 /**
@@ -107,6 +128,14 @@ export function Receipt() {
   const receiptInputRef = useRef<HTMLInputElement>(null)
   const statementInputRef = useRef<HTMLInputElement>(null)
   const [manualOpen, setManualOpen] = useState(searchParams.get('add') === 'manual')
+
+  // Фильтр списка «Последнее» по категории (id или 'all') — не сохраняется между сессиями.
+  const [catFilter, setCatFilter] = useState<string>('all')
+  const chips = useMemo(() => categoryChips(expenses ?? [], categories ?? []), [expenses, categories])
+  // Удалили последнюю трату выбранной категории — её чипа больше нет, возвращаемся на «Все».
+  useEffect(() => {
+    if (catFilter !== 'all' && !chips.some((c) => c.id === catFilter)) setCatFilter('all')
+  }, [chips, catFilter])
 
   useEffect(() => {
     if (searchParams.get('add') === 'receipt') receiptInputRef.current?.click()
@@ -321,6 +350,9 @@ export function Receipt() {
               expenses={expenses ?? []}
               incomes={incomes ?? []}
               categories={categories ?? []}
+              chips={chips}
+              catFilter={catFilter}
+              onCatFilter={setCatFilter}
               onOpenExpense={setOpenExpenseId}
               onDeleteIncome={(id) => deleteIncome.mutateAsync(id).then(() => toast.success('Доход удалён'))}
             />
@@ -369,6 +401,9 @@ function IdleView({
   expenses,
   incomes,
   categories,
+  chips,
+  catFilter,
+  onCatFilter,
   onOpenExpense,
   onDeleteIncome,
 }: {
@@ -378,11 +413,19 @@ function IdleView({
   expenses: Expense[]
   incomes: Income[]
   categories: Category[]
+  chips: Array<{ id: string; name: string; sum: number }>
+  catFilter: string
+  onCatFilter: (id: string) => void
   onOpenExpense: (id: string) => void
   onDeleteIncome: (id: string) => void
 }) {
+  const filtering = catFilter !== 'all'
+  const filtered = filtering ? expenses.filter((e) => e.category_id === catFilter) : expenses
+  const filteredTotal = filtered.reduce((s, e) => s + e.amount, 0)
+  const activeName = chips.find((c) => c.id === catFilter)?.name
+
   const rows = [
-    ...expenses.map((e) => ({
+    ...filtered.map((e) => ({
       id: e.id,
       type: 'expense' as const,
       amount: e.amount,
@@ -391,7 +434,7 @@ function IdleView({
       label: e.merchant ?? categories.find((c) => c.id === e.category_id)?.name ?? e.description ?? 'Расход',
       needsReview: !e.is_confirmed,
     })),
-    ...incomes.map((i) => ({
+    ...(filtering ? [] : incomes).map((i) => ({
       id: i.id,
       type: 'income' as const,
       amount: i.amount,
@@ -419,7 +462,36 @@ function IdleView({
         </button>
       </div>
 
-      <Eyebrow>Последнее</Eyebrow>
+      {chips.length > 0 && (
+        <div className="no-scrollbar -mx-4 -my-1.5 flex gap-2 overflow-x-auto px-4 py-1.5" role="group" aria-label="Фильтр по категории">
+          {[{ id: 'all', name: 'Все' }, ...chips].map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onCatFilter(c.id)}
+              aria-pressed={catFilter === c.id}
+              className={cn(
+                // before: невидимая зона нажатия до ~48px по высоте при визуальных 36px
+                "relative shrink-0 rounded-[10px] px-3.5 py-2 text-[13px] before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent",
+                catFilter === c.id ? 'bg-hf-accent text-white' : 'bg-hf-card text-hf-text-3',
+              )}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {expenses.length > 0 && (
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-[28px] font-bold tracking-[-0.03em] text-hf-text">{formatMoney(filteredTotal)}</span>
+          <span className="truncate font-mono text-[11px] text-hf-text-4">
+            {filtering ? activeName : 'все категории'} · {filtered.length} {receiptsWord(filtered.length)}
+          </span>
+        </div>
+      )}
+
+      <Eyebrow>{filtering && activeName ? activeName : 'Последнее'}</Eyebrow>
       <div className="flex flex-col gap-2">
         {rows.map((row) =>
           row.type === 'expense' ? (
@@ -460,7 +532,11 @@ function IdleView({
             </div>
           ),
         )}
-        {rows.length === 0 && <p className="py-8 text-center text-[13px] text-hf-text-4">Записей пока нет — загрузи первый чек</p>}
+        {rows.length === 0 && (
+          <p className="py-8 text-center text-[13px] text-hf-text-4">
+            {filtering ? 'В этой категории пока нет трат' : 'Записей пока нет — загрузи первый чек'}
+          </p>
+        )}
       </div>
     </>
   )
