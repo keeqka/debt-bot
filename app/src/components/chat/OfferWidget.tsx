@@ -1,4 +1,5 @@
 import { Paper, PaperRow } from '@/components/chrome/Paper'
+import { Term } from '@/components/glossary/Term'
 import { formatMoney } from '@/lib/format'
 import type { OfferCompare, OfferParse } from '@/types/domain'
 
@@ -26,7 +27,7 @@ export function OfferWidget({ offer, compare }: { offer: OfferParse; compare: Of
       {offer.nominal_rate != null && <PaperRow label="Ставка" value={pct(offer.nominal_rate)} tone={worse(offer.nominal_rate) ? 'warn' : 'default'} />}
       {offer.effective_rate != null && (
         <PaperRow
-          label={offer.effective_rate_computed ? 'ГЭСВ (расчётный)' : 'ГЭСВ'}
+          label={<>{<Term id="gesv">ГЭСВ</Term>}{offer.effective_rate_computed ? ' (расчётный)' : ''}</>}
           value={pct(offer.effective_rate)}
           tone={worse(offer.effective_rate) ? 'warn' : 'default'}
         />

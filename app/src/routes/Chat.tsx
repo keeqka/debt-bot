@@ -16,11 +16,13 @@ import { OfferWidget } from '@/components/chat/OfferWidget'
 import { DebtCheckCard } from '@/components/chat/DebtCheckCard'
 import { imageToBase64Resized } from '@/lib/file-to-base64'
 import { features } from '@/lib/env'
+import { useOpenTerm } from '@/components/glossary/Term'
+import { findTermInText } from '@/lib/glossary'
 import { useHeaderAction } from '@/lib/header-action'
 import { useReducedMotion } from '@/hooks/use-reduced-motion'
 import type { ChatDataWidgetRow, ProposedCategory, ProposedDebt, ProposedSettings } from '@/types/domain'
 
-const SUGGESTIONS = ['Могу я купить MacBook за 750 000₸?', 'Как быстрее закрыть долги?', 'Сколько я трачу на еду в месяц?']
+const SUGGESTIONS = ['Могу я купить MacBook за 750 000₸?', 'Как быстрее закрыть долги?', 'Что такое ГЭСВ?', 'Сколько я трачу на еду в месяц?']
 
 async function copyText(text: string) {
   try {
@@ -40,6 +42,7 @@ async function copyText(text: string) {
 export function Chat() {
   const { data: messages, isLoading } = useChatMessages()
   const sendMessage = useSendChatMessage()
+  const openTerm = useOpenTerm()
   const clearChat = useClearChat()
   const addCategory = useAddCategory()
   const updateHousehold = useUpdateHouseholdSettings()
@@ -71,6 +74,13 @@ export function Chat() {
   function handleSend(text: string) {
     const trimmed = text.trim()
     if (!trimmed || sendMessage.isPending) return
+    // «Что такое ГЭСВ?» — короткий вопрос про термин: отвечаем листом на цифрах пользователя, без вызова ИИ.
+    const term = features.glossary && trimmed.length <= 60 && /^(что так(ое|ое)|что значит|что означает|объясни|расскажи про)/i.test(trimmed) ? findTermInText(trimmed) : null
+    if (term) {
+      setDraft('')
+      openTerm(term)
+      return
+    }
     setDraft('')
     sendMessage.mutate(trimmed)
   }

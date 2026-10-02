@@ -6,6 +6,39 @@ export type BotTone = 'soft' | 'neutral' | 'direct'
 export type ForecastMode = 'cautious' | 'normal' | 'optimistic'
 export type BudgetModel = '50_30_20' | 'zero_based' | 'pay_yourself_first'
 export type NeedKind = 'need' | 'want'
+export type ExplainLevel = 'simple' | 'numbers' | 'detailed'
+export type ChallengeKind = 'no_delivery' | 'subscription_audit' | 'coffee_home' | 'pause_72h'
+export type ChallengeStatus = 'active' | 'done' | 'failed' | 'skipped'
+export type HealthItemId = 'budget_history' | 'cushion_1' | 'no_overdue' | 'no_expensive_debt' | 'cushion_target' | 'annual_reserve' | 'insurance'
+
+/** Принятый челлендж недели (challenges). */
+export interface Challenge {
+  id: Uuid
+  user_id: Uuid
+  kind: ChallengeKind
+  started_at: string
+  ends_at: string
+  status: ChallengeStatus
+  est_saving: number
+  payload: Record<string, unknown>
+}
+
+/** Пометка в финансовом здоровье: «не про меня» или ручная отметка «сделано». */
+export interface HealthOverride {
+  item: HealthItemId
+  status: 'na' | 'done'
+}
+
+/** Разбор недели от бота (ai_insights.type = 'weekly_review'). */
+export interface WeeklyReview {
+  week_of: string
+  win: string
+  fix: string
+  milestone: { pct: number; text: string } | null
+  challenges: Array<{ kind: ChallengeKind; est_saving: number }>
+  /** Последний достигнутый рубеж погашения (10, 20, …) — чтобы веха приходила один раз. */
+  milestone_level: number
+}
 
 /** Крупная трата года, под которую откладывается резерв (annual_expenses). */
 export interface AnnualExpense {
@@ -32,6 +65,10 @@ export interface User {
   daily_reminder_time: string
   vacation_paused: boolean
   onboarding_completed_at: string | null
+  /** Глубина объяснений терминов. */
+  explain_level: ExplainLevel
+  /** День недели разбора недели: 0 — воскресенье … 6 — суббота. */
+  weekly_review_dow: number
   /** Голос бота в чате и пушах. */
   bot_tone: BotTone
   /** Семья — все данные делятся внутри неё (0017_households_and_invites.sql). */

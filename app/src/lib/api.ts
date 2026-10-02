@@ -10,6 +10,11 @@ import type {
   HouseholdSettings,
   AnnualExpense,
   NeedKind,
+  HealthOverride,
+  HealthItemId,
+  Challenge,
+  ChallengeKind,
+  WeeklyReview,
   MerchantRule,
   AccessInfo,
   InviteKind,
@@ -377,6 +382,86 @@ export async function updateCategoryNeedKind(id: string, needKind: NeedKind): Pr
   }
   const { error } = await supabase.from('categories').update({ need_kind: needKind }).eq('id', id)
   if (error) throw error
+}
+
+export async function getHealthOverrides(): Promise<HealthOverride[]> {
+  if (!isBackendConfigured || !supabase) return [...mock.mockHealthOverrides]
+  const { data, error } = await supabase.from('health_overrides').select('item, status')
+  if (error) throw error
+  return (data ?? []) as HealthOverride[]
+}
+
+/** status null — снять пометку. */
+export async function setHealthOverride(item: HealthItemId, status: 'na' | 'done' | null): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const i = mock.mockHealthOverrides.findIndex((o) => o.item === item)
+    if (i !== -1) mock.mockHealthOverrides.splice(i, 1)
+    if (status) mock.mockHealthOverrides.push({ item, status })
+    return
+  }
+  if (status === null) {
+    const { error } = await supabase.from('health_overrides').delete().eq('item', item)
+    if (error) throw error
+    return
+  }
+  const { error } = await supabase.from('health_overrides').upsert({ item, status }, { onConflict: 'household_id,item' })
+  if (error) throw error
+}
+
+export async function getChallenges(): Promise<Challenge[]> {
+  if (!isBackendConfigured || !supabase) return [...mock.mockChallenges]
+  const { data, error } = await supabase.from('challenges').select('*').order('started_at', { ascending: false }).limit(20)
+  if (error) throw error
+  return (data ?? []).map((c) => ({ ...c, est_saving: Number(c.est_saving) })) as Challenge[]
+}
+
+export async function startChallenge(input: { kind: ChallengeKind; days: number; est_saving: number; payload?: Record<string, unknown> }): Promise<void> {
+  const ends_at = new Date(Date.now() + input.days * 86_400_000).toISOString()
+  if (!isBackendConfigured || !supabase) {
+    mock.mockChallenges.unshift({
+      id: crypto.randomUUID(),
+      user_id: mock.currentMockUser.id,
+      kind: input.kind,
+      started_at: new Date().toISOString(),
+      ends_at,
+      status: 'active',
+      est_saving: input.est_saving,
+      payload: input.payload ?? {},
+    })
+    return
+  }
+  const { error } = await supabase.from('challenges').insert({ kind: input.kind, ends_at, est_saving: input.est_saving, payload: input.payload ?? {} })
+  if (error) throw error
+}
+
+export async function setChallengeStatus(id: string, status: Challenge['status']): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const c = mock.mockChallenges.find((x) => x.id === id)
+    if (c) c.status = status
+    return
+  }
+  const { error } = await supabase.from('challenges').update({ status }).eq('id', id)
+  if (error) throw error
+}
+
+/** Последний разбор недели от бота (ai_insights.type = 'weekly_review'); null — ещё не приходил. */
+export async function getLatestWeeklyReview(): Promise<WeeklyReview | null> {
+  if (!isBackendConfigured || !supabase) {
+    return {
+      week_of: new Date().toISOString().slice(0, 10),
+      win: 'Еда: 74 000 ₸ вместо обычных 96 000 — на 22 000 меньше.',
+      fix: 'В «Прочем» накопилось 38 000 ₸ без понятной категории — разнеси их, и бюджет станет точнее.',
+      milestone: { pct: 20, text: 'Закрыто 20% долгов от начала — осталось 80%.' },
+      challenges: [
+        { kind: 'no_delivery', est_saving: 15_000 },
+        { kind: 'coffee_home', est_saving: 6_000 },
+      ],
+      milestone_level: 2,
+    }
+  }
+  const { data, error } = await supabase.from('ai_insights').select('payload').eq('type', 'weekly_review').order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (error) throw error
+  return (data?.payload as WeeklyReview | undefined) ?? null
 }
 
 export async function getGoals(): Promise<Goal[]> {

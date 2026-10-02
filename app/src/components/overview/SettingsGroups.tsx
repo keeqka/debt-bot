@@ -12,15 +12,25 @@ import { formatMoney, formatMoneyCompact } from '@/lib/format'
 import { STRATEGY_META } from '@/lib/plan-text'
 import { previewSettingsChange } from '@/lib/settings-preview'
 import { cn } from '@/lib/utils'
-import type { BotTone, BudgetModel, DebtStrategyKind, ForecastMode, HouseholdSettings } from '@/types/domain'
+import { GLOSSARY, type TermId } from '@/lib/glossary'
+import { useOpenTerm } from '@/components/glossary/Term'
+import type { ExplainLevel, BotTone, BudgetModel, DebtStrategyKind, ForecastMode, HouseholdSettings } from '@/types/domain'
 
-type SheetKey = 'period' | 'model' | 'forecast' | 'strategy' | 'windfall' | 'pause' | 'tone'
+type SheetKey = 'period' | 'model' | 'forecast' | 'strategy' | 'windfall' | 'pause' | 'tone' | 'explain' | 'review'
 
 const TONES: Array<{ id: BotTone; label: string; sample: string }> = [
   { id: 'soft', label: 'Мягкий', sample: 'Если будет минутка — закинь чеки за сегодня.' },
   { id: 'neutral', label: 'Нейтральный', sample: 'Закинь чеки за сегодня.' },
   { id: 'direct', label: 'Прямой', sample: 'Чеки за сегодня.' },
 ]
+
+const EXPLAIN_LEVELS: Array<{ id: ExplainLevel; label: string; hint: string }> = [
+  { id: 'simple', label: 'Просто', hint: 'Одно-два предложения, без цифр.' },
+  { id: 'numbers', label: 'С цифрами', hint: 'Объяснение и пример на твоих цифрах.' },
+  { id: 'detailed', label: 'Подробно', hint: 'Пример и как это считается.' },
+]
+
+const WEEKDAYS = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота']
 
 const STRATEGIES: DebtStrategyKind[] = ['avalanche', 'snowball', 'cash_flow']
 
@@ -59,6 +69,8 @@ export function SettingsGroups() {
       </Group>
       <Group title="Чек">
         <Row label="Тон" value={tone.label} onClick={() => setOpen('tone')} />
+        {features.glossary && <Row label="Глубина объяснений" value={(EXPLAIN_LEVELS.find((l) => l.id === user.explain_level) ?? EXPLAIN_LEVELS[1]).label.toLowerCase()} onClick={() => setOpen('explain')} />}
+        {features.weeklyReview && <Row label="День разбора недели" value={WEEKDAYS[user.weekly_review_dow] ?? WEEKDAYS[0]} onClick={() => setOpen('review')} />}
       </Group>
 
       <PeriodSheet open={open === 'period'} onClose={() => setOpen(null)} settings={settings} />
@@ -68,6 +80,8 @@ export function SettingsGroups() {
       <WindfallSheet open={open === 'windfall'} onClose={() => setOpen(null)} settings={settings} />
       <PauseSheet open={open === 'pause'} onClose={() => setOpen(null)} settings={settings} />
       <ToneSheet open={open === 'tone'} onClose={() => setOpen(null)} current={tone.id} />
+      <ExplainSheet open={open === 'explain'} onClose={() => setOpen(null)} />
+      <ReviewDaySheet open={open === 'review'} onClose={() => setOpen(null)} />
     </div>
   )
 }
@@ -331,6 +345,70 @@ function ToneSheet({ open, onClose, current }: { open: boolean; onClose: () => v
           >
             <span className="block text-[13px] font-medium text-hf-text">{t.label}</span>
             <span className="mt-0.5 block text-[12px] leading-snug text-hf-text-3">«{t.sample}»</span>
+          </button>
+        ))}
+      </div>
+    </FormSheet>
+  )
+}
+
+// ── Глубина объяснений и словарь ───────────────────────────────────────
+
+function ExplainSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const updateUser = useUpdateUser()
+  const user = useCurrentUser()
+  const openTerm = useOpenTerm()
+  return (
+    <FormSheet open={open} onOpenChange={(o) => !o && onClose()} title="Глубина объяснений" footer={<CloseButton onClose={onClose} />}>
+      <p className="text-[12px] leading-relaxed text-hf-text-3">Как «Чек» объясняет термины — «ГЭСВ», «сложный процент», «минимальный платёж». Тап по слову с пунктиром открывает объяснение.</p>
+      <div className="space-y-2" role="radiogroup" aria-label="Глубина объяснений">
+        {EXPLAIN_LEVELS.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            role="radio"
+            aria-checked={user.explain_level === l.id}
+            onClick={() => updateUser.mutate({ id: user.id, patch: { explain_level: l.id } })}
+            className={cn('min-h-11 w-full rounded-[12px] border px-3.5 py-2.5 text-left', user.explain_level === l.id ? 'border-hf-accent bg-hf-card' : 'border-transparent bg-hf-card')}
+          >
+            <span className="block text-[13px] font-medium text-hf-text">{l.label}</span>
+            <span className="mt-0.5 block text-[12px] leading-snug text-hf-text-3">{l.hint}</span>
+          </button>
+        ))}
+      </div>
+      <p className="pt-1 font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Словарь</p>
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(GLOSSARY) as TermId[]).map((id) => (
+          <button key={id} type="button" onClick={() => openTerm(id)} className="min-h-11 rounded-[12px] bg-hf-card px-3.5 text-[13px] text-hf-text-2">
+            {GLOSSARY[id].title}
+          </button>
+        ))}
+      </div>
+    </FormSheet>
+  )
+}
+
+// ── День разбора недели ────────────────────────────────────────────────
+
+function ReviewDaySheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const updateUser = useUpdateUser()
+  const user = useCurrentUser()
+  // Неделя в России и Казахстане начинается с понедельника: порядок Пн…Вс, значения 1…6, 0.
+  const order = [1, 2, 3, 4, 5, 6, 0]
+  return (
+    <FormSheet open={open} onOpenChange={(o) => !o && onClose()} title="День разбора недели" footer={<CloseButton onClose={onClose} />}>
+      <p className="text-[12px] leading-relaxed text-hf-text-3">В этот день в 19:00 по Алматы «Чек» пришлёт разбор недели: что случилось с тратами и один шаг на следующую.</p>
+      <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="День разбора недели">
+        {order.map((d) => (
+          <button
+            key={d}
+            type="button"
+            role="radio"
+            aria-checked={user.weekly_review_dow === d}
+            onClick={() => updateUser.mutate({ id: user.id, patch: { weekly_review_dow: d } })}
+            className={cn('min-h-11 rounded-[12px] border px-3.5 text-[13px]', user.weekly_review_dow === d ? 'border-hf-accent bg-hf-card text-hf-text' : 'border-transparent bg-hf-card text-hf-text-3')}
+          >
+            {WEEKDAYS[d]}
           </button>
         ))}
       </div>

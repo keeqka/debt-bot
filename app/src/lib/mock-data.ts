@@ -8,6 +8,8 @@ import type {
   Goal,
   HouseholdSettings,
   AnnualExpense,
+  HealthOverride,
+  Challenge,
   MerchantRule,
   Income,
   Subscription,
@@ -35,6 +37,8 @@ export const mockUsers: User[] = [
     vacation_paused: false,
     onboarding_completed_at: '2026-01-05T00:00:00Z',
     bot_tone: 'neutral',
+    explain_level: 'numbers',
+    weekly_review_dow: 0,
     household_id: 'h1',
     is_admin: true,
     created_at: '2026-01-05T00:00:00Z',
@@ -53,6 +57,8 @@ export const mockUsers: User[] = [
     vacation_paused: false,
     onboarding_completed_at: '2026-01-05T00:00:00Z',
     bot_tone: 'neutral',
+    explain_level: 'numbers',
+    weekly_review_dow: 0,
     household_id: 'h1',
     is_admin: false,
     created_at: '2026-01-05T00:00:00Z',
@@ -303,6 +309,9 @@ export const mockHouseholdSettings: HouseholdSettings = {
   forecast_mode: 'normal',
   budget_model: '50_30_20',
 }
+
+export const mockHealthOverrides: HealthOverride[] = []
+export const mockChallenges: Challenge[] = []
 
 export const mockAnnualExpenses: AnnualExpense[] = [
   { id: 'ae1', title: 'Страховка авто', amount: 180_000, month: 2, saved: 60_000 },

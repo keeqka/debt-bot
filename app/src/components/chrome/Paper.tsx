@@ -14,7 +14,7 @@ export function PaperRow({
   value,
   tone = 'default',
 }: {
-  label: string
+  label: ReactNode
   value: string
   tone?: 'default' | 'accent' | 'warn'
 }) {

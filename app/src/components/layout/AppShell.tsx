@@ -6,6 +6,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { BottomTabBar } from '@/components/layout/BottomTabBar'
 import { Toaster } from '@/components/ui/sonner'
 import { HeaderActionSetterContext } from '@/lib/header-action'
+import { TermProvider } from '@/components/glossary/Term'
 import { Onboarding } from '@/routes/Onboarding'
 import { useAccessDenied, useCurrentUser } from '@/lib/auth'
 import { AccessScreen } from '@/components/layout/AccessScreen'
@@ -65,6 +66,7 @@ export function AppShell() {
 
   return (
     <HeaderActionSetterContext.Provider value={setHeaderAction}>
+      <TermProvider>
       <div className="mx-auto flex max-w-md flex-col bg-hf-bg" style={{ height: 'var(--tg-height, 100dvh)' }}>
         <TopBar subtitle={subtitleFor(location.pathname)} action={headerAction} face={face} />
         {/* scrollbar-gutter: место под полосу прокрутки занято всегда — иначе при коротком списке
@@ -86,6 +88,7 @@ export function AppShell() {
         <BottomTabBar />
         <Toaster position="top-center" />
       </div>
+      </TermProvider>
     </HeaderActionSetterContext.Provider>
   )
 }

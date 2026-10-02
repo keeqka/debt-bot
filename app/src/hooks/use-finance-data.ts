@@ -7,7 +7,8 @@ import { currencySymbol } from '@/lib/format'
 import { toPlanSettings } from '@/lib/month'
 import { useCurrentUser } from '@/lib/auth'
 import type { BudgetInput } from '@/lib/budget'
-import type { ChatMessage, HouseholdSettings, NeedKind, User } from '@/types/domain'
+import { evaluateHealth } from '@/lib/health'
+import type { Challenge, ChatMessage, HealthItemId, HouseholdSettings, NeedKind, User } from '@/types/domain'
 
 export const queryKeys = {
   status: ['status'] as const,
@@ -27,6 +28,9 @@ export const queryKeys = {
   subscription: ['subscription'] as const,
   receiptScanCount: ['receipt-scan-count'] as const,
   annualExpenses: ['annual-expenses'] as const,
+  healthOverrides: ['health-overrides'] as const,
+  challenges: ['challenges'] as const,
+  weeklyReview: ['weekly-review'] as const,
 }
 
 // Pure DB read (see api.getStatus) — cheap no matter how often it's called,
@@ -121,6 +125,71 @@ export function useCreateInvite() {
 
 export const useHouseholdSettings = () => useQuery({ queryKey: queryKeys.householdSettings, queryFn: api.getHouseholdSettings })
 
+export const useHealthOverrides = () => useQuery({ queryKey: queryKeys.healthOverrides, queryFn: api.getHealthOverrides })
+
+export function useSetHealthOverride() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ item, status }: { item: HealthItemId; status: 'na' | 'done' | null }) => api.setHealthOverride(item, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.healthOverrides }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Не удалось сохранить'),
+  })
+}
+
+/** Финансовое здоровье (11): тот же бюджет и те же долги, что на остальных экранах. */
+export function useHealth() {
+  const input = useBudgetInput()
+  const month = useMonth()
+  const { data: debts } = useDebts()
+  const { data: payments } = useAllDebtPayments()
+  const { data: overrides } = useHealthOverrides()
+  const { data: annual } = useAnnualExpenses()
+  return useMemo(() => {
+    if (!input || !month || !debts || !payments || !overrides || !annual) return undefined
+    return evaluateHealth({
+      today: new Date(),
+      periodStartDay: input.settings.periodStartDay,
+      expenseDates: input.expenses.filter((e) => e.is_confirmed).map((e) => e.spent_at),
+      cushionBalance: input.cushionBalance,
+      monthlyNeed: month.monthlyNeed,
+      cushionMonths: input.settings.cushionMonths,
+      highRateThreshold: input.settings.highRateThreshold,
+      debts: debts.map((d) => ({
+        id: d.id,
+        title: d.title,
+        interest_rate: d.interest_rate,
+        current_balance: d.current_balance,
+        due_day: d.due_day,
+        created_at: d.created_at,
+        status: d.status,
+      })),
+      payments: payments.map((p) => ({ debt_id: p.debt_id, paid_at: p.paid_at })),
+      annual,
+      overrides,
+    })
+  }, [input, month, debts, payments, overrides, annual])
+}
+
+export const useChallenges = () => useQuery({ queryKey: queryKeys.challenges, queryFn: api.getChallenges })
+export const useWeeklyReview = () => useQuery({ queryKey: queryKeys.weeklyReview, queryFn: api.getLatestWeeklyReview })
+
+export function useStartChallenge() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.startChallenge,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.challenges }),
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Не удалось принять челлендж'),
+  })
+}
+
+export function useSetChallengeStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: Challenge['status'] }) => api.setChallengeStatus(id, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.challenges }),
+  })
+}
+
 function useAnnualMutation<TVars>(fn: (v: TVars) => Promise<unknown>) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -177,7 +246,7 @@ export function useUpdateUser() {
       patch,
     }: {
       id: string
-      patch: Partial<Pick<User, 'monthly_income' | 'payday' | 'daily_reminder_enabled' | 'daily_reminder_time' | 'vacation_paused' | 'onboarding_completed_at' | 'bot_tone'>>
+      patch: Partial<Pick<User, 'monthly_income' | 'payday' | 'daily_reminder_enabled' | 'daily_reminder_time' | 'vacation_paused' | 'onboarding_completed_at' | 'bot_tone' | 'explain_level' | 'weekly_review_dow'>>
     }) => api.updateUser(id, patch),
     // Оптимистично: собственная строка в кэше меняется сразу, откат — при ошибке.
     onMutate: async ({ id, patch }) => {

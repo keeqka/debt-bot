@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Camera, ChevronRight, Settings } from 'lucide-react'
 import { Eyebrow } from '@/components/chrome/Chrome'
@@ -9,9 +9,11 @@ import { MascotAvatar, Mascot } from '@/components/Mascot'
 import { BudgetSetupSheet } from '@/components/overview/BudgetSetupSheet'
 import { ReportSheet } from '@/components/overview/ReportSheet'
 import { ForecastSheet } from '@/components/overview/ForecastSheet'
+import { HealthSheet } from '@/components/overview/HealthSheet'
+import { WeeklyReviewSheet } from '@/components/overview/WeeklyReviewSheet'
 import { features } from '@/lib/env'
 import { SettingsRow, rowClass } from '@/components/overview/SettingsRow'
-import { useMonth, useExpenses, useDebts, useGoals, useStatus, useDebtFreeDate } from '@/hooks/use-finance-data'
+import { useMonth, useExpenses, useDebts, useGoals, useStatus, useDebtFreeDate, useHealth } from '@/hooks/use-finance-data'
 import { goalsWaitUntil } from '@/lib/goal'
 import { computeInsight } from '@/lib/insight'
 import { STATUS_META } from '@/lib/status'
@@ -45,6 +47,16 @@ export function Overview() {
   const [setupOpen, setSetupOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [forecastOpen, setForecastOpen] = useState(false)
+  const [healthOpen, setHealthOpen] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  // Диплинк из сообщения бота: #/overview?review=1 открывает разбор недели; параметр убираем, чтобы повторный заход не открывал его снова.
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    if (params.get('review') !== '1') return
+    if (features.weeklyReview) setReviewOpen(true)
+    setParams((p) => { p.delete('review'); return p }, { replace: true })
+  }, [params, setParams])
+  const health = useHealth()
 
   const activeDebts = (debts ?? []).filter((d) => d.status === 'active')
   // Same budget extra and same simulation as the Debts screen's default plan,
@@ -73,6 +85,8 @@ export function Overview() {
       <BudgetSetupSheet open={setupOpen} onOpenChange={setSetupOpen} />
       <ReportSheet open={reportOpen} onOpenChange={setReportOpen} />
       <ForecastSheet open={forecastOpen} onOpenChange={setForecastOpen} />
+      <HealthSheet open={healthOpen} onOpenChange={setHealthOpen} />
+      <WeeklyReviewSheet open={reviewOpen} onOpenChange={setReviewOpen} />
     </>
   )
 
@@ -263,6 +277,30 @@ export function Overview() {
         </button>
 
         <SettingsRow onClick={() => setSetupOpen(true)} />
+
+        {features.health && (
+          <button type="button" onClick={() => setHealthOpen(true)} className={rowClass}>
+            <span className="min-w-0">
+              <span className="block font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">
+                Финансовое здоровье{health ? ` · ${health.done}/${health.total}` : ''}
+              </span>
+              <span className="mt-1 block text-[13px] text-hf-text">
+                {health?.next ? health.next.title : health ? 'Все пункты закрыты' : 'считаю…'}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-hf-text-4" />
+          </button>
+        )}
+
+        {features.weeklyReview && (
+          <button type="button" onClick={() => setReviewOpen(true)} className={rowClass}>
+            <span className="min-w-0">
+              <span className="block font-mono text-[11px] tracking-[0.1em] text-hf-text-4 uppercase">Разбор недели</span>
+              <span className="mt-1 block text-[13px] text-hf-text">Победа, поправка и челленджи</span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-hf-text-4" />
+          </button>
+        )}
       </div>
 
       {sheets}
