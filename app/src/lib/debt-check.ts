@@ -2,7 +2,7 @@
 // живёт в двух местах — app/src/lib и supabase/functions/_shared (чат считает
 // то же самое на сервере): держать байт в байт одинаковыми, как budget.ts.
 
-import { computeBudget, type BudgetInput } from './budget'
+import { computeBudget, type BudgetInput } from './budget.ts'
 
 export interface NewDebtInput {
   title: string
