@@ -7,6 +7,8 @@ import { useCurrentUser } from '@/lib/auth'
 import { currencySymbol } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PlanSettingsSection } from '@/components/overview/PlanSettingsSection'
+import { BudgetPeriodSection } from '@/components/overview/BudgetPeriodSection'
+import { MerchantRulesSection } from '@/components/overview/MerchantRulesSection'
 import { Toggle } from '@/components/chrome/Toggle'
 import { FamilySection } from '@/components/overview/FamilySection'
 import { SupportSection } from '@/components/overview/SupportSection'
@@ -144,6 +146,8 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
             </label>
           )}
 
+          <BudgetPeriodSection />
+
           <PlanSettingsSection />
 
           <FamilySection />
@@ -209,6 +213,8 @@ export function BudgetSetupSheet({ open, onOpenChange }: { open: boolean; onOpen
               </button>
             </div>
           </div>
+
+          <MerchantRulesSection />
 
           <div className="space-y-2 border-t border-hf-line pt-4">
             <p className="text-[13px] font-medium text-hf-text">Опасная зона</p>

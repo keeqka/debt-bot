@@ -156,6 +156,16 @@ export type DebtStrategyKind = 'avalanche' | 'snowball' | 'cash_flow'
 
 export type PriorityMode = 'debts_first' | 'cushion_first' | 'split' | 'ladder'
 
+/** «Этот магазин — всегда эта категория» (0020_budget_period_and_merchant_rules.sql). */
+export interface MerchantRule {
+  id: string
+  /** Нормализованное название (lib/merchant.ts), по нему ищется совпадение. */
+  merchant_key: string
+  /** Как магазин выглядел в выписке — для списка в настройках. */
+  merchant_label: string
+  category_id: string
+}
+
 /** Модель денег семьи — одна строка на всех (0016_household_plan_settings.sql). */
 export interface HouseholdSettings {
   priority_mode: PriorityMode
@@ -163,6 +173,8 @@ export interface HouseholdSettings {
   cushion_months: number
   split_debt_pct: number
   high_rate_threshold: number
+  /** День, с которого начинается бюджетный месяц (обычно день зарплаты); null — календарный месяц. */
+  period_start_day: number | null
 }
 
 

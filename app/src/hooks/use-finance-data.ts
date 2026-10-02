@@ -18,6 +18,7 @@ export const queryKeys = {
   incomes: ['incomes'] as const,
   expenses: ['expenses'] as const,
   categories: ['categories'] as const,
+  merchantRules: ['merchant-rules'] as const,
   goals: ['goals'] as const,
   bankProducts: ['bank-products'] as const,
   chatMessages: ['chat-messages'] as const,
@@ -266,6 +267,35 @@ export function useDeleteExpense() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: api.deleteExpense,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.expenses })
+      queryClient.invalidateQueries({ queryKey: queryKeys.status })
+    },
+  })
+}
+
+export const useMerchantRules = () => useQuery({ queryKey: queryKeys.merchantRules, queryFn: api.getMerchantRules })
+
+export function useSaveMerchantRules() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.saveMerchantRules,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.merchantRules }),
+  })
+}
+
+export function useDeleteMerchantRule() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.deleteMerchantRule,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.merchantRules }),
+  })
+}
+
+export function useUpdateExpensesCategory() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ids, categoryId }: { ids: string[]; categoryId: string }) => api.updateExpensesCategory(ids, categoryId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.expenses })
       queryClient.invalidateQueries({ queryKey: queryKeys.status })

@@ -92,6 +92,7 @@ const PROPOSE_SETTINGS_TOOL = {
           cushion_months: { type: 'number', description: '1-12' },
           split_debt_pct: { type: 'number', description: '0-100, доля свободных денег в долги (режим split)' },
           high_rate_threshold: { type: 'number', description: '% годовых, с которого долг считается дорогим (режим ladder)' },
+          period_start_day: { type: ['number', 'null'], description: 'с какого числа (1-31) начинается бюджетный месяц, обычно день зарплаты; null — календарный месяц' },
           monthly_income: { type: ['number', 'null'], description: 'доход в месяц автора сообщения' },
           payday: { type: ['number', 'null'], description: '1-31' },
           daily_reminder_enabled: { type: 'boolean' },
@@ -290,6 +291,7 @@ type SettingsChange = {
   cushion_months?: number
   split_debt_pct?: number
   high_rate_threshold?: number
+  period_start_day?: number | null
   monthly_income?: number | null
   payday?: number | null
   daily_reminder_enabled?: boolean
@@ -309,6 +311,7 @@ function buildSettingsProposal(changes: SettingsChange, snapshot: FinancialSnaps
   if (changes.cushion_months != null) household.cushion_months = clamp(changes.cushion_months, 1, 12)
   if (changes.split_debt_pct != null) household.split_debt_pct = Math.round(clamp(changes.split_debt_pct, 0, 100))
   if (changes.high_rate_threshold != null) household.high_rate_threshold = clamp(changes.high_rate_threshold, 0, 100)
+  if (changes.period_start_day !== undefined) household.period_start_day = changes.period_start_day == null ? null : Math.round(clamp(changes.period_start_day, 1, 31))
 
   const user: Record<string, unknown> = {}
   if (changes.monthly_income !== undefined) user.monthly_income = changes.monthly_income
@@ -330,6 +333,7 @@ function buildSettingsProposal(changes: SettingsChange, snapshot: FinancialSnaps
       ...(household.cushion_months != null ? { cushionMonths: household.cushion_months as number } : {}),
       ...(household.split_debt_pct != null ? { splitDebtPct: household.split_debt_pct as number } : {}),
       ...(household.high_rate_threshold != null ? { highRateThreshold: household.high_rate_threshold as number } : {}),
+      ...(household.period_start_day !== undefined ? { periodStartDay: household.period_start_day as number | null } : {}),
     },
   })
 

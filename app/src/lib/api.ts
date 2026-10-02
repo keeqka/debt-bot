@@ -8,6 +8,7 @@ import type {
   DebtDraft,
   DebtPayment,
   HouseholdSettings,
+  MerchantRule,
   AccessInfo,
   InviteKind,
   Category,
@@ -225,6 +226,17 @@ export async function deleteExpense(id: string): Promise<void> {
   if (error) throw error
 }
 
+/** Одна категория для пачки трат — применение правила магазина к уже записанным. */
+export async function updateExpensesCategory(ids: string[], categoryId: string): Promise<void> {
+  if (ids.length === 0) return
+  if (!isBackendConfigured || !supabase) {
+    for (const e of mock.mockExpenses) if (ids.includes(e.id)) e.category_id = categoryId
+    return
+  }
+  const { error } = await supabase.from('expenses').update({ category_id: categoryId }).in('id', ids)
+  if (error) throw error
+}
+
 /** Bulk-wipe, gated behind a type-to-confirm dialog in ProfilePanel — RLS scopes this to the caller's own household. */
 export async function deleteAllExpenses(): Promise<void> {
   if (!isBackendConfigured || !supabase) {
@@ -273,6 +285,38 @@ export async function addCategory(category: Omit<Category, 'id' | 'is_system'>):
   const { data, error } = await supabase.from('categories').insert({ ...category, is_system: false }).select().single()
   if (error) throw error
   return data as Category
+}
+
+export async function getMerchantRules(): Promise<MerchantRule[]> {
+  if (!isBackendConfigured || !supabase) return [...mock.mockMerchantRules]
+  const { data, error } = await supabase.from('merchant_rules').select('id, merchant_key, merchant_label, category_id').order('created_at')
+  if (error) throw error
+  return data as MerchantRule[]
+}
+
+/** Новое правило или смена категории у существующего — ключ магазина один на семью. */
+export async function saveMerchantRules(rules: Omit<MerchantRule, 'id'>[]): Promise<void> {
+  if (rules.length === 0) return
+  if (!isBackendConfigured || !supabase) {
+    for (const r of rules) {
+      const existing = mock.mockMerchantRules.find((m) => m.merchant_key === r.merchant_key)
+      if (existing) Object.assign(existing, r)
+      else mock.mockMerchantRules.push({ ...r, id: crypto.randomUUID() })
+    }
+    return
+  }
+  const { error } = await supabase.from('merchant_rules').upsert(rules, { onConflict: 'household_id,merchant_key' })
+  if (error) throw error
+}
+
+export async function deleteMerchantRule(id: string): Promise<void> {
+  if (!isBackendConfigured || !supabase) {
+    const index = mock.mockMerchantRules.findIndex((r) => r.id === id)
+    if (index !== -1) mock.mockMerchantRules.splice(index, 1)
+    return
+  }
+  const { error } = await supabase.from('merchant_rules').delete().eq('id', id)
+  if (error) throw error
 }
 
 export async function deleteCategory(id: string): Promise<void> {
@@ -535,7 +579,7 @@ export async function getHouseholdSettings(): Promise<HouseholdSettings> {
   if (!isBackendConfigured || !supabase) return { ...mock.mockHouseholdSettings }
   const { data, error } = await supabase
     .from('household_settings')
-    .select('priority_mode, debt_strategy, cushion_months, split_debt_pct, high_rate_threshold')
+    .select('priority_mode, debt_strategy, cushion_months, split_debt_pct, high_rate_threshold, period_start_day')
     .maybeSingle() // RLS: only this family's row
   if (error) throw error
   if (!data) return { ...mock.mockHouseholdSettings } // same values as the table defaults

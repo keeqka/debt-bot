@@ -74,9 +74,14 @@ export interface Budget {
   monthlyNeed: number
   cushionBalance: number
 
+  /** День бюджетного месяца (с 1) — от 1-го числа или от дня зарплаты, смотря что выбрано. */
   dayOfMonth: number
+  /** Длина текущего бюджетного месяца в днях. */
   daysInMonth: number
   daysLeft: number
+  /** Границы текущего бюджетного месяца, ISO-даты, конец включительно. */
+  periodStart: string
+  periodEnd: string
   spent: number
   /** Внесено по долгам в этом месяце (минимумы и досрочно). */
   debtPaid: number
@@ -124,6 +129,8 @@ export interface PlanSettings {
   splitDebtPct: number
   /** ladder: долг с этой ставкой (% годовых) и выше считается дорогим. */
   highRateThreshold: number
+  /** День (1-31), с которого начинается бюджетный месяц — обычно день зарплаты; null — календарный месяц. */
+  periodStartDay: number | null
 }
 
 export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
@@ -132,6 +139,7 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   cushionMonths: 3,
   splitDebtPct: 50,
   highRateThreshold: 15,
+  periodStartDay: null,
 }
 
 export interface PlanDebt {
@@ -357,16 +365,35 @@ function median(values: number[]) {
 
 export function computeBudget(input: BudgetInput): Budget {
   const today = input.today ?? new Date()
-  const current = monthIndex(today.getFullYear(), today.getMonth())
-  const dayOfMonth = today.getDate()
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
+  // Бюджетный месяц: календарный или от дня зарплаты (settings.periodStartDay).
+  // Период k начинается в startOf(k) и длится до начала k+1; всё остальное —
+  // траты, доходы, платежи — относится к периоду по дате через idxOf.
+  const startDay = input.settings.periodStartDay ?? null
+  const lastDayOf = (y: number, m: number) => new Date(y, m + 1, 0).getDate()
+  const startOf = (idx: number) => {
+    const y = Math.floor(idx / 12)
+    const m = idx % 12
+    return { y, m, d: startDay == null ? 1 : Math.min(startDay, lastDayOf(y, m)) }
+  }
+  const idxOf = (y: number, m: number, d: number) =>
+    startDay != null && d < Math.min(startDay, lastDayOf(y, m)) ? monthIndex(y, m) - 1 : monthIndex(y, m)
+  const utc = (p: { y: number; m: number; d: number }) => Date.UTC(p.y, p.m, p.d)
+  const dayIn = (p: { y: number; m: number; d: number }, idx: number) => Math.round((utc(p) - utc(startOf(idx))) / 86_400_000) + 1
+  const isoOf = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+
+  const todayPos = { y: today.getFullYear(), m: today.getMonth(), d: today.getDate() }
+  const current = idxOf(todayPos.y, todayPos.m, todayPos.d)
+  const dayOfMonth = dayIn(todayPos, current)
+  const daysInMonth = Math.round((utc(startOf(current + 1)) - utc(startOf(current))) / 86_400_000)
   const daysLeft = daysInMonth - dayOfMonth + 1
+  const periodStart = isoOf(utc(startOf(current)))
+  const periodEnd = isoOf(utc(startOf(current + 1)) - 86_400_000)
   const money = (n: number) => `${new Intl.NumberFormat('ru-RU').format(Math.round(n))} ${input.currencySymbol}`
 
   // ── Доход ──────────────────────────────────────────────────────────────
   const settingsIncome = input.userIncomes.reduce<number>((s, v) => s + (v ?? 0), 0)
   const incomeIn = (idx: number) =>
-    input.incomes.filter((i) => { const p = ymd(i.received_at); return monthIndex(p.y, p.m) === idx }).reduce((s, i) => s + i.amount, 0)
+    input.incomes.filter((i) => { const p = ymd(i.received_at); return idxOf(p.y, p.m, p.d) === idx }).reduce((s, i) => s + i.amount, 0)
   const thisMonthIncome = incomeIn(current)
   const lastMonthIncome = incomeIn(current - 1)
   const [income, incomeSource]: [number, Budget['incomeSource']] =
@@ -377,7 +404,11 @@ export function computeBudget(input: BudgetInput): Budget {
 
   // ── История трат ───────────────────────────────────────────────────────
   const confirmed = input.expenses.filter((e) => e.is_confirmed)
-  const withPos = confirmed.map((e) => { const p = ymd(e.spent_at); return { e, idx: monthIndex(p.y, p.m), day: p.d, cat: e.category_id ?? UNCATEGORIZED } })
+  const withPos = confirmed.map((e) => {
+    const p = ymd(e.spent_at)
+    const idx = idxOf(p.y, p.m, p.d)
+    return { e, idx, day: dayIn(p, idx), cat: e.category_id ?? UNCATEGORIZED }
+  })
   const thisMonth = withPos.filter((x) => x.idx === current)
   const past = withPos.filter((x) => x.idx < current)
 
@@ -434,7 +465,7 @@ export function computeBudget(input: BudgetInput): Budget {
   const paidThisMonth = new Map<string, number>()
   for (const p of input.debtPayments) {
     const pos = ymd(p.paid_at)
-    if (monthIndex(pos.y, pos.m) === current) paidThisMonth.set(p.debt_id, (paidThisMonth.get(p.debt_id) ?? 0) + p.amount)
+    if (idxOf(pos.y, pos.m, pos.d) === current) paidThisMonth.set(p.debt_id, (paidThisMonth.get(p.debt_id) ?? 0) + p.amount)
   }
   const debtPaid = [...paidThisMonth.values()].reduce((s, v) => s + v, 0)
   const unpaidMins = activeDebts.reduce((s, d) => s + Math.max(0, d.minimum_payment - (paidThisMonth.get(d.id) ?? 0)), 0)
@@ -549,6 +580,8 @@ export function computeBudget(input: BudgetInput): Budget {
     dayOfMonth,
     daysInMonth,
     daysLeft,
+    periodStart,
+    periodEnd,
     spent,
     debtPaid,
     reserved,

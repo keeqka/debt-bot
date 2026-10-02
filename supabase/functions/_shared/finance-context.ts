@@ -64,13 +64,13 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
 
   const [{ data: incomes }, { data: expenses }, { data: debts }, { data: debtPayments }, { data: goals }, { data: categories }, { data: settingsRow }] =
     await Promise.all([
-      scope(supabase.from('incomes').select('amount, received_at')).gte('received_at', monthStart(today, 1)),
+      scope(supabase.from('incomes').select('amount, received_at')).gte('received_at', monthStart(today, 2)),
       scope(supabase.from('expenses').select('id, amount, category_id, spent_at, is_confirmed, merchant, description')).gte(
         'spent_at',
-        monthStart(today, 3),
+        monthStart(today, 4),
       ),
       scope(supabase.from('debts').select('id, title, current_balance, interest_rate, minimum_payment, status')).eq('status', 'active'),
-      scope(supabase.from('debt_payments').select('debt_id, amount, paid_at')).gte('paid_at', monthStart(today, 0)),
+      scope(supabase.from('debt_payments').select('debt_id, amount, paid_at')).gte('paid_at', monthStart(today, 1)),
       scope(supabase.from('goals').select('title, target_amount, current_amount, target_date, is_cushion')).eq('status', 'active'),
       householdId
         ? supabase.from('categories').select('id, name').or(`household_id.is.null,household_id.eq.${householdId}`)
@@ -85,6 +85,7 @@ export async function buildFinancialSnapshot(supabase: SupabaseLike, householdId
         cushionMonths: Number(settingsRow.cushion_months),
         splitDebtPct: Number(settingsRow.split_debt_pct),
         highRateThreshold: Number(settingsRow.high_rate_threshold),
+        periodStartDay: settingsRow.period_start_day == null ? null : Number(settingsRow.period_start_day),
       }
     : DEFAULT_PLAN_SETTINGS
 
@@ -184,7 +185,7 @@ export function snapshotToPrompt(s: FinancialSnapshot): string {
     `Доход в месяц: ${r(b.income)} (${INCOME_SOURCE[b.incomeSource]}).`,
     `Обычные траты в месяц: ${r(b.typicalSpend)} (${b.historyMonths ? `среднее за ${b.historyMonths} мес.` : 'первый месяц — оценка по текущему темпу, истории ещё нет'}).`,
     `Минимальные платежи по долгам: ${r(b.minPayments)} в месяц. Сверх обычных трат и минимумов: ${r(b.planExtra)} в месяц; в этом месяце по плану — в долги ${r(p.now.toDebts)}, в подушку ${r(p.now.toCushion)}, на цели ${r(p.now.toGoals)}.`,
-    `Этот месяц (день ${b.dayOfMonth} из ${b.daysInMonth}, осталось ${b.daysLeft} дн.): потрачено ${r(b.spent)}; по долгам внесено ${r(b.debtPaid)}; ещё отложить по плану ${r(b.reserved)}; бюджет на траты ${r(b.limit)}; свободно до конца месяца ${r(b.available)} (≈${r(b.perDay)} в день).`,
+    `${b.settings.periodStartDay == null ? 'Этот месяц' : `Бюджетный месяц с ${b.periodStart} по ${b.periodEnd} (от дня зарплаты)`} (день ${b.dayOfMonth} из ${b.daysInMonth}, осталось ${b.daysLeft} дн.): потрачено ${r(b.spent)}; по долгам внесено ${r(b.debtPaid)}; ещё отложить по плану ${r(b.reserved)}; бюджет на траты ${r(b.limit)}; свободно до конца месяца ${r(b.available)} (≈${r(b.perDay)} в день).`,
     b.expectedByNow != null ? `Обычно к этому дню месяца потрачено: ${r(b.expectedByNow)}.` : '',
     `Траты этого месяца по категориям: ${b.categories.map((c) => `${c.name}=${r(c.amount)}${c.typical != null ? ` (обычно за месяц ${r(c.typical)})` : ''}`).join(', ') || '—'}.`,
     `Перерасход и аномалии: ${b.signals.length ? b.signals.map((x) => x.text).join(' ') : 'не найдено'}`,

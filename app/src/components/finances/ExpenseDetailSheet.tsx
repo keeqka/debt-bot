@@ -6,7 +6,8 @@ import { Eyebrow } from '@/components/chrome/Chrome'
 import { Paper } from '@/components/chrome/Paper'
 import { ProgressBar } from '@/components/chrome/ProgressBar'
 import { ConfirmSheet } from '@/components/chrome/ConfirmSheet'
-import { useCategories, useDeleteExpense, useUpdateExpense, useMonth } from '@/hooks/use-finance-data'
+import { useCategories, useDeleteExpense, useExpenses, useSaveMerchantRules, useUpdateExpense, useUpdateExpensesCategory, useMonth } from '@/hooks/use-finance-data'
+import { merchantKey } from '@/lib/merchant'
 import { formatMoney, formatPercent } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { Expense, ExpenseSource } from '@/types/domain'
@@ -43,6 +44,9 @@ export function ExpenseDetailSheet({
   const { data: categories } = useCategories()
   const month = useMonth()
   const updateExpense = useUpdateExpense()
+  const { data: allExpenses } = useExpenses()
+  const saveRules = useSaveMerchantRules()
+  const updateMany = useUpdateExpensesCategory()
   const deleteExpense = useDeleteExpense()
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -58,7 +62,17 @@ export function ExpenseDetailSheet({
   async function setCategory(categoryId: string) {
     if (!expense || categoryId === expense.category_id) return
     await updateExpense.mutateAsync({ id: expense.id, patch: { category_id: categoryId } })
-    toast.success('Категория обновлена')
+    // Смена категории у траты с магазином — правило для всех будущих и уже записанных трат этого магазина.
+    const key = merchantKey(expense.merchant)
+    if (!key) {
+      toast.success('Категория обновлена')
+      return
+    }
+    await saveRules.mutateAsync([{ merchant_key: key, merchant_label: expense.merchant ?? key, category_id: categoryId }])
+    const others = (allExpenses ?? []).filter((e) => e.id !== expense.id && e.category_id !== categoryId && merchantKey(e.merchant) === key)
+    if (others.length > 0) await updateMany.mutateAsync({ ids: others.map((e) => e.id), categoryId })
+    const name = expenseCategories.find((c) => c.id === categoryId)?.name
+    toast.success(others.length > 0 ? `«${name}» — и ещё ${others.length} трат этого магазина; дальше так же` : `Запомнил: этот магазин — «${name}»`)
   }
 
   async function confirm() {

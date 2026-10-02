@@ -7,6 +7,7 @@ import type {
   Expense,
   Goal,
   HouseholdSettings,
+  MerchantRule,
   Income,
   Subscription,
   StatusInsight,
@@ -280,12 +281,15 @@ export const mockExpenses: Expense[] = [
   ),
 ]
 
+export const mockMerchantRules: MerchantRule[] = []
+
 export const mockHouseholdSettings: HouseholdSettings = {
   priority_mode: 'debts_first',
   debt_strategy: 'avalanche',
   cushion_months: 3,
   split_debt_pct: 50,
   high_rate_threshold: 15,
+  period_start_day: null,
 }
 
 export const mockGoals: Goal[] = [

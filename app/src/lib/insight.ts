@@ -13,8 +13,9 @@ function daysUntilDueDay(dueDay: number, today: Date): number {
   return Math.round((target.getTime() - new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) / 86_400_000)
 }
 
-function isThisMonth(iso: string, today: Date) {
-  return iso.slice(0, 7) === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+function inPeriod(iso: string, month: Month) {
+  const day = iso.slice(0, 10)
+  return day >= month.periodStart && day <= month.periodEnd
 }
 
 /**
@@ -49,7 +50,7 @@ export function computeInsight(month: Month, debts: Debt[], expenses: Expense[])
 
   const seen = new Set<string>()
   const duplicate = expenses
-    .filter((e) => e.is_confirmed && isThisMonth(e.spent_at, today))
+    .filter((e) => e.is_confirmed && inPeriod(e.spent_at, month))
     .find((e) => {
       const key = `${e.amount}|${e.merchant ?? ''}|${e.spent_at.slice(0, 10)}`
       if (seen.has(key)) return true

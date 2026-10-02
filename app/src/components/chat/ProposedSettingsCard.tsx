@@ -12,6 +12,7 @@ function changeLines(p: ProposedSettings): string[] {
     h.cushion_months != null && `Подушка: ${h.cushion_months} мес. расходов`,
     h.split_debt_pct != null && `В долги: ${h.split_debt_pct}%, в накопления: ${100 - h.split_debt_pct}%`,
     h.high_rate_threshold != null && `Дорогие долги — от ${h.high_rate_threshold}%`,
+    h.period_start_day !== undefined && `Бюджетный месяц: ${h.period_start_day == null ? 'календарный' : `с ${h.period_start_day}-го числа`}`,
     u.monthly_income !== undefined && `Доход в месяц: ${u.monthly_income == null ? 'не указан' : formatMoney(u.monthly_income)}`,
     u.payday !== undefined && `День зарплаты: ${u.payday ?? 'не указан'}`,
     u.daily_reminder_enabled !== undefined && `Напоминание о чеках: ${u.daily_reminder_enabled ? 'включить' : 'выключить'}`,

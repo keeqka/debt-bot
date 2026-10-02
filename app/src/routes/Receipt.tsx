@@ -18,12 +18,15 @@ import {
   useDeleteIncome,
   useIncomes,
   useLogReceiptScan,
+  useMerchantRules,
+  useSaveMerchantRules,
   useReceiptScanCount,
   useSubscription,
 } from '@/hooks/use-finance-data'
 import { useCurrentUserId } from '@/lib/auth'
 import { parseReceipt, parseStatement } from '@/lib/api'
 import { fileToBase64 } from '@/lib/file-to-base64'
+import { findMerchantRule, merchantKey } from '@/lib/merchant'
 import { formatMoney, formatDateShort } from '@/lib/format'
 import { AddTransactionDialog } from '@/components/finances/AddTransactionDialog'
 import { ExpenseDetailSheet } from '@/components/finances/ExpenseDetailSheet'
@@ -86,6 +89,8 @@ export function Receipt() {
   const addExpensesBulk = useAddExpensesBulk()
   const addIncomesBulk = useAddIncomesBulk()
   const addCategory = useAddCategory()
+  const { data: rules = [] } = useMerchantRules()
+  const saveRules = useSaveMerchantRules()
   const deleteIncome = useDeleteIncome()
   const { data: subscription } = useSubscription()
   const { data: scanCount = 0 } = useReceiptScanCount()
@@ -131,8 +136,11 @@ export function Receipt() {
         setDraft({ status: 'error', message: 'Не разобрал — переснять? Убедись, что чек целиком в кадре и хорошо освещён.' })
         return
       }
-      const matched = categories?.find((c) => c.name.trim().toLowerCase() === result.suggested_category?.trim().toLowerCase())
-      setDraft({ status: 'parsed-receipt', result, categoryId: matched?.id ?? '' })
+      // Правило магазина сильнее догадки ИИ: один раз поправил — дальше без ошибок.
+      const rule = findMerchantRule(rules, result.merchant)
+      const ruleCategory = rule && categories?.find((c) => c.id === rule.category_id)
+      const matched = ruleCategory ?? categories?.find((c) => c.name.trim().toLowerCase() === result.suggested_category?.trim().toLowerCase())
+      setDraft({ status: 'parsed-receipt', result, categoryId: matched?.id ?? '', autoCategoryId: matched?.id ?? '', ruled: !!ruleCategory })
     } catch {
       setDraft({ status: 'error', message: 'Не удалось распознать чек, попробуй ещё раз.' })
     }
@@ -158,15 +166,16 @@ export function Receipt() {
         setDraft({ status: 'error', message: 'Не нашёл операций в файле — попробуй другую выписку или добавь траты вручную.' })
         return
       }
-      const rows: StatementDraftRow[] = parsed.transactions.map((t) => ({
-        ...t,
-        key: crypto.randomUUID(),
-        included: true,
-        categoryId:
+      const rows: StatementDraftRow[] = parsed.transactions.map((t) => {
+        const rule = t.direction === 'expense' ? findMerchantRule(rules, t.description) : undefined
+        const ruleCategoryId = rule && expenseCategories.find((c) => c.id === rule.category_id)?.id
+        const categoryId =
+          ruleCategoryId ||
           (t.direction === 'expense' &&
             expenseCategories.find((c) => c.name.trim().toLowerCase() === t.suggested_category?.trim().toLowerCase())?.id) ||
-          '',
-      }))
+          ''
+        return { ...t, key: crypto.randomUUID(), included: true, categoryId, autoCategoryId: categoryId, ruled: !!ruleCategoryId }
+      })
       setDraft({ status: 'parsed-statement', rows })
     } catch {
       setDraft({ status: 'error', message: 'Не удалось разобрать выписку, попробуй ещё раз.' })
@@ -175,7 +184,7 @@ export function Receipt() {
 
   async function saveReceipt() {
     if (draft.status !== 'parsed-receipt') return
-    const { result, categoryId } = draft
+    const { result, categoryId, autoCategoryId } = draft
     let finalCategoryId = categoryId
     if (!finalCategoryId && result.suggested_category) {
       const map = await resolveCategoryIds([result.suggested_category], categories ?? [], addCategory)
@@ -194,7 +203,14 @@ export function Receipt() {
       ai_confidence: result.confidence,
       is_confirmed: true,
     })
-    toast.success('Расход сохранён')
+    // Пользователь сам выбрал/сменил категорию — запоминаем для этого магазина.
+    const key = merchantKey(result.merchant)
+    if (key && categoryId && categoryId !== autoCategoryId) {
+      await saveRules.mutateAsync([{ merchant_key: key, merchant_label: result.merchant ?? key, category_id: categoryId }])
+      toast.success(`Запомнил: «${result.merchant}» — в «${categories?.find((c) => c.id === categoryId)?.name}»`)
+    } else {
+      toast.success('Расход сохранён')
+    }
     reset()
   }
 
@@ -209,6 +225,14 @@ export function Receipt() {
     const incomeRows = included.filter((r) => r.direction === 'income')
     const newCategoryNames = expenseRows.filter((r) => !r.categoryId && r.suggested_category).map((r) => r.suggested_category!)
     const categoryMap = newCategoryNames.length > 0 ? await resolveCategoryIds(newCategoryNames, categories ?? [], addCategory) : new Map<string, string>()
+    // Исправленные вручную категории становятся правилами магазинов (последняя правка по магазину выигрывает).
+    const learned = new Map<string, { merchant_key: string; merchant_label: string; category_id: string }>()
+    for (const r of expenseRows) {
+      const key = merchantKey(r.description)
+      if (key && r.categoryId && r.categoryId !== r.autoCategoryId) {
+        learned.set(key, { merchant_key: key, merchant_label: r.description, category_id: r.categoryId })
+      }
+    }
     if (expenseRows.length > 0) {
       await addExpensesBulk.mutateAsync(
         expenseRows.map((r) => ({
@@ -239,7 +263,8 @@ export function Receipt() {
         })),
       )
     }
-    toast.success(`Добавлено операций: ${included.length}`)
+    if (learned.size > 0) await saveRules.mutateAsync([...learned.values()])
+    toast.success(`Добавлено операций: ${included.length}${learned.size > 0 ? `, правил магазинов: ${learned.size}` : ''}`)
     reset()
   }
 
@@ -723,6 +748,7 @@ function ParsedStatementView({
                   ))}
                 </select>
               )}
+              {row.ruled && row.categoryId === row.autoCategoryId && <span className="shrink-0 font-mono text-[11px] text-hf-text-4">по правилу</span>}
               {row.confidence < 0.6 && <span className="shrink-0 rounded-md border border-hf-warn-on-dark px-1.5 py-0.5 text-[11px] text-hf-warn-on-dark">уточнить</span>}
             </div>
           </div>

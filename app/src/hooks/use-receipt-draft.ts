@@ -16,7 +16,7 @@ export type ReceiptDraft =
   | { status: 'idle' }
   | { status: 'uploading'; kind: 'receipt' | 'statement' }
   | { status: 'reading'; kind: 'receipt' | 'statement' }
-  | { status: 'parsed-receipt'; result: ReceiptParseResult; categoryId: string }
+  | { status: 'parsed-receipt'; result: ReceiptParseResult; categoryId: string; autoCategoryId: string; ruled: boolean }
   | { status: 'parsed-statement'; rows: StatementDraftRow[] }
   | { status: 'error'; message: string }
 
@@ -24,6 +24,10 @@ export interface StatementDraftRow extends StatementTransaction {
   key: string
   included: boolean
   categoryId: string
+  /** Категория, подставленная правилом или ИИ, — если пользователь её сменил, это новое правило магазина. */
+  autoCategoryId: string
+  /** Категория взята из правила магазина, а не угадана ИИ. */
+  ruled: boolean
 }
 
 const DRAFT_KEY = ['receipt-draft'] as const

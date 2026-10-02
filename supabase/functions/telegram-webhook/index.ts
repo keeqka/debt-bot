@@ -28,6 +28,7 @@ import { getAdminClient } from '../_shared/supabase-admin.ts'
 import { findMember, inviteErrorCode, type AppUser } from '../_shared/get-or-create-user.ts'
 import { downloadTelegramFile } from '../_shared/telegram-file.ts'
 import { parseReceiptFile } from '../_shared/receipt-tool.ts'
+import { findMerchantRule } from '../_shared/merchant.ts'
 import { decodePayload } from '../_shared/stars.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -310,7 +311,12 @@ async function handleReceiptMessage(message: AnyRecord, user: AppUser) {
     return
   }
 
-  const category = categories.find((c) => c.name === receipt.suggested_category)
+  // Правило магазина (семья уже правила категорию) сильнее догадки ИИ.
+  const { data: rulesData } = await admin.from('merchant_rules').select('merchant_key, category_id').eq('household_id', user.household_id)
+  const rule = findMerchantRule((rulesData ?? []) as Array<{ merchant_key: string; category_id: string }>, receipt.merchant)
+  const category =
+    categories.find((c) => c.id === rule?.category_id) ??
+    categories.find((c) => String(c.name).trim().toLowerCase() === receipt.suggested_category?.trim().toLowerCase())
 
   const draftPayload = {
     amount: receipt.total_amount,
@@ -392,12 +398,31 @@ async function handleCallbackQuery(callbackQuery: AnyRecord) {
   }
 
   const payload = draft.payload
+  // ИИ мог предложить новую категорию (её ещё нет) — создаётся здесь, при подтверждении.
+  let categoryId: string | null = payload.category_id ?? null
+  if (!categoryId && payload.category_name) {
+    const wanted = String(payload.category_name).trim()
+    const { data: existing } = await admin
+      .from('categories')
+      .select('id, name')
+      .eq('type', 'expense')
+      .or(`household_id.is.null,household_id.eq.${draft.household_id}`)
+    categoryId = (existing ?? []).find((c: AnyRecord) => String(c.name).trim().toLowerCase() === wanted.toLowerCase())?.id ?? null
+    if (!categoryId && wanted) {
+      const { data: created } = await admin
+        .from('categories')
+        .insert({ name: wanted, icon: 'tag', type: 'expense', is_system: false, household_id: draft.household_id })
+        .select('id')
+        .single()
+      categoryId = created?.id ?? null
+    }
+  }
   const { error } = await admin.from('expenses').insert({
     user_id: draft.user_id,
     household_id: draft.household_id,
     amount: payload.amount,
     currency: payload.currency,
-    category_id: payload.category_id,
+    category_id: categoryId,
     merchant: payload.merchant,
     spent_at: payload.spent_at,
     description: null,
