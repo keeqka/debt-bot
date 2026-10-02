@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -18,6 +18,7 @@ import {
   useDeleteIncome,
   useIncomes,
   useLogReceiptScan,
+  useMonth,
   useMerchantRules,
   useSaveMerchantRules,
   useReceiptScanCount,
@@ -30,6 +31,7 @@ import { findMerchantRule, merchantKey } from '@/lib/merchant'
 import { formatMoney, formatDateShort } from '@/lib/format'
 import { AddTransactionDialog } from '@/components/finances/AddTransactionDialog'
 import { ExpenseDetailSheet } from '@/components/finances/ExpenseDetailSheet'
+import { periodOptions, inPeriod, type PeriodOption } from '@/lib/periods'
 import { cn } from '@/lib/utils'
 import type { Category, Expense, Income, ReceiptParseResult } from '@/types/domain'
 
@@ -129,9 +131,25 @@ export function Receipt() {
   const statementInputRef = useRef<HTMLInputElement>(null)
   const [manualOpen, setManualOpen] = useState(searchParams.get('add') === 'manual')
 
-  // Фильтр списка «Последнее» по категории (id или 'all') — не сохраняется между сессиями.
+  // Фильтры списка «Последнее» — не сохраняются между сессиями. Месяц (бюджетный,
+  // как в настройках) по умолчанию текущий; 'all' — за всё время. Категории в
+  // чипах считаются внутри выбранного месяца.
+  const month = useMonth()
+  const startDay = month?.settings.periodStartDay ?? null
+  const periods = useMemo(
+    () => periodOptions([...(expenses ?? []).map((e) => e.spent_at), ...(incomes ?? []).map((i) => i.received_at)], startDay),
+    [expenses, incomes, startDay],
+  )
+  const [periodBack, setPeriodBack] = useState<number | 'all'>(0)
+  useEffect(() => {
+    if (periodBack !== 'all' && !periods.some((p) => p.back === periodBack)) setPeriodBack(0)
+  }, [periods, periodBack])
+  const period = periodBack === 'all' ? null : (periods.find((p) => p.back === periodBack) ?? periods[0])
+  const periodExpenses = useMemo(() => (period ? (expenses ?? []).filter((e) => inPeriod(e.spent_at, period)) : (expenses ?? [])), [expenses, period])
+  const periodIncomes = useMemo(() => (period ? (incomes ?? []).filter((i) => inPeriod(i.received_at, period)) : (incomes ?? [])), [incomes, period])
+
   const [catFilter, setCatFilter] = useState<string>('all')
-  const chips = useMemo(() => categoryChips(expenses ?? [], categories ?? []), [expenses, categories])
+  const chips = useMemo(() => categoryChips(periodExpenses, categories ?? []), [periodExpenses, categories])
   // Удалили последнюю трату выбранной категории — её чипа больше нет, возвращаемся на «Все».
   useEffect(() => {
     if (catFilter !== 'all' && !chips.some((c) => c.id === catFilter)) setCatFilter('all')
@@ -347,9 +365,13 @@ export function Receipt() {
               onReceipt={() => receiptInputRef.current?.click()}
               onStatement={() => statementInputRef.current?.click()}
               onManual={() => setManualOpen(true)}
-              expenses={expenses ?? []}
-              incomes={incomes ?? []}
+              expenses={periodExpenses}
+              incomes={periodIncomes}
               categories={categories ?? []}
+              hasRecords={(expenses?.length ?? 0) + (incomes?.length ?? 0) > 0}
+              periods={periods}
+              periodBack={periodBack}
+              onPeriod={setPeriodBack}
               chips={chips}
               catFilter={catFilter}
               onCatFilter={setCatFilter}
@@ -401,6 +423,10 @@ function IdleView({
   expenses,
   incomes,
   categories,
+  hasRecords,
+  periods,
+  periodBack,
+  onPeriod,
   chips,
   catFilter,
   onCatFilter,
@@ -413,6 +439,11 @@ function IdleView({
   expenses: Expense[]
   incomes: Income[]
   categories: Category[]
+  /** Есть ли вообще записи (за любой месяц) — без них фильтров нет. */
+  hasRecords: boolean
+  periods: PeriodOption[]
+  periodBack: number | 'all'
+  onPeriod: (back: number | 'all') => void
   chips: Array<{ id: string; name: string; sum: number }>
   catFilter: string
   onCatFilter: (id: string) => void
@@ -462,28 +493,28 @@ function IdleView({
         </button>
       </div>
 
-      {chips.length > 0 && (
-        <div className="no-scrollbar -mx-4 -my-1.5 flex gap-2 overflow-x-auto px-4 py-1.5" role="group" aria-label="Фильтр по категории">
-          {[{ id: 'all', name: 'Все' }, ...chips].map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onCatFilter(c.id)}
-              aria-pressed={catFilter === c.id}
-              className={cn(
-                // before: невидимая зона нажатия до ~48px по высоте при визуальных 36px
-                "relative shrink-0 rounded-[10px] px-3.5 py-2 text-[13px] before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent",
-                catFilter === c.id ? 'bg-hf-accent text-white' : 'bg-hf-card text-hf-text-3',
-              )}
-            >
-              {c.name}
-            </button>
+      {hasRecords && (
+        <FilterStrip label="Фильтр по месяцу">
+          {[...periods.map((p) => ({ id: p.back, name: p.label })), { id: 'all' as const, name: 'Всё время' }].map((p) => (
+            <FilterChip key={p.id} active={periodBack === p.id} onClick={() => onPeriod(p.id)} round>
+              {p.name}
+            </FilterChip>
           ))}
-        </div>
+        </FilterStrip>
       )}
 
-      {expenses.length > 0 && (
-        <div className="flex items-baseline justify-between gap-3">
+      {chips.length > 0 && (
+        <FilterStrip label="Фильтр по категории">
+          {[{ id: 'all', name: 'Все' }, ...chips].map((c) => (
+            <FilterChip key={c.id} active={catFilter === c.id} onClick={() => onCatFilter(c.id)}>
+              {c.name}
+            </FilterChip>
+          ))}
+        </FilterStrip>
+      )}
+
+      {hasRecords && (
+        <div className="flex items-baseline justify-between gap-3 pt-1">
           <span className="text-[28px] font-bold tracking-[-0.03em] text-hf-text">{formatMoney(filteredTotal)}</span>
           <span className="truncate font-mono text-[11px] text-hf-text-4">
             {filtering ? activeName : 'все категории'} · {filtered.length} {receiptsWord(filtered.length)}
@@ -534,11 +565,42 @@ function IdleView({
         )}
         {rows.length === 0 && (
           <p className="py-8 text-center text-[13px] text-hf-text-4">
-            {filtering ? 'В этой категории пока нет трат' : 'Записей пока нет — загрузи первый чек'}
+            {filtering
+              ? 'В этой категории пока нет трат'
+              : hasRecords
+                ? 'В этом месяце записей пока нет'
+                : 'Записей пока нет — загрузи первый чек'}
           </p>
         )}
       </div>
     </>
+  )
+}
+
+/** Горизонтальная полоса чипов: скроллится без полосы прокрутки, прижата к краям экрана. */
+function FilterStrip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="no-scrollbar -mx-4 -my-1.5 flex gap-2 overflow-x-auto px-4 py-1.5" role="group" aria-label={label}>
+      {children}
+    </div>
+  )
+}
+
+function FilterChip({ active, onClick, round = false, children }: { active: boolean; onClick: () => void; round?: boolean; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        // before: невидимая зона нажатия до ~48px по высоте при визуальных 36px
+        "relative shrink-0 px-3.5 py-2 text-[13px] before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-hf-accent",
+        round ? 'rounded-full' : 'rounded-[10px]',
+        active ? 'bg-hf-accent text-white' : 'bg-hf-card text-hf-text-3',
+      )}
+    >
+      {children}
+    </button>
   )
 }
 

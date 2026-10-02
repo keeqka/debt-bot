@@ -67,7 +67,9 @@ export function AppShell() {
     <HeaderActionSetterContext.Provider value={setHeaderAction}>
       <div className="mx-auto flex max-w-md flex-col bg-hf-bg" style={{ height: 'var(--tg-height, 100dvh)' }}>
         <TopBar subtitle={subtitleFor(location.pathname)} action={headerAction} face={face} />
-        <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4.5">
+        {/* scrollbar-gutter: место под полосу прокрутки занято всегда — иначе при коротком списке
+            (фильтр, пустой экран) полоса пропадает и вся страница дёргается на её ширину. */}
+        <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-4.5 [scrollbar-gutter:stable]">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

@@ -29,15 +29,15 @@ export interface Month extends Omit<Budget, 'categories'> {
   categories: MonthCategory[]
 }
 
-const MONTH_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+export const MONTH_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 
 /** «25 сен – 24 окт» — подпись бюджетного месяца, начинающегося не с 1-го числа. */
-function periodLabel(start: string, end: string) {
+export function periodLabel(start: string, end: string) {
   const fmt = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTH_SHORT[Number(iso.slice(5, 7)) - 1]}`
   return `${fmt(start)} – ${fmt(end)}`
 }
 
-const MONTH_NAMES = [
+export const MONTH_NAMES = [
   'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
 ]
