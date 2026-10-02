@@ -6,6 +6,8 @@ import App from './App.tsx'
 import { initTelegram } from '@/lib/telegram'
 import { initSession } from '@/lib/auth'
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
+import { ReportPublic } from '@/routes/ReportPublic'
+import { REPORT_PATH } from '@/lib/public-report'
 
 // Telegram delivers its own initData/theme/version via the URL hash on the
 // very first load — e.g. "#tgWebAppData=...&tgWebAppVersion=9.6
@@ -64,12 +66,20 @@ const queryClient = new QueryClient({
   },
 })
 
+// /report/<токен> — временная публичная ссылка на «Выписку»: открывается без
+// входа в Telegram и без остального приложения (ни сессии, ни роутера).
+const reportToken = window.location.pathname.match(REPORT_PATH)?.[1]
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
+      {reportToken ? (
+        <ReportPublic token={reportToken} />
+      ) : (
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      )}
     </ErrorBoundary>
   </StrictMode>,
 )
@@ -82,4 +92,4 @@ createRoot(document.getElementById('root')!).render(
 // Android — often a dated bundled Chromium) is known to choke on top-level
 // await in the entry module, and a stuck/slow/failing auth call must never
 // leave the whole WebView on a permanently blank screen either way.
-initSession(queryClient)
+if (!reportToken) initSession(queryClient)

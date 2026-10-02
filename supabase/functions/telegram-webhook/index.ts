@@ -30,7 +30,7 @@ import { downloadTelegramFile } from '../_shared/telegram-file.ts'
 import { parseReceiptFile } from '../_shared/receipt-tool.ts'
 import { findMerchantRule } from '../_shared/merchant.ts'
 import { buildReportHtml } from '../_shared/report.ts'
-import { sendTelegramDocument } from '../_shared/telegram-send.ts'
+import { createReportLink, REPORT_LINK_TTL_SECONDS } from '../_shared/report-link.ts'
 import { decodePayload } from '../_shared/stars.ts'
 
 // deno-lint-ignore no-explicit-any
@@ -510,9 +510,13 @@ Deno.serve(async (req) => {
 
     if (command === '/report') {
       try {
-        const html = await buildReportHtml(getAdminClient(), member.household_id)
-        const ok = await sendTelegramDocument(message.chat.id, `hlow-flow-vypiska-${new Date().toISOString().slice(0, 10)}.html`, html, 'Выписка Hlow Flow. Открой файл в браузере.')
-        if (!ok) await sendTelegramMessage(message.chat.id, 'Не получилось отправить выписку — попробуй ещё раз или открой её в приложении.')
+        const admin = getAdminClient()
+        const { url } = await createReportLink(admin, member.household_id, await buildReportHtml(admin, member.household_id))
+        await sendTelegramMessage(
+          message.chat.id,
+          `Выписка готова. Ссылка живёт ${REPORT_LINK_TTL_SECONDS / 60} минут — её можно открыть без входа и переслать партнёру.`,
+          { inline_keyboard: [[{ text: 'Открыть выписку', url }]] },
+        )
       } catch (error) {
         console.error('report failed', error)
         await sendTelegramMessage(message.chat.id, 'Не получилось собрать выписку — попробуй позже.')
