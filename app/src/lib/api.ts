@@ -823,7 +823,7 @@ export async function createStarsInvoice(): Promise<string> {
 
 export async function getAccessInfo(): Promise<AccessInfo> {
   if (!isBackendConfigured || !supabase) {
-    return { users: mock.mockUsers.length, max_users: 5, members: mock.mockUsers.length, max_members: 2, is_admin: true }
+    return { users: mock.mockUsers.length, max_users: 10, members: mock.mockUsers.length, max_members: 2, is_admin: true }
   }
   const { data, error } = await supabase.rpc('access_info')
   if (error) throw error
