@@ -2,7 +2,7 @@
  * Typed access to Edge Function secrets. Set these with:
  *   supabase secrets set TELEGRAM_BOT_TOKEN=... ANTHROPIC_API_KEY=... \
  *     SESSION_JWT_SECRET=... CRON_SECRET=... \
- *     MINI_APP_URL=https://debt-bot.pages.dev
+ *     MINI_APP_URL=https://bot.hlowflow.app
  *
  * Note: this is the *value* of the project's JWT Secret (Settings → API →
  * JWT Keys), but it can't be stored under the name SUPABASE_JWT_SECRET —
@@ -44,6 +44,6 @@ export const env = {
    * nobody set MINI_APP_URL (CI never did); set it to override.
    */
   get miniAppUrl() {
-    return (Deno.env.get('MINI_APP_URL') || 'https://debt-bot.pages.dev').replace(/\/+$/, '')
+    return (Deno.env.get('MINI_APP_URL') || 'https://bot.hlowflow.app').replace(/\/+$/, '')
   },
 }
