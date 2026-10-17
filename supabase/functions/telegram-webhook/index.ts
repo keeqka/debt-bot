@@ -77,7 +77,7 @@ async function answerCallbackQuery(callbackQueryId: string, text?: string) {
 // more thing that can silently fail and produce a broken t.me/<empty>
 // link (Telegram then shows "Sorry, this user doesn't seem to exist",
 // with no error on our side to notice it by).
-const BOT_USERNAME = 'aibasedfinancecontrolbot_bot'
+const BOT_USERNAME = 'hlowflow_bot'
 
 function inviteLink(code: string) {
   return `https://t.me/${BOT_USERNAME}?start=inv_${code}`

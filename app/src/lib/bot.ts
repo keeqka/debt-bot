@@ -1,5 +1,5 @@
 /** The Telegram bot behind the Mini App — same as the landing's TELEGRAM_BOT_URL. */
-export const BOT_USERNAME = 'aibasedfinancecontrolbot_bot'
+export const BOT_USERNAME = 'hlowflow_bot'
 
 /** Invite link: opens the bot, which answers with a button into the app carrying the code. */
 export function inviteLink(code: string) {
