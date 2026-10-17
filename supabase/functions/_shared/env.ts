@@ -3,6 +3,7 @@
  *   supabase secrets set TELEGRAM_BOT_TOKEN=... ANTHROPIC_API_KEY=... \
  *     SESSION_JWT_SECRET=... CRON_SECRET=... \
  *     MINI_APP_URL=https://bot.hlowflow.app
+ * TELEGRAM_BOT_TOKEN — токен текущего бота; им же проверяется подпись входа из мини-аппа.
  *
  * Note: this is the *value* of the project's JWT Secret (Settings → API →
  * JWT Keys), but it can't be stored under the name SUPABASE_JWT_SECRET —
